@@ -1,6 +1,14 @@
+/* 整个后台占满视口，避免文档滚动 —— 只让右侧内容区滚 */
+.admin-shell {
+  overflow: hidden;
+}
+
 .admin-sider {
   background: #fff !important;
   border-right: 1px solid #eef0f5;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .admin-logo {
   display: flex;
@@ -39,6 +47,7 @@
   justify-content: space-between;
   height: 64px !important;
   line-height: 64px !important;
+  flex-shrink: 0;
 }
 .header-left { display: flex; align-items: center; gap: 18px; }
 .collapse-btn { cursor: pointer; font-size: 20px; color: #6b7280; }
@@ -60,5 +69,7 @@
 .admin-content {
   padding: 24px 28px;
   background: #f5f7fb;
-  min-height: calc(100vh - 64px);
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }

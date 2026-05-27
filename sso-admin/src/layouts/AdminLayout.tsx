@@ -67,7 +67,7 @@ export default function AdminLayout() {
   const currentLabel = labelMap[location.pathname] || '管理后台';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="admin-shell" style={{ height: '100vh' }}>
       <Sider collapsed={collapsed} width={220} className="admin-sider" theme="light">
         <div className="admin-logo">
           <SiteLogo size={32} />
