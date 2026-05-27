@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { siteApi, type SiteInfo } from '@/api/site';
 
-const DEFAULT_SITE: SiteInfo = { name: 'OneAuth', logo: '', theme_color: '#1677ff' };
+const DEFAULT_SITE: SiteInfo = { name: 'OneAuth', logo: '', theme_color: '#1677ff', smtp_enabled: false };
 
 // 进程级缓存：避免每个组件 mount 都打一次 /site
 let cached: SiteInfo | null = null;

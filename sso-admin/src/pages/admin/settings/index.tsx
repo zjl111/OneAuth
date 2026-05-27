@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Alert, Tag, Space, Upload } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Alert, Tag, Space, Upload, Select } from 'antd';
+import { UploadOutlined, MailOutlined } from '@ant-design/icons';
 import { configApi, type SystemConfig } from '@/api/misc';
 import { invalidateSiteCache } from '@/hooks/useSite';
 import { useAuthStore } from '@/store/authStore';
+import request from '@/api/request';
 
 const READONLY_OAUTH_KEYS = new Set([
   'id_token_signing_alg',
@@ -26,11 +27,16 @@ const NUMERIC_SECURITY_KEYS = new Set([
 ]);
 
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
+const NUMERIC_SMTP_KEYS = new Set(['port']);
+const PASSWORD_SMTP_KEYS = new Set(['password']);
+const BOOLEAN_SMTP_KEYS = new Set(['enabled']);
+const ENUM_SMTP_KEYS: Record<string, string[]> = { use_tls: ['ssl', 'starttls', 'none'] };
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',
   security: '安全策略',
   monitor: '监控设置',
+  smtp: '邮件 (SMTP)',
   oauth: 'OAuth2 / OIDC 协议',
 };
 
@@ -38,6 +44,7 @@ function isNumeric(category: string, key: string) {
   if (category === 'oauth') return NUMERIC_OAUTH_KEYS.has(key);
   if (category === 'security') return NUMERIC_SECURITY_KEYS.has(key);
   if (category === 'monitor') return NUMERIC_MONITOR_KEYS.has(key);
+  if (category === 'smtp') return NUMERIC_SMTP_KEYS.has(key);
   return false;
 }
 
@@ -46,7 +53,7 @@ function isReadOnly(category: string, key: string) {
 }
 
 export default function SettingsPage() {
-  const { message } = AntdApp.useApp();
+  const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<SystemConfig[]>([]);
   const [form] = Form.useForm();
 
@@ -55,7 +62,13 @@ export default function SettingsPage() {
     setData(d);
     const obj: Record<string, string | number> = {};
     d.forEach((c) => {
-      obj[`${c.category}.${c.key}`] = isNumeric(c.category, c.key) ? Number(c.value) : c.value;
+      const isPasswordField = c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key);
+      if (isPasswordField) {
+        // 密码字段不回显已保存值，留空给运营
+        obj[`${c.category}.${c.key}`] = '';
+      } else {
+        obj[`${c.category}.${c.key}`] = isNumeric(c.category, c.key) ? Number(c.value) : c.value;
+      }
     });
     form.setFieldsValue(obj);
   };
@@ -81,6 +94,8 @@ export default function SettingsPage() {
       const [category, ...rest] = k.split('.');
       const key = rest.join('.');
       if (isReadOnly(category, key)) continue;
+      // SMTP 密码留空 = 不修改
+      if (category === 'smtp' && PASSWORD_SMTP_KEYS.has(key) && v === '') continue;
       items.push({ category, key, value: String(v) });
     }
     await configApi.set(items);
@@ -173,7 +188,55 @@ export default function SettingsPage() {
     if (numeric) {
       return <InputNumber min={0} style={{ width: '100%' }} addonAfter={c.key.endsWith('_ttl') || c.key.includes('timeout') || c.key.includes('duration') ? '秒' : undefined} />;
     }
+    if (c.category === 'smtp' && BOOLEAN_SMTP_KEYS.has(c.key)) {
+      return (
+        <Select
+          options={[
+            { value: 'true', label: '启用' },
+            { value: 'false', label: '禁用' },
+          ]}
+          style={{ width: 220 }}
+        />
+      );
+    }
+    if (c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key)) {
+      return <Input.Password placeholder="保存后不再回显，留空表示不修改" autoComplete="new-password" />;
+    }
+    if (c.category === 'smtp' && ENUM_SMTP_KEYS[c.key]) {
+      return (
+        <Select
+          options={ENUM_SMTP_KEYS[c.key].map((v) => ({ value: v, label: v.toUpperCase() }))}
+          style={{ width: 220 }}
+        />
+      );
+    }
     return <Input />;
+  };
+
+  const testSMTP = () => {
+    let to = '';
+    modal.confirm({
+      title: '发送测试邮件',
+      content: (
+        <Input
+          placeholder="测试收件邮箱"
+          onChange={(e) => (to = e.target.value)}
+        />
+      ),
+      okText: '发送',
+      onOk: async () => {
+        if (!to) {
+          message.error('请输入收件邮箱');
+          return Promise.reject();
+        }
+        try {
+          await request.post('/configs/test-smtp', { to });
+          message.success(`已发送测试邮件到 ${to}`);
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '发送失败');
+        }
+      },
+    });
   };
 
   return (
@@ -206,6 +269,26 @@ export default function SettingsPage() {
                         <span>• <b>Access Token TTL</b> 减小只影响新签发的 Token；增大不会延长已签发 Token 的有效期。</span>
                         <span>• 标记为"只读"的字段反映了当前实现能力，不可在 UI 修改。</span>
                       </Space>
+                    }
+                  />
+                )}
+                {cat === 'smtp' && (
+                  <Alert
+                    showIcon
+                    type="info"
+                    style={{ marginBottom: 16 }}
+                    message="SMTP 配置用于「忘记密码」邮件发送等场景"
+                    description={
+                      <Space direction="vertical" size={2}>
+                        <span>• 密码保存后不再回显，留空提交表示<b>不修改</b>密码。</span>
+                        <span>• <b>use_tls</b>：QQ/腾讯企业邮箱用 <code>ssl</code>(465)；Gmail/Outlook 用 <code>starttls</code>(587)。</span>
+                        <span>• 修改后建议点击右上角「发送测试邮件」验证配置。</span>
+                      </Space>
+                    }
+                    action={
+                      <Button size="small" type="primary" icon={<MailOutlined />} onClick={testSMTP}>
+                        发送测试邮件
+                      </Button>
                     }
                   />
                 )}

@@ -33,5 +33,9 @@ export const authApi = {
     put<{ user: UserInfo; permissions: string[] }>('/auth/profile', data),
   changePassword: (data: { old_password: string; new_password: string }) =>
     post('/auth/change-password', data),
+  forgotPassword: (email: string) => post<{ message: string }>('/auth/forgot-password', { email }),
+  verifyResetToken: (token: string) => get<{ email: string }>('/auth/reset-password/verify', { token }),
+  resetPassword: (data: { token: string; new_password: string }) =>
+    post('/auth/reset-password', data),
   uploadAvatarPath: '/api/v1/auth/avatar', // multipart 上传地址
 };

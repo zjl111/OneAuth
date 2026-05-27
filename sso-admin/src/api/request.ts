@@ -30,7 +30,13 @@ request.interceptors.response.use(
       const rt = useAuthStore.getState().refreshToken;
       const bounce = () => {
         useAuthStore.getState().clear();
-        if (!location.pathname.startsWith('/oauth/login')) {
+        // 已经在首页/未登录公共页 → 不再重定向，避免循环
+        const onPublicPage =
+          location.pathname === '/' ||
+          location.pathname.startsWith('/oauth/login') ||
+          location.pathname.startsWith('/oauth/forgot-password') ||
+          location.pathname.startsWith('/oauth/reset-password');
+        if (!onPublicPage) {
           redirectToLogin(location.pathname + location.search);
         }
       };

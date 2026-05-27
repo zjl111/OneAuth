@@ -1,7 +1,12 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,7 +16,9 @@ import (
 	"sso-server/internal/repository"
 	"sso-server/internal/service"
 	"sso-server/internal/session"
+	"sso-server/pkg/mailer"
 	"sso-server/pkg/response"
+	"sso-server/pkg/utils"
 )
 
 // AdminClientID 内置管理后台对应的 OAuth2 client_id
@@ -26,6 +33,19 @@ type AuthHandler struct {
 	SessionMgr   *session.Manager
 	Store        oauth.Store
 	LogRepo      *repository.LogRepository
+	Mailer       *mailer.Mailer
+	Issuer       string
+	FrontendBase string
+}
+
+const (
+	resetTokenPrefix = "pwd_reset:"
+	resetTokenTTL    = 30 * time.Minute
+)
+
+type resetTokenPayload struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
 }
 
 type LoginRequest struct {
@@ -252,4 +272,136 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 	response.OK(c, nil)
+}
+
+// ForgotPassword 忘记密码：根据邮箱发送重置链接
+// 安全考虑：无论邮箱是否存在都返回成功，避免账号枚举
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请输入有效邮箱")
+		return
+	}
+	if h.Mailer == nil || !h.Mailer.Enabled() {
+		response.BadRequest(c, "管理员未启用邮件功能，请联系管理员重置密码")
+		return
+	}
+
+	email := strings.TrimSpace(req.Email)
+	user, _ := h.UserService.GetByEmail(email)
+	// 即使用户不存在也假装发邮件成功，避免被用来枚举注册邮箱
+	if user != nil && user.IsActive && !user.IsLocked && user.Email != nil {
+		go h.sendResetMail(user, email)
+	}
+	response.OK(c, gin.H{"message": "如果该邮箱已注册，重置链接已发送"})
+}
+
+func (h *AuthHandler) sendResetMail(user *model.User, email string) {
+	token := utils.RandomString(48)
+	payload := resetTokenPayload{UserID: user.ID.String(), Email: email}
+	b, _ := json.Marshal(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.Store.Set(ctx, resetTokenPrefix+token, b, resetTokenTTL); err != nil {
+		return
+	}
+
+	cfg, _ := h.Mailer.LoadConfig()
+	base := cfg.ResetLinkBase
+	if base == "" {
+		if h.FrontendBase != "" {
+			base = h.FrontendBase
+		} else {
+			base = h.Issuer
+		}
+	}
+	link := fmt.Sprintf("%s/oauth/reset-password?token=%s", strings.TrimRight(base, "/"), token)
+
+	subject := "重置 OneAuth 密码"
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, sans-serif; line-height: 1.6; color: #1d2c5b; padding: 20px;">
+  <div style="max-width:560px; margin:auto; background:#fff; border-radius:12px; padding:32px; border:1px solid #eef0f5;">
+    <h2 style="color:#1677ff; margin-top:0;">重置密码</h2>
+    <p>您好 <b>%s</b>，</p>
+    <p>我们收到了重置您 OneAuth 账号密码的请求。请点击下面的按钮设置新密码：</p>
+    <p style="text-align:center; margin:32px 0;">
+      <a href="%s" style="display:inline-block; background:#1677ff; color:#fff; padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">重置密码</a>
+    </p>
+    <p style="font-size:13px; color:#6b7280;">如果按钮无法点击，请复制下面的链接到浏览器：</p>
+    <p style="font-size:12px; color:#6b7280; word-break:break-all;">%s</p>
+    <hr style="border:none; border-top:1px solid #eef0f5; margin:24px 0;">
+    <p style="font-size:12px; color:#94a3b8;">链接 30 分钟内有效。如非本人操作请忽略本邮件。</p>
+  </div>
+</body>
+</html>`, user.Nickname, link, link)
+
+	_ = h.Mailer.Send([]string{email}, subject, body)
+}
+
+// VerifyResetToken 验证重置 token 是否有效，前端在重置密码页加载时调
+func (h *AuthHandler) VerifyResetToken(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		response.BadRequest(c, "缺少 token")
+		return
+	}
+	b, err := h.Store.Get(c.Request.Context(), resetTokenPrefix+token)
+	if err != nil {
+		response.BadRequest(c, "链接已过期或无效")
+		return
+	}
+	var p resetTokenPayload
+	_ = json.Unmarshal(b, &p)
+	// 只暴露脱敏邮箱
+	response.OK(c, gin.H{"email": maskEmail(p.Email)})
+}
+
+// ResetPassword 凭 token 重置密码
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Token       string `json:"token" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	b, err := h.Store.Get(c.Request.Context(), resetTokenPrefix+req.Token)
+	if err != nil {
+		response.BadRequest(c, "链接已过期或无效")
+		return
+	}
+	var p resetTokenPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		response.BadRequest(c, "链接已过期或无效")
+		return
+	}
+	uid, err := uuid.Parse(p.UserID)
+	if err != nil {
+		response.BadRequest(c, "链接已过期或无效")
+		return
+	}
+	if err := h.UserService.ResetPassword(uid, req.NewPassword); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	// 一次性：用完即删
+	_ = h.Store.Del(c.Request.Context(), resetTokenPrefix+req.Token)
+	h.LogRepo.RecordLogin(&uid, "", c.ClientIP(), c.GetHeader("User-Agent"), "password_reset", "success", "")
+	response.OK(c, nil)
+}
+
+func maskEmail(email string) string {
+	at := strings.Index(email, "@")
+	if at <= 1 {
+		return email
+	}
+	prefix := email[:at]
+	if len(prefix) <= 2 {
+		return prefix[:1] + "***" + email[at:]
+	}
+	return prefix[:2] + "***" + email[at:]
 }

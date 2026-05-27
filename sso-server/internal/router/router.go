@@ -89,6 +89,9 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	api.POST("/auth/login", h.Auth.Login)
 	api.POST("/auth/logout", h.Auth.Logout)
 	api.POST("/auth/refresh", h.Auth.Refresh)
+	api.POST("/auth/forgot-password", h.Auth.ForgotPassword)
+	api.GET("/auth/reset-password/verify", h.Auth.VerifyResetToken)
+	api.POST("/auth/reset-password", h.Auth.ResetPassword)
 
 	// 状态页公开 API
 	statusGroup := r.Group("/api/status")
@@ -170,6 +173,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.PUT("/configs", h.Config.Set)
 		admin.POST("/configs/upload-logo", h.Config.UploadLogo)
 		admin.POST("/configs/upload-image", h.Config.UploadImage)
+		admin.POST("/configs/test-smtp", h.Config.TestSMTP)
 		admin.GET("/configs/:category", h.Config.ByCategory)
 		admin.GET("/dictionaries", h.Config.ListDict)
 		admin.POST("/dictionaries", h.Config.CreateDict)

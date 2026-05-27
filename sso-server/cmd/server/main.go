@@ -21,6 +21,7 @@ import (
 	"sso-server/internal/router"
 	"sso-server/internal/service"
 	"sso-server/internal/session"
+	"sso-server/pkg/mailer"
 )
 
 func main() {
@@ -48,6 +49,8 @@ func main() {
 	configRepo := repository.NewConfigRepository(db)
 	repository.ApplyOAuthOverrides(configRepo, &cfg.OAuth)
 	log.Println("[startup] database ready")
+
+	mailService := mailer.New(configRepo)
 
 	// Store: Redis 或内存
 	var store oauth.Store
@@ -161,6 +164,9 @@ func main() {
 			SessionMgr:   sessionMgr,
 			Store:        store,
 			LogRepo:      logRepo,
+			Mailer:       mailService,
+			Issuer:       cfg.OAuth.Issuer,
+			FrontendBase: frontendBase,
 		},
 		User: &handler.UserHandler{Service: userService},
 		App:  &handler.AppHandler{Service: clientService},
@@ -177,11 +183,11 @@ func main() {
 		Department: &handler.DepartmentHandler{Repo: deptRepo},
 		Role:       &handler.RoleHandler{Repo: roleRepo, PermRepo: permRepo},
 		Log:        &handler.LogHandler{Repo: logRepo},
-		Config:     &handler.ConfigHandler{Repo: configRepo, DictRepo: dictRepo},
+		Config:     &handler.ConfigHandler{Repo: configRepo, DictRepo: dictRepo, Mailer: mailService},
 		Access:     &handler.AccessHandler{Repo: ipRepo},
 		Monitor:    &handler.MonitorHandler{Repo: monitorRepo, ClientRepo: clientRepo, ProbeFunc: probeFunc},
 		Status:     &handler.StatusHandler{MonitorRepo: monitorRepo, ClientService: clientService},
-		Site:       &handler.SiteHandler{ConfigRepo: configRepo},
+		Site:       &handler.SiteHandler{ConfigRepo: configRepo, Mailer: mailService},
 		Session:    &handler.SessionHandler{SessionMgr: sessionMgr},
 	}
 

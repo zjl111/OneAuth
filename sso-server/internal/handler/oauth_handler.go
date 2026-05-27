@@ -103,7 +103,7 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 
 	sd := h.currentSession(c)
 	if sd == nil {
-		loginURL := h.FrontendBase + "/oauth/login?" + url.Values{
+		loginURL := h.FrontendBase + "/?" + url.Values{
 			"return_to": []string{c.Request.URL.RequestURI()},
 		}.Encode()
 		c.Redirect(http.StatusFound, loginURL)
@@ -423,7 +423,7 @@ func (h *OAuthHandler) EndSession(c *gin.Context) {
 	h.clearSession(c)
 	postLogout := c.Query("post_logout_redirect_uri")
 	if postLogout == "" {
-		postLogout = h.FrontendBase + "/oauth/login"
+		postLogout = h.FrontendBase + "/"
 	}
 	c.Redirect(http.StatusFound, postLogout)
 }

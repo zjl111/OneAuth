@@ -161,6 +161,8 @@ func (s *UserService) Delete(id uuid.UUID) error { return s.repo.Delete(id) }
 
 func (s *UserService) GetByID(id uuid.UUID) (*model.User, error) { return s.repo.GetByID(id) }
 
+func (s *UserService) GetByEmail(email string) (*model.User, error) { return s.repo.GetByEmail(email) }
+
 func (s *UserService) List(q repository.UserQuery) ([]model.User, int64, error) {
 	return s.repo.List(q)
 }

@@ -6,6 +6,10 @@ export interface SiteInfo {
   name: string;
   logo: string;
   theme_color: string;
+  hero_title?: string;
+  hero_subtitle?: string;
+  hero_description?: string;
+  smtp_enabled?: boolean;
 }
 
 export const siteApi = {

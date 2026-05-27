@@ -1,0 +1,149 @@
+.home-page {
+  position: relative;
+  min-height: 100vh;
+  background-image: url('/hero-bg.png');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-color: #eaf2ff;
+  overflow: hidden;
+}
+
+/* 给左侧文字加一层从左到右淡白渐变，提高可读性 */
+.home-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(244, 247, 255, 0.85) 0%,
+    rgba(244, 247, 255, 0.55) 25%,
+    rgba(244, 247, 255, 0.0) 50%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 让 hero / header 都浮于背景之上 */
+.home-header,
+.home-hero {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 880px) {
+  .home-page { background-position: 70% center; }
+  .home-page::before {
+    background: linear-gradient(
+      180deg,
+      rgba(244, 247, 255, 0.92) 0%,
+      rgba(244, 247, 255, 0.65) 55%,
+      rgba(244, 247, 255, 0.0) 100%
+    );
+  }
+}
+
+/* 顶部 */
+.home-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px clamp(20px, 4vw, 64px);
+}
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #1d2c5b;
+  letter-spacing: 0.5px;
+}
+.home-brand .brand-suffix { color: #1677ff; }
+
+/* Hero —— 整页减去顶部 brand 高度，纵向居中文案 */
+.home-hero {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 100px);
+  display: flex;
+  align-items: center;
+  padding: 0 56px;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+.home-hero-text {
+  max-width: 620px;
+  margin-left: clamp(0px, 4vw, 56px);
+}
+.home-hero-title {
+  margin: 0;
+  font-size: clamp(56px, 6.4vw, 96px);
+  line-height: 1.05;
+  font-weight: 800;
+  color: #1d2c5b;
+  letter-spacing: -1.5px;
+}
+.home-hero-title .accent {
+  color: #1677ff;
+}
+
+.home-hero-subtitle {
+  margin: 18px 0 0;
+  font-size: clamp(32px, 3.6vw, 52px);
+  font-weight: 700;
+  color: #1d2c5b;
+  letter-spacing: 2px;
+  line-height: 1.15;
+}
+.home-hero-desc {
+  margin: 28px 0 0;
+  font-size: 15px;
+  color: #4b5563;
+  line-height: 1.85;
+  max-width: 460px;
+}
+
+.home-hero-cta {
+  display: flex;
+  gap: 16px;
+  margin-top: 40px;
+}
+.home-cta-primary {
+  height: 48px;
+  padding: 0 32px;
+  border-radius: 10px;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  font-size: 15px;
+  letter-spacing: 1px;
+  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.28);
+}
+.home-cta-primary:hover {
+  background: #1e40af !important;
+  border-color: #1e40af !important;
+}
+.home-cta-secondary {
+  height: 48px;
+  padding: 0 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-color: #c7d2fe;
+  color: #1d2c5b;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+.home-cta-secondary:hover {
+  background: #fff !important;
+  border-color: #1677ff !important;
+  color: #1677ff !important;
+}
+
+@media (max-width: 880px) {
+  .home-header { padding: 16px 20px; }
+  .home-hero { padding: 24px 20px 0; }
+  .home-hero-text { max-width: 100%; }
+}

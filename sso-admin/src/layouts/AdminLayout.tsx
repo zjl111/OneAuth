@@ -58,7 +58,7 @@ export default function AdminLayout() {
         label: '退出登录',
         onClick: async () => {
           await logout();
-          navigate('/oauth/login');
+          navigate('/');
         },
       },
     ],

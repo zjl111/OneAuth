@@ -296,6 +296,9 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "platform", Key: "name", Value: "OneAuth", Description: "平台名称"},
 		{Category: "platform", Key: "logo", Value: "", Description: "平台 Logo"},
 		{Category: "platform", Key: "theme_color", Value: "#1677ff", Description: "主题色"},
+		{Category: "platform", Key: "hero_title", Value: "OneAuth", Description: "首页主标题（一般等于平台名）"},
+		{Category: "platform", Key: "hero_subtitle", Value: "一键登录所有应用", Description: "首页副标题"},
+		{Category: "platform", Key: "hero_description", Value: "OneAuth 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。", Description: "首页描述"},
 		{Category: "security", Key: "session_timeout", Value: "7200", Description: "Session 超时秒数"},
 		{Category: "security", Key: "password_min_length", Value: "8", Description: "密码最小长度"},
 		{Category: "security", Key: "login_lockout_threshold", Value: "10", Description: "登录失败锁定阈值"},
@@ -313,6 +316,16 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "oauth", Key: "grant_types_supported", Value: "authorization_code,refresh_token", Description: "支持的授权类型（只读）"},
 		{Category: "oauth", Key: "response_types_supported", Value: "code", Description: "支持的响应类型（只读）"},
 		{Category: "oauth", Key: "pkce_required_for_public_clients", Value: "true", Description: "公共客户端是否强制 PKCE（只读）"},
+		// SMTP 邮件配置 — 用于忘记密码 / 通知
+		{Category: "smtp", Key: "enabled", Value: "false", Description: "是否启用 SMTP 邮件功能"},
+		{Category: "smtp", Key: "host", Value: "", Description: "SMTP 服务器地址，例如 smtp.qq.com"},
+		{Category: "smtp", Key: "port", Value: "465", Description: "SMTP 端口（465=SSL，587=STARTTLS，25=明文）"},
+		{Category: "smtp", Key: "username", Value: "", Description: "SMTP 账号"},
+		{Category: "smtp", Key: "password", Value: "", Description: "SMTP 授权码 / 密码（仅写入，不回显）"},
+		{Category: "smtp", Key: "from_address", Value: "", Description: "发件邮箱地址（建议与账号一致）"},
+		{Category: "smtp", Key: "from_name", Value: "OneAuth", Description: "发件人显示名称"},
+		{Category: "smtp", Key: "use_tls", Value: "ssl", Description: "加密方式：ssl / starttls / none"},
+		{Category: "smtp", Key: "reset_link_base", Value: "", Description: "重置密码链接前缀（空则用 issuer，例如 https://sso.example.com）"},
 	}
 	for _, c := range configs {
 		c.UpdatedAt = time.Now()

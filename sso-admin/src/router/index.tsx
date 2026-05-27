@@ -1,6 +1,8 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import AuthGuard from '@/components/AuthGuard';
-import LoginPage from '@/pages/login';
+import HomePage from '@/pages/home';
+import ForgotPasswordPage from '@/pages/forgot-password';
+import ResetPasswordPage from '@/pages/reset-password';
 import ConsentPage from '@/pages/consent';
 import PortalPage from '@/pages/portal';
 import StatusPage from '@/pages/status';
@@ -18,8 +20,11 @@ import ProfilePage from '@/pages/profile';
 import NotFoundPage from '@/pages/NotFound';
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/portal" replace /> },
-  { path: '/oauth/login', element: <LoginPage /> },
+  { path: '/', element: <HomePage /> },
+  // /oauth/login 兼容老链接和后端重定向，等同于首页（携带 return_to 自动弹登录框）
+  { path: '/oauth/login', element: <HomePage /> },
+  { path: '/oauth/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/oauth/reset-password', element: <ResetPasswordPage /> },
   {
     path: '/oauth/consent',
     element: (

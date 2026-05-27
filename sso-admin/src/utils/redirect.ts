@@ -1,6 +1,9 @@
+/**
+ * 登录入口现在是首页 /，登录框由首页根据 ?return_to 自动弹出。
+ */
 export function loginPath(returnTo?: string): string {
-  if (!returnTo) return '/oauth/login';
-  return `/oauth/login?return_to=${encodeURIComponent(returnTo)}`;
+  if (!returnTo) return '/';
+  return `/?return_to=${encodeURIComponent(returnTo)}`;
 }
 
 export function redirectToLogin(returnTo?: string): void {

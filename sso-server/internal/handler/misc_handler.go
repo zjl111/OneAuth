@@ -12,6 +12,7 @@ import (
 
 	"sso-server/internal/model"
 	"sso-server/internal/repository"
+	"sso-server/pkg/mailer"
 	"sso-server/pkg/response"
 )
 
@@ -267,6 +268,7 @@ func (h *LogHandler) Access(c *gin.Context) {
 type ConfigHandler struct {
 	Repo     *repository.ConfigRepository
 	DictRepo *repository.DictionaryRepository
+	Mailer   *mailer.Mailer
 }
 
 func (h *ConfigHandler) List(c *gin.Context) {
@@ -296,6 +298,27 @@ func (h *ConfigHandler) Set(c *gin.Context) {
 		}
 	}
 	response.OK(c, nil)
+}
+
+// TestSMTP 给指定收件人发一封测试邮件，验证 SMTP 配置是否可用
+func (h *ConfigHandler) TestSMTP(c *gin.Context) {
+	var req struct {
+		To string `json:"to" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请输入有效的测试收件邮箱")
+		return
+	}
+	if h.Mailer == nil {
+		response.ServerError(c, "邮件服务未初始化")
+		return
+	}
+	if err := h.Mailer.Send([]string{req.To}, "OneAuth SMTP 测试邮件",
+		`<p>你好，</p><p>这是一封来自 OneAuth 的测试邮件，如果你能看到它说明 SMTP 配置生效。</p>`); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"sent_to": req.To})
 }
 
 // UploadImage 通用图片上传（应用图标等），只落盘并返回 URL，不写任何业务表
