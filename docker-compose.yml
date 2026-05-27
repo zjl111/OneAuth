@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sso_platform}
+      POSTGRES_USER: ${DB_USER:-sso}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sso_password}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sso}"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_password}", "ping"]
+      interval: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.backend
+    environment:
+      SSO_APP_DRIVER: "postgres"
+      SSO_DATABASE_HOST: postgres
+      SSO_DATABASE_PORT: "5432"
+      SSO_DATABASE_USER: ${DB_USER:-sso}
+      SSO_DATABASE_PASSWORD: ${DB_PASSWORD:-sso_password}
+      SSO_DATABASE_DBNAME: ${DB_NAME:-sso_platform}
+      SSO_REDIS_ENABLED: "true"
+      SSO_REDIS_ADDR: redis:6379
+      SSO_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      SSO_OAUTH_ISSUER: ${SSO_ISSUER:-http://localhost}
+    volumes:
+      - rsa_keys:/app/keys
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.frontend
+    expose:
+      - "80"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deployments/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  pg_data:
+  redis_data:
+  rsa_keys:

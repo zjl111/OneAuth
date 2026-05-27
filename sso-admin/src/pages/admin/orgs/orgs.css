@@ -1,0 +1,62 @@
+.org-page {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .org-page {
+    grid-template-columns: 320px 1fr;
+  }
+}
+
+@media (max-width: 880px) {
+  .org-page {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dept-tree-card .ant-card-body {
+  padding: 16px;
+}
+.dept-tree-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dept-node {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+.dept-node .dept-icon {
+  color: #1677ff;
+  font-size: 14px;
+}
+.dept-node .dept-name {
+  flex: 1;
+  font-size: 14px;
+  color: #1d2c5b;
+}
+.dept-node .dept-more {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ant-tree-treenode:hover .dept-node .dept-more,
+.ant-tree-treenode-selected .dept-node .dept-more {
+  opacity: 1;
+}
+
+.dept-members-card .ant-card-body {
+  padding: 16px 20px;
+}
+.dept-members-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}

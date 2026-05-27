@@ -1,0 +1,20 @@
+# Stage 1: build
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache git
+COPY sso-server/go.mod ./
+RUN go mod download || true
+COPY sso-server/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/sso-server ./cmd/server
+
+# Stage 2: runtime
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates tzdata
+ENV TZ=Asia/Shanghai
+WORKDIR /app
+COPY --from=builder /out/sso-server .
+COPY --from=builder /app/configs ./configs
+RUN adduser -D -H sso && mkdir -p keys data && chown -R sso:sso keys data
+USER sso
+EXPOSE 8080
+CMD ["./sso-server", "--config", "./configs/config.yaml"]

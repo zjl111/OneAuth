@@ -1,0 +1,62 @@
+# 使用云上托管的 PostgreSQL / Redis（如阿里云 RDS、AWS RDS、自建实例）
+# 启动:
+#   docker compose -f docker-compose.cloud.yml up -d
+#
+# .env 需要补齐：
+#   PG_HOST=your-rds-host.rds.aliyuncs.com
+#   PG_PORT=5432
+#   PG_USER=sso
+#   PG_PASSWORD=...
+#   PG_DBNAME=sso_platform
+#   REDIS_ADDR=your-redis-host:6379
+#   REDIS_PASSWORD=...
+#   SSO_ISSUER=https://sso.yourcompany.com
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.backend
+    environment:
+      SSO_APP_DRIVER: "postgres"
+      SSO_APP_ENVIRONMENT: "production"
+      SSO_DATABASE_HOST: ${PG_HOST}
+      SSO_DATABASE_PORT: ${PG_PORT:-5432}
+      SSO_DATABASE_USER: ${PG_USER}
+      SSO_DATABASE_PASSWORD: ${PG_PASSWORD}
+      SSO_DATABASE_DBNAME: ${PG_DBNAME}
+      SSO_DATABASE_SSLMODE: ${PG_SSLMODE:-require}   # 云 PG 通常强制 TLS
+      SSO_REDIS_ENABLED: "true"
+      SSO_REDIS_ADDR: ${REDIS_ADDR}
+      SSO_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SSO_OAUTH_ISSUER: ${SSO_ISSUER}
+      SSO_OAUTH_FRONTEND_URL: ""   # 同域，留空，Nginx 反代
+    volumes:
+      - rsa_keys:/app/keys           # ⚠️ RSA 私钥必须持久化，否则重启所有 token 失效
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.frontend
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"            # 生产建议挂 SSL
+    volumes:
+      - ./deployments/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro   # 放你的证书
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  rsa_keys:

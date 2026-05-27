@@ -1,0 +1,74 @@
+package handler
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"sso-server/internal/repository"
+	"sso-server/internal/service"
+	"sso-server/pkg/response"
+)
+
+// PortalHandler 普通用户的应用门户
+type PortalHandler struct {
+	UserService   *service.UserService
+	ClientService *service.ClientService
+	GrantRepo     *repository.GrantRepository
+}
+
+type PortalApp struct {
+	ID          string `json:"id"`
+	ClientID    string `json:"client_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	LogoURL     string `json:"logo_url"`
+	HomeURL     string `json:"home_url"`
+	IsBuiltin   bool   `json:"is_builtin"`
+	IsFavorite  bool   `json:"is_favorite"`
+	Granted     bool   `json:"granted"`
+}
+
+// Apps 当前用户可访问的应用列表
+func (h *PortalHandler) Apps(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+	uid, _ := uuid.Parse(userIDVal.(string))
+	user, err := h.UserService.GetByID(uid)
+	if err != nil {
+		response.Unauthorized(c, "用户不存在")
+		return
+	}
+
+	clients, err := h.ClientService.ListAll()
+	if err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	grants, _ := h.GrantRepo.ListByUser(uid)
+	grantedSet := make(map[string]bool)
+	for _, g := range grants {
+		grantedSet[g.ClientID] = true
+	}
+
+	apps := []PortalApp{}
+	for _, cl := range clients {
+		// 管理后台只对管理员可见
+		if cl.ClientID == "sso-admin" && !user.IsStaff {
+			continue
+		}
+		apps = append(apps, PortalApp{
+			ID:          cl.ID.String(),
+			ClientID:    cl.ClientID,
+			Name:        cl.ClientName,
+			Description: cl.Description,
+			LogoURL:     cl.LogoURL,
+			HomeURL:     cl.HomeURL,
+			IsBuiltin:   cl.IsBuiltin,
+			Granted:     grantedSet[cl.ClientID] || cl.IsBuiltin,
+		})
+	}
+	response.OK(c, apps)
+}

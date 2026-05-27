@@ -1,0 +1,53 @@
+app:
+  secret_key: "change-me-in-production-please-use-strong-secret"
+  environment: "development"
+  host: "0.0.0.0"
+  port: 8080
+  # 数据库驱动: postgres | sqlite
+  driver: "sqlite"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "sso"
+  password: "sso"
+  dbname: "sso_platform"
+  sslmode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 10
+  # SQLite 路径（driver=sqlite 时使用）
+  sqlite_path: "./data/sso.db"
+
+redis:
+  enabled: false  # 设为 false 时使用内存存储（开发模式）
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+oauth:
+  issuer: "http://localhost:8080"
+  access_token_ttl: 3600
+  refresh_token_ttl: 2592000
+  auth_code_ttl: 300
+  keys_dir: "./keys"
+  # 开发环境下前端 SPA 的地址（用于 302 跳转到登录/同意页）
+  # 空字符串表示与 issuer 同域（生产 Nginx 反代模式）
+  frontend_url: "http://localhost:5174"
+
+cors:
+  allowed_origins:
+    - "http://localhost:5174"
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  allow_credentials: true
+
+monitor:
+  enabled: true
+  interval_seconds: 30
+  default_timeout_ms: 10000
+  default_degraded_ms: 2000
+  retention_days: 30
+
+status:
+  public: true  # /api/status/* 是否公开访问

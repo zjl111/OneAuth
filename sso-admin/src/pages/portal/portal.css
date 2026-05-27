@@ -1,0 +1,239 @@
+.portal-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 600px at 90% -10%, rgba(22, 119, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.08), transparent 60%),
+    #f5f7fb;
+  padding: 0 0 60px;
+}
+
+/* ── 顶部 ────────────────────────────── */
+.portal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 32px;
+  background: #ffffffc7;
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #eef0f5;
+}
+.portal-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-weight: 700;
+  font-size: 17px;
+  color: #1d2c5b;
+  letter-spacing: 0.3px;
+}
+.brand-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #1677ff, #4f8cff);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  box-shadow: 0 6px 14px rgba(22, 119, 255, 0.32);
+}
+.portal-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 14px 4px 4px;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.portal-user:hover { background: rgba(22, 119, 255, 0.06); }
+
+/* ── 工具栏 ──────────────────────────── */
+.portal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.portal-search {
+  flex: 1;
+  min-width: 360px;
+  max-width: 720px;
+}
+.portal-toolbar .ant-segmented {
+  background: #fff;
+  padding: 4px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+/* 选中态：蓝色实心填充，白色文字 */
+.portal-toolbar .ant-segmented .ant-segmented-item-selected {
+  background: #1677ff !important;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.25);
+}
+.portal-toolbar .ant-segmented .ant-segmented-item-selected,
+.portal-toolbar .ant-segmented .ant-segmented-item-selected .ant-segmented-item-label,
+.portal-toolbar .ant-segmented .ant-segmented-item-selected .anticon {
+  color: #fff !important;
+}
+.portal-toolbar .ant-segmented .ant-segmented-thumb {
+  background: #1677ff !important;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.25);
+}
+.portal-toolbar .ant-segmented .ant-segmented-item-label {
+  padding: 4px 16px;
+  font-weight: 500;
+}
+.view-switch {
+  display: inline-flex;
+  background: #fff;
+  border: 1px solid #eef0f5;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.view-switch span {
+  display: inline-flex;
+  width: 40px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 16px;
+  transition: all 0.15s;
+}
+.view-switch span.active {
+  background: #1677ff;
+  color: #fff;
+}
+
+/* ── 应用网格 ────────────────────────── */
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 24px;
+  padding: 8px 32px 0;
+}
+
+/* 默认：透明背景，仅图标和文字；悬停时浮现选中态 */
+.app-tile {
+  position: relative;
+  background: transparent;
+  border-radius: 24px;
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  aspect-ratio: 1 / 1;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+.app-tile:hover {
+  background: #ffffff;
+  border-color: rgba(214, 228, 255, 0.8);
+  box-shadow: 0 18px 36px rgba(22, 119, 255, 0.12);
+  transform: translateY(-3px);
+}
+.app-tile:active {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(22, 119, 255, 0.10);
+}
+
+/* 图标 */
+.app-tile-logo {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  font-size: 56px;
+  color: #1677ff;
+  transition: transform 0.22s ease;
+}
+.app-tile:hover .app-tile-logo { transform: scale(1.06); }
+.app-tile-logo img { width: 100%; height: 100%; object-fit: contain; }
+.app-tile-logo .emoji-logo { font-size: 64px; line-height: 1; }
+
+.app-tile-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1d2c5b;
+  text-align: center;
+  letter-spacing: 0.3px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.18s ease, font-weight 0.18s ease;
+}
+.app-tile:hover .app-tile-name {
+  color: #1677ff;
+  font-weight: 600;
+}
+
+/* ── 列表视图 ────────────────────────── */
+.portal-list {
+  padding: 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.app-list-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 22px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #eef0f5;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+.app-list-item:hover {
+  border-color: #d6e4ff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.08);
+}
+.list-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eaf2ff, #f4f7ff);
+  color: #1677ff;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.list-logo img { width: 30px; height: 30px; object-fit: contain; }
+.list-text { flex: 1; }
+.list-name { font-weight: 700; color: #1d2c5b; font-size: 15px; }
+.list-desc { font-size: 12.5px; color: #6b7280; margin-top: 2px; }
+.list-action {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+  border: 1px solid rgba(22, 119, 255, 0.18);
+  transition: all 0.15s;
+}
+.app-list-item:hover .list-action {
+  background: #1677ff;
+  color: #fff;
+  border-color: #1677ff;
+}

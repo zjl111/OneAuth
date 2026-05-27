@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+
+# 环境变量
+.env
+.env.local
+
+# 日志
+*.log
+
+# ---- 后端 ----
+sso-server/data/
+sso-server/keys/
+sso-server/bin/
+sso-server/*.db
+sso-server/*.pem
+
+# ---- 前端 ----
+sso-admin/node_modules/
+sso-admin/dist/
+sso-admin/.vite/
+sso-admin/*.tsbuildinfo
+sso-admin/vite.config.js
+sso-admin/vite.config.d.ts
+
+# 构建输出
+bin/
+dist/
+
+# IDE / 工具本地配置
+.vscode/
+.idea/
+*.swp
+.claude/

@@ -1,0 +1,219 @@
+.dashboard {
+  /* 全屏宽度，让卡片自由伸缩 */
+}
+
+/* ── 顶部统计卡片 ───────────────────── */
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #eef0f5;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: all 0.18s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(22, 119, 255, 0.10);
+}
+.stat-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.stat-card-body { flex: 1; min-width: 0; }
+.stat-card-title { font-size: 13px; color: #6b7280; }
+.stat-card-value { font-size: 26px; font-weight: 700; color: #1d2c5b; line-height: 1.2; margin-top: 4px; }
+.stat-card-delta { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+
+/* ── 通用卡片 ───────────────────────── */
+.dash-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.dash-card .ant-card-head { border-bottom: 1px solid #f3f4f6; }
+.dash-card .ant-card-head-title { font-weight: 600; color: #1d2c5b; }
+.dash-card .ant-card-extra a { font-size: 13px; color: #1677ff; }
+.dash-card .ant-card-body {
+  padding: 18px 22px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.dash-card .ant-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+}
+
+/* ── 饼图旁的图例列表 ─────────────── */
+.dash-legend {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #4b5563;
+}
+.dash-legend .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dash-legend .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-legend .pct {
+  font-weight: 600;
+  color: #1d2c5b;
+}
+
+.dash-sub {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: #94a3b8;
+}
+.dash-sub b { color: #1d2c5b; font-weight: 600; }
+
+/* ── 最近操作 ───────────────────────── */
+.op-list { margin: 0; padding: 0; list-style: none; }
+.op-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px dashed #eef0f5;
+}
+.op-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.op-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #eaf2ff, #f4f7ff);
+  color: #1677ff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.op-text { flex: 1; min-width: 0; }
+.op-title { font-size: 14px; color: #1d2c5b; font-weight: 500; }
+.op-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.op-sub b { color: #4b5563; }
+.op-time { font-size: 12px; color: #94a3b8; flex-shrink: 0; }
+
+/* ── 快捷入口 ───────────────────────── */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fafbfd;
+  border: 1px solid #eef0f5;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.shortcut:hover {
+  transform: translateY(-2px);
+  border-color: #d6e4ff;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.08);
+}
+.shortcut-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.shortcut-label { font-size: 14px; font-weight: 600; color: #1d2c5b; }
+.shortcut-sub { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+
+/* ── 热门应用排行 ───────────────────── */
+.rank-list { margin: 0; padding: 0; list-style: none; }
+.rank-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed #eef0f5;
+}
+.rank-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.rank-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  background: #f1f5fa;
+  color: #6b7280;
+  font-weight: 600;
+}
+.rank-badge.rank-1 { background: #fef3c7; color: #f59e0b; }
+.rank-badge.rank-2 { background: #e5e7eb; color: #6b7280; }
+.rank-badge.rank-3 { background: #fed7aa; color: #ea580c; }
+.rank-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f5f7fb;
+  color: #1677ff;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.rank-name {
+  flex: 1;
+  font-size: 14px;
+  color: #1d2c5b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-count { color: #6b7280; font-size: 13px; }
+.rank-pct {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11.5px;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
