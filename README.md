@@ -214,4 +214,4 @@ make docker-up
 
 ## 📜 许可
 
-仅限内部学习与企业使用。
+[MIT License](LICENSE) © 2026 zjl111
