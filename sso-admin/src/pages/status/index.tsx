@@ -6,7 +6,6 @@ import {
   CloseCircleFilled,
   ToolFilled,
   QuestionCircleFilled,
-  GlobalOutlined,
   BulbOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -103,9 +102,6 @@ export default function StatusPage() {
           </div>
         </div>
         <div className="status-actions">
-          <button className="icon-btn" title="国际化">
-            <GlobalOutlined />
-          </button>
           <button
             className="icon-btn"
             title="主题"

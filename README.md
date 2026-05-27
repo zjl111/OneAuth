@@ -12,6 +12,16 @@
 - 🚀 **零依赖开发**：内置 SQLite + 内存 Store，无需 Postgres/Redis 即可本地启动
 - 🐳 **生产部署**：Docker Compose 一键部署完整栈
 
+## 📸 项目预览
+
+| 落地页 | 应用门户 |
+| --- | --- |
+| ![首页](docs/screenshots/01-home.png) | ![应用门户](docs/screenshots/02-portal.png) |
+
+| 组织架构 | 公开状态页 |
+| --- | --- |
+| ![组织架构](docs/screenshots/03-admin-orgs.png) | ![状态页](docs/screenshots/04-status.png) |
+
 ## 🏗️ 技术栈
 
 | 层 | 选型 |
