@@ -39,6 +39,7 @@ services:
       SSO_OAUTH_ISSUER: ${SSO_ISSUER:-http://localhost}
     volumes:
       - rsa_keys:/app/keys
+      - uploads:/app/data/uploads
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
@@ -66,3 +67,4 @@ volumes:
   pg_data:
   redis_data:
   rsa_keys:
+  uploads:

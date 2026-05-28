@@ -1,9 +1,12 @@
 # Stage 1: build
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
+# 国内网络访问 proxy.golang.org 不稳定，统一走 goproxy.cn
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOSUMDB=off
 RUN apk add --no-cache git
-COPY sso-server/go.mod ./
-RUN go mod download || true
+COPY sso-server/go.mod sso-server/go.sum ./
+RUN go mod download
 COPY sso-server/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/sso-server ./cmd/server
 
@@ -14,7 +17,7 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /out/sso-server .
 COPY --from=builder /app/configs ./configs
-RUN adduser -D -H sso && mkdir -p keys data && chown -R sso:sso keys data
+RUN adduser -D -H sso && mkdir -p keys data/uploads && chown -R sso:sso keys data
 USER sso
 EXPOSE 8080
 CMD ["./sso-server", "--config", "./configs/config.yaml"]
