@@ -166,11 +166,11 @@ func seedAdminUser(db *gorm.DB) error {
 
 	// 创建一个示例普通用户
 	uhash, _ := password.Hash("User@123456")
-	uemail := "zhang.li@example.com"
+	uemail := "jinli@example.com"
 	user := model.User{
 		ID:           uuid.New(),
-		Username:     "zhang.li",
-		Nickname:     "张丽",
+		Username:     "jinli",
+		Nickname:     "金丽",
 		Email:        &uemail,
 		PasswordHash: uhash,
 		IsActive:     true,

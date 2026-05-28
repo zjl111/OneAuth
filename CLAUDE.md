@@ -99,7 +99,7 @@ The status page (`/status` + `/api/status/overview`) reads from the **daily aggr
 
 Wired in `repository/seed.go`:
 - Admin: `admin / Admin@123456` (is_staff, super_admin role)
-- Normal user: `zhang.li / User@123456`
+- Normal user: `jinli / User@123456`
 - Built-in client `sso-admin` (the admin panel itself)
 - 8 demo apps (`demo-oa`, `demo-mail`, ...) with public health-check URLs for monitor demo data
 

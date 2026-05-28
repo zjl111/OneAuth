@@ -111,7 +111,7 @@ make dev-frontend
 | 账号 | 密码 | 角色 |
 | --- | --- | --- |
 | `admin` | `Admin@123456` | 超级管理员（is_staff=true） |
-| `zhang.li` | `User@123456` | 普通用户 |
+| `jinli` | `User@123456` | 普通用户 |
 
 ## 🔐 OAuth 2.0 / OIDC 接入示例
 

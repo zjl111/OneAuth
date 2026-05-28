@@ -196,7 +196,7 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port)
 	log.Printf("[startup] HTTP server listening on %s", addr)
 	log.Printf("[startup] Default admin: admin / Admin@123456")
-	log.Printf("[startup] Default user:  zhang.li / User@123456")
+	log.Printf("[startup] Default user:  jinli / User@123456")
 
 	srv := startServer(r, addr)
 
