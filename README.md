@@ -102,7 +102,7 @@ make dev-frontend
 | --- | --- | --- |
 | 统一登录页 | http://localhost:5173/oauth/login | 所有用户登录入口 |
 | 应用门户 | http://localhost:5173/portal | 普通用户登录后落地 |
-| 管理后台 | http://localhost:5173/admin | 仅 `is_staff=true` 用户 |
+| 管理后台 | http://localhost:5173/admin | 仅管理员用户 |
 | 状态监控 | http://localhost:5173/status | 公开可访问 |
 | OIDC Discovery | http://localhost:8080/.well-known/openid-configuration | — |
 
