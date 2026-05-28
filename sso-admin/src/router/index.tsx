@@ -10,7 +10,9 @@ import AdminLayout from '@/layouts/AdminLayout';
 import DashboardPage from '@/pages/admin/dashboard';
 import UserListPage from '@/pages/admin/users';
 import OrgPage from '@/pages/admin/orgs';
+import UserGroupsPage from '@/pages/admin/user-groups';
 import RolePage from '@/pages/admin/roles';
+import AppPermsPage from '@/pages/admin/app-perms';
 import AppListPage from '@/pages/admin/apps';
 import AccessPage from '@/pages/admin/access';
 import SettingsPage from '@/pages/admin/settings';
@@ -64,7 +66,9 @@ export const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'users', element: <UserListPage /> },
       { path: 'orgs', element: <OrgPage /> },
+      { path: 'user-groups', element: <UserGroupsPage /> },
       { path: 'roles', element: <RolePage /> },
+      { path: 'app-perms', element: <AppPermsPage /> },
       { path: 'apps', element: <AppListPage /> },
       { path: 'access', element: <AccessPage /> },
       { path: 'settings', element: <SettingsPage /> },

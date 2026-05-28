@@ -14,6 +14,7 @@ type PortalHandler struct {
 	UserService   *service.UserService
 	ClientService *service.ClientService
 	GrantRepo     *repository.GrantRepository
+	AppGrantRepo  *repository.AppGrantRepository
 }
 
 type PortalApp struct {
@@ -53,11 +54,28 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		grantedSet[g.ClientID] = true
 	}
 
+	// 应用授权过滤：有 grant 配置的应用只对授权 principal 可见
+	var allowedSet map[string]bool
+	var restrictedSet map[string]bool
+	if h.AppGrantRepo != nil {
+		allowedSet, _ = h.AppGrantRepo.AllowedClientIDs(uid)
+		restrictedSet, _ = h.AppGrantRepo.ClientsWithGrant()
+	}
+
 	apps := []PortalApp{}
 	for _, cl := range clients {
 		// 管理后台只对管理员可见
 		if cl.ClientID == "sso-admin" && !user.IsStaff {
 			continue
+		}
+		// 应用授权：如果该应用配置了授权但用户没命中，过滤
+		if restrictedSet != nil && restrictedSet[cl.ClientID] {
+			if allowedSet == nil || !allowedSet[cl.ClientID] {
+				// 但 super_admin 永远能看（避免锁死管理员）
+				if !user.IsStaff {
+					continue
+				}
+			}
 		}
 		apps = append(apps, PortalApp{
 			ID:          cl.ID.String(),

@@ -76,6 +76,57 @@ export interface IPRule {
   created_at: string;
 }
 
+export interface UserGroup {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  member_count?: number;
+}
+
+export interface AppPermApp {
+  id: string;
+  client_id: string;
+  client_name: string;
+  logo_url: string;
+  is_builtin: boolean;
+  is_active: boolean;
+  granted: boolean;
+  grant_total: number;
+  grant_users: number;
+  grant_roles: number;
+  grant_groups: number;
+}
+
+export interface AppGrant {
+  id: string;
+  client_id: string;
+  principal_type: 'user' | 'role' | 'group';
+  principal_id: string;
+  principal_name: string;
+  created_at: string;
+}
+
+export const appPermApi = {
+  listApps: () => get<AppPermApp[]>('/app-perms/apps'),
+  listGrants: (clientId: string) => get<AppGrant[]>(`/app-perms/apps/${clientId}/grants`),
+  setGrants: (clientId: string, grants: Array<{ principal_type: string; principal_id: string }>) =>
+    put(`/app-perms/apps/${clientId}/grants`, { grants }),
+};
+
+export const userGroupApi = {
+  list: () => get<UserGroup[]>('/user-groups'),
+  create: (data: { name: string; description?: string }) => post<UserGroup>('/user-groups', data),
+  update: (id: string, data: { name: string; description?: string }) =>
+    put<UserGroup>(`/user-groups/${id}`, data),
+  delete: (id: string) => del(`/user-groups/${id}`),
+  members: (id: string) =>
+    get<Array<{ id: string; username: string; nickname: string; email: string | null; avatar: string }>>(
+      `/user-groups/${id}/members`
+    ),
+  setMembers: (id: string, user_ids: string[]) => put(`/user-groups/${id}/members`, { user_ids }),
+};
+
 export const orgApi = {
   tree: () => get<Department[]>('/departments/tree'),
   list: () => get<Department[]>('/departments'),
@@ -112,6 +163,28 @@ export const accessApi = {
   list: () => get<IPRule[]>('/access/ip'),
   create: (data: Partial<IPRule>) => post<IPRule>('/access/ip', data),
   delete: (id: string) => del(`/access/ip/${id}`),
+};
+
+export interface LoginRule {
+  id: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  user_scope: 'all' | 'specific';
+  user_ids: string[];
+  ips: string[];
+  time_mask: string;
+  action: 'accept' | 'deny';
+  created_at: string;
+  updated_at: string;
+}
+
+export const loginRuleApi = {
+  list: () => get<LoginRule[]>('/access/login-rules'),
+  create: (data: Partial<LoginRule>) => post<LoginRule>('/access/login-rules', data),
+  update: (id: string, data: Partial<LoginRule>) => put<LoginRule>(`/access/login-rules/${id}`, data),
+  delete: (id: string) => del(`/access/login-rules/${id}`),
+  toggle: (id: string) => post<{ enabled: boolean }>(`/access/login-rules/${id}/toggle`),
 };
 
 export const dashboardApi = {

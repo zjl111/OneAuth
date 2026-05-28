@@ -16,6 +16,12 @@ type User struct {
 	PasswordHash string         `gorm:"size:256;not null" json:"-"`
 	Avatar       string         `gorm:"size:512" json:"avatar"`
 	Position     string         `gorm:"size:150" json:"position"`
+	Gender       string         `gorm:"size:10" json:"gender"`         // male | female | ""
+	EmployeeNo   string         `gorm:"size:64" json:"employee_no"`    // 员工编号
+	DomainAccount string        `gorm:"size:128" json:"domain_account"` // AD/域账号
+	UserType     string         `gorm:"size:30;default:'internal'" json:"user_type"` // internal | external
+	HireStatus   string         `gorm:"size:20;default:'active'" json:"hire_status"` // active | resigned
+	SortOrder    int            `gorm:"default:0" json:"sort_order"`
 	DepartmentID *uuid.UUID     `gorm:"type:char(36);index" json:"department_id"`
 	IsActive     bool           `gorm:"default:true" json:"is_active"`
 	IsStaff      bool           `gorm:"default:false" json:"is_staff"`

@@ -30,6 +30,9 @@ type Handlers struct {
 	Status     *handler.StatusHandler
 	Site       *handler.SiteHandler
 	Session    *handler.SessionHandler
+	UserGroup  *handler.UserGroupHandler
+	LoginRule  *handler.LoginRuleHandler
+	AppPerm    *handler.AppPermHandler
 }
 
 func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserService, h *Handlers) *gin.Engine {
@@ -132,6 +135,14 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.PUT("/users/:id/roles", h.User.SetRoles)
 		admin.POST("/users/:id/avatar", h.User.UploadAvatar)
 
+		// 用户组
+		admin.GET("/user-groups", h.UserGroup.List)
+		admin.POST("/user-groups", h.UserGroup.Create)
+		admin.PUT("/user-groups/:id", h.UserGroup.Update)
+		admin.DELETE("/user-groups/:id", h.UserGroup.Delete)
+		admin.GET("/user-groups/:id/members", h.UserGroup.Members)
+		admin.PUT("/user-groups/:id/members", h.UserGroup.SetMembers)
+
 		// 部门
 		admin.GET("/departments/tree", h.Department.Tree)
 		admin.GET("/departments", h.Department.List)
@@ -146,6 +157,11 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.DELETE("/roles/:id", h.Role.Delete)
 		admin.PUT("/roles/:id/permissions", h.Role.SetPermissions)
 		admin.GET("/permissions/tree", h.Role.PermissionTree)
+
+		// 应用授权
+		admin.GET("/app-perms/apps", h.AppPerm.ListApps)
+		admin.GET("/app-perms/apps/:client_id/grants", h.AppPerm.ListGrants)
+		admin.PUT("/app-perms/apps/:client_id/grants", h.AppPerm.SetGrants)
 
 		// 应用管理
 		admin.GET("/apps", h.App.List)
@@ -184,6 +200,12 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/access/ip", h.Access.List)
 		admin.POST("/access/ip", h.Access.Create)
 		admin.DELETE("/access/ip/:id", h.Access.Delete)
+		// 用户登录控制规则
+		admin.GET("/access/login-rules", h.LoginRule.List)
+		admin.POST("/access/login-rules", h.LoginRule.Create)
+		admin.PUT("/access/login-rules/:id", h.LoginRule.Update)
+		admin.DELETE("/access/login-rules/:id", h.LoginRule.Delete)
+		admin.POST("/access/login-rules/:id/toggle", h.LoginRule.Toggle)
 
 		// 监控
 		admin.GET("/monitor/apps", h.Monitor.List)

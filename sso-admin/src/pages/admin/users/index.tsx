@@ -11,12 +11,42 @@ import {
   Switch,
   Popconfirm,
   Select,
+  Drawer,
+  Tabs,
+  Row,
+  Col,
+  InputNumber,
+  Upload,
   App as AntdApp,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, KeyOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  LockOutlined,
+  UnlockOutlined,
+  KeyOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
 import { usersApi, type User } from '@/api/users';
 import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
+import UserAvatar from '@/components/UserAvatar';
+import { useAuthStore } from '@/store/authStore';
+
+function randomPassword(length = 12): string {
+  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digit = '23456789';
+  const symbol = '!@#$%^&*';
+  const all = upper + lower + digit + symbol;
+  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
+  let out = pick(upper) + pick(lower) + pick(digit) + pick(symbol);
+  for (let i = 4; i < length; i++) out += pick(all);
+  return out
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('');
+}
 
 export default function UserListPage() {
   const { message, modal } = AntdApp.useApp();
@@ -29,9 +59,16 @@ export default function UserListPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [form] = Form.useForm();
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+
+  const avatarUrl = Form.useWatch('avatar', form) as string | undefined;
+  const watchedName =
+    (Form.useWatch('nickname', form) as string) ||
+    (Form.useWatch('username', form) as string) ||
+    '新用户';
 
   const flatDept = (list: Department[], depth = 0): Array<{ id: string; label: string }> => {
     const result: Array<{ id: string; label: string }> = [];
@@ -245,63 +282,237 @@ export default function UserListPage() {
         ]}
       />
 
-      <Modal
-        title={editing ? '编辑用户' : '新建用户'}
+      <Drawer
+        title={editing ? '编辑用户' : '新增'}
         open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={handleSave}
-        width={520}
+        onClose={() => setModalOpen(false)}
+        width={760}
         destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setModalOpen(false)}>关闭</Button>
+            <Button type="primary" onClick={handleSave}>
+              提交
+            </Button>
+          </Space>
+        }
       >
-        <Form form={form} layout="vertical" preserve={false} initialValues={{ is_active: true }}>
-          {!editing && (
-            <Form.Item
-              name="username"
-              label="用户名"
-              rules={[{ required: true, message: '请输入用户名' }]}
-              extra="用户名为账号唯一标识，创建后不可更改"
-            >
-              <Input />
-            </Form.Item>
-          )}
-          <Form.Item name="nickname" label="昵称">
-            <Input />
-          </Form.Item>
-          {!editing && (
-            <Form.Item
-              name="password"
-              label="初始密码"
-              rules={[{ required: true, min: 8, message: '至少 8 位' }]}
-            >
-              <Input.Password />
-            </Form.Item>
-          )}
-          <Form.Item name="email" label="邮箱">
-            <Input />
-          </Form.Item>
-          <Form.Item name="department_id" label="所属部门">
-            <Select
-              allowClear
-              placeholder="选择部门"
-              options={flatDept(depts).map((d) => ({ value: d.id, label: d.label }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="role_ids"
-            label="角色"
-            extra="选择超级管理员角色将自动获得管理后台访问权限，其他角色按所分配的权限进入对应菜单"
-          >
-            <Select
-              mode="multiple"
-              placeholder="选择角色"
-              options={roles.map((r) => ({ value: r.id, label: r.name }))}
-            />
-          </Form.Item>
-          <Form.Item name="is_active" label="启用" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+        <Form
+          form={form}
+          layout="vertical"
+          preserve={false}
+          initialValues={{
+            is_active: true,
+            user_type: 'internal',
+            hire_status: 'active',
+            sort_order: 1,
+            gender: 'male',
+          }}
+        >
+          <Tabs
+            items={[
+              {
+                key: 'basic',
+                label: '基本信息',
+                children: (
+                  <Row gutter={24}>
+                    <Col span={14}>
+                      {!editing && (
+                        <Form.Item
+                          name="nickname"
+                          label="姓名"
+                          rules={[{ required: true, message: '请输入姓名' }]}
+                        >
+                          <Input placeholder="请输入姓名" />
+                        </Form.Item>
+                      )}
+                      {editing && (
+                        <Form.Item name="nickname" label="姓名">
+                          <Input placeholder="请输入姓名" />
+                        </Form.Item>
+                      )}
+                      {!editing && (
+                        <Form.Item
+                          name="username"
+                          label="登录账号"
+                          rules={[{ required: true, message: '请输入登录账号' }]}
+                          extra="用户名为账号唯一标识，创建后不可更改"
+                        >
+                          <Input placeholder="字母/数字/点/下划线" />
+                        </Form.Item>
+                      )}
+                      {!editing && (
+                        <Form.Item
+                          name="password"
+                          label="密码"
+                          rules={[{ required: true, min: 8, message: '至少 8 位' }]}
+                        >
+                          <Input.Password
+                            placeholder="new password"
+                            addonAfter={
+                              <Button
+                                size="small"
+                                type="primary"
+                                style={{ marginRight: -8 }}
+                                onClick={() =>
+                                  form.setFieldValue('password', randomPassword(12))
+                                }
+                              >
+                                生成
+                              </Button>
+                            }
+                          />
+                        </Form.Item>
+                      )}
+                      <Form.Item name="gender" label="性别">
+                        <Select
+                          options={[
+                            { value: 'male', label: '男' },
+                            { value: 'female', label: '女' },
+                          ]}
+                          style={{ width: 200 }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={10}>
+                      <Form.Item name="avatar" label="头像">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          <UserAvatar src={avatarUrl} name={watchedName} size={72} />
+                          <Upload
+                            name="file"
+                            action="/api/v1/configs/upload-image"
+                            headers={{ Authorization: `Bearer ${accessToken}` }}
+                            data={{ prefix: 'avatar' }}
+                            accept=".png,.jpg,.jpeg,.webp,.gif"
+                            showUploadList={false}
+                            beforeUpload={(file) => {
+                              if (file.size > 5 * 1024 * 1024) {
+                                message.error('头像不能超过 5MB');
+                                return Upload.LIST_IGNORE;
+                              }
+                              return true;
+                            }}
+                            onChange={(info) => {
+                              if (info.file.status === 'done') {
+                                const url = info.file.response?.data?.url;
+                                if (url) {
+                                  form.setFieldValue('avatar', url);
+                                  message.success('头像已上传');
+                                }
+                              } else if (info.file.status === 'error') {
+                                message.error(info.file.response?.message || '上传失败');
+                              }
+                            }}
+                          >
+                            <Button icon={<UploadOutlined />}>Upload</Button>
+                          </Upload>
+                        </div>
+                      </Form.Item>
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Item name="employee_no" label="员工编号">
+                        <Input placeholder="如 E1001" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item name="domain_account" label="域账号">
+                        <Input placeholder="如 corp\\zhangsan" />
+                      </Form.Item>
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Item name="phone" label="手机号码">
+                        <Input />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item name="email" label="电子邮箱">
+                        <Input />
+                      </Form.Item>
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Item
+                        name="user_type"
+                        label="用户类型"
+                        rules={[{ required: true }]}
+                      >
+                        <Select
+                          options={[
+                            { value: 'internal', label: '内部员工' },
+                            { value: 'external', label: '外部协作' },
+                          ]}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="hire_status"
+                        label="用户状态"
+                        rules={[{ required: true }]}
+                      >
+                        <Select
+                          options={[
+                            { value: 'active', label: '在职' },
+                            { value: 'resigned', label: '离职' },
+                          ]}
+                        />
+                      </Form.Item>
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Item
+                        name="sort_order"
+                        label="排序"
+                        rules={[{ required: true }]}
+                      >
+                        <InputNumber min={0} max={9999} style={{ width: '100%' }} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="is_active"
+                        label="状态"
+                        valuePropName="checked"
+                        rules={[{ required: true }]}
+                      >
+                        <Switch checkedChildren="活动" unCheckedChildren="禁用" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                ),
+              },
+              {
+                key: 'org',
+                label: '组织与角色',
+                children: (
+                  <>
+                    <Form.Item name="department_id" label="所属部门">
+                      <Select
+                        allowClear
+                        placeholder="选择部门"
+                        options={flatDept(depts).map((d) => ({ value: d.id, label: d.label }))}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      name="role_ids"
+                      label="角色"
+                      extra="选择超级管理员角色将自动获得管理后台访问权限，其他角色按所分配的权限进入对应菜单"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="选择角色"
+                        options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                      />
+                    </Form.Item>
+                  </>
+                ),
+              },
+            ]}
+          />
         </Form>
-      </Modal>
+      </Drawer>
       </Card>
     </>
   );

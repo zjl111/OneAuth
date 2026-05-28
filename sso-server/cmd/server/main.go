@@ -95,6 +95,9 @@ func main() {
 	dictRepo := repository.NewDictionaryRepository(db)
 	ipRepo := repository.NewIPAccessRepository(db)
 	grantRepo := repository.NewGrantRepository(db)
+	userGroupRepo := repository.NewUserGroupRepository(db)
+	loginRuleRepo := repository.NewLoginRuleRepository(db)
+	appGrantRepo := repository.NewAppGrantRepository(db)
 
 	// services
 	userService := service.NewUserService(userRepo)
@@ -153,20 +156,22 @@ func main() {
 			UserService:   userService,
 			ClientService: clientService,
 			GrantRepo:     grantRepo,
+			AppGrantRepo:  appGrantRepo,
 			LogRepo:       logRepo,
 			SessionMgr:    sessionMgr,
 			Issuer:        cfg.OAuth.Issuer,
 			FrontendBase:  frontendBase,
 		},
 		Auth: &handler.AuthHandler{
-			UserService:  userService,
-			TokenService: tokenService,
-			SessionMgr:   sessionMgr,
-			Store:        store,
-			LogRepo:      logRepo,
-			Mailer:       mailService,
-			Issuer:       cfg.OAuth.Issuer,
-			FrontendBase: frontendBase,
+			UserService:   userService,
+			TokenService:  tokenService,
+			SessionMgr:    sessionMgr,
+			Store:         store,
+			LogRepo:       logRepo,
+			LoginRuleRepo: loginRuleRepo,
+			Mailer:        mailService,
+			Issuer:        cfg.OAuth.Issuer,
+			FrontendBase:  frontendBase,
 		},
 		User: &handler.UserHandler{Service: userService},
 		App:  &handler.AppHandler{Service: clientService},
@@ -179,6 +184,7 @@ func main() {
 			UserService:   userService,
 			ClientService: clientService,
 			GrantRepo:     grantRepo,
+			AppGrantRepo:  appGrantRepo,
 		},
 		Department: &handler.DepartmentHandler{Repo: deptRepo},
 		Role:       &handler.RoleHandler{Repo: roleRepo, PermRepo: permRepo},
@@ -189,6 +195,9 @@ func main() {
 		Status:     &handler.StatusHandler{MonitorRepo: monitorRepo, ClientService: clientService},
 		Site:       &handler.SiteHandler{ConfigRepo: configRepo, Mailer: mailService},
 		Session:    &handler.SessionHandler{SessionMgr: sessionMgr},
+		UserGroup:  &handler.UserGroupHandler{Repo: userGroupRepo},
+		LoginRule:  &handler.LoginRuleHandler{Repo: loginRuleRepo},
+		AppPerm:    &handler.AppPermHandler{GrantRepo: appGrantRepo, ClientRepo: clientRepo},
 	}
 
 	r := router.Setup(cfg, tokenService, userService, handlers)

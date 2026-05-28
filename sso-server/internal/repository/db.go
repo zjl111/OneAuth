@@ -72,6 +72,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.SystemConfig{},
 		&model.Dictionary{},
 		&model.IPAccess{},
+		&model.LoginRule{},
+		&model.AppGrant{},
 		&model.AppMonitor{},
 		&model.StatusProbe{},
 		&model.StatusDaily{},

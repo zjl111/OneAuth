@@ -47,14 +47,21 @@ func (s *UserService) deriveIsStaff(roleIDs []uuid.UUID) bool {
 }
 
 type CreateUserInput struct {
-	Username     string      `json:"username" binding:"required"`
-	Nickname     string      `json:"nickname"`
-	Email        string      `json:"email"`
-	Phone        string      `json:"phone"`
-	Password     string      `json:"password" binding:"required"`
-	DepartmentID *uuid.UUID  `json:"department_id"`
-	IsActive     *bool       `json:"is_active"`
-	RoleIDs      []uuid.UUID `json:"role_ids"`
+	Username      string      `json:"username" binding:"required"`
+	Nickname      string      `json:"nickname"`
+	Email         string      `json:"email"`
+	Phone         string      `json:"phone"`
+	Password      string      `json:"password" binding:"required"`
+	Avatar        string      `json:"avatar"`
+	Gender        string      `json:"gender"`
+	EmployeeNo    string      `json:"employee_no"`
+	DomainAccount string      `json:"domain_account"`
+	UserType      string      `json:"user_type"`
+	HireStatus    string      `json:"hire_status"`
+	SortOrder     int         `json:"sort_order"`
+	DepartmentID  *uuid.UUID  `json:"department_id"`
+	IsActive      *bool       `json:"is_active"`
+	RoleIDs       []uuid.UUID `json:"role_ids"`
 }
 
 func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
@@ -66,13 +73,20 @@ func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
 		return nil, err
 	}
 	u := &model.User{
-		ID:           uuid.New(),
-		Username:     in.Username,
-		Nickname:     in.Nickname,
-		PasswordHash: hash,
-		DepartmentID: in.DepartmentID,
-		IsStaff:      s.deriveIsStaff(in.RoleIDs),
-		IsActive:     true,
+		ID:            uuid.New(),
+		Username:      in.Username,
+		Nickname:      in.Nickname,
+		PasswordHash:  hash,
+		Avatar:        in.Avatar,
+		Gender:        in.Gender,
+		EmployeeNo:    in.EmployeeNo,
+		DomainAccount: in.DomainAccount,
+		UserType:      defaultStr(in.UserType, "internal"),
+		HireStatus:    defaultStr(in.HireStatus, "active"),
+		SortOrder:     in.SortOrder,
+		DepartmentID:  in.DepartmentID,
+		IsStaff:       s.deriveIsStaff(in.RoleIDs),
+		IsActive:      true,
 	}
 	if in.Email != "" {
 		u.Email = &in.Email
@@ -96,14 +110,20 @@ func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
 }
 
 type UpdateUserInput struct {
-	Nickname     *string     `json:"nickname"`
-	Email        *string     `json:"email"`
-	Phone        *string     `json:"phone"`
-	Avatar       *string     `json:"avatar"`
-	Position     *string     `json:"position"`
-	DepartmentID *uuid.UUID  `json:"department_id"`
-	IsActive     *bool       `json:"is_active"`
-	RoleIDs      []uuid.UUID `json:"role_ids"`
+	Nickname      *string     `json:"nickname"`
+	Email         *string     `json:"email"`
+	Phone         *string     `json:"phone"`
+	Avatar        *string     `json:"avatar"`
+	Position      *string     `json:"position"`
+	Gender        *string     `json:"gender"`
+	EmployeeNo    *string     `json:"employee_no"`
+	DomainAccount *string     `json:"domain_account"`
+	UserType      *string     `json:"user_type"`
+	HireStatus    *string     `json:"hire_status"`
+	SortOrder     *int        `json:"sort_order"`
+	DepartmentID  *uuid.UUID  `json:"department_id"`
+	IsActive      *bool       `json:"is_active"`
+	RoleIDs       []uuid.UUID `json:"role_ids"`
 }
 
 func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, error) {
@@ -141,6 +161,24 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 	}
 	if in.Position != nil {
 		u.Position = *in.Position
+	}
+	if in.Gender != nil {
+		u.Gender = *in.Gender
+	}
+	if in.EmployeeNo != nil {
+		u.EmployeeNo = *in.EmployeeNo
+	}
+	if in.DomainAccount != nil {
+		u.DomainAccount = *in.DomainAccount
+	}
+	if in.UserType != nil {
+		u.UserType = *in.UserType
+	}
+	if in.HireStatus != nil {
+		u.HireStatus = *in.HireStatus
+	}
+	if in.SortOrder != nil {
+		u.SortOrder = *in.SortOrder
 	}
 	if in.IsActive != nil {
 		u.IsActive = *in.IsActive

@@ -28,14 +28,15 @@ const AdminClientID = "sso-admin"
 const AdminDefaultScope = "openid profile email roles"
 
 type AuthHandler struct {
-	UserService  *service.UserService
-	TokenService *oauth.TokenService
-	SessionMgr   *session.Manager
-	Store        oauth.Store
-	LogRepo      *repository.LogRepository
-	Mailer       *mailer.Mailer
-	Issuer       string
-	FrontendBase string
+	UserService   *service.UserService
+	TokenService  *oauth.TokenService
+	SessionMgr    *session.Manager
+	Store         oauth.Store
+	LogRepo       *repository.LogRepository
+	LoginRuleRepo *repository.LoginRuleRepository
+	Mailer        *mailer.Mailer
+	Issuer        string
+	FrontendBase  string
 }
 
 const (
@@ -112,6 +113,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
 		response.Unauthorized(c, err.Error())
 		return
+	}
+
+	// 登录控制规则：IP/时段/用户范围匹配 deny → 拒绝登录
+	if h.LoginRuleRepo != nil {
+		if allowed, hit := h.LoginRuleRepo.Evaluate(user.ID, c.ClientIP(), time.Now()); !allowed && hit != nil {
+			msg := "已被访问策略「" + hit.Name + "」拒绝"
+			h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", msg)
+			response.Forbidden(c, msg)
+			return
+		}
 	}
 
 	sd, err := h.SessionMgr.Create(c.Request.Context(), user.ID.String(), user.Username, c.ClientIP(), c.GetHeader("User-Agent"), user.IsStaff)

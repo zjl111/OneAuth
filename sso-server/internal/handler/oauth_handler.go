@@ -27,6 +27,7 @@ type OAuthHandler struct {
 	UserService   *service.UserService
 	ClientService *service.ClientService
 	GrantRepo     *repository.GrantRepository
+	AppGrantRepo  *repository.AppGrantRepository
 	LogRepo       *repository.LogRepository
 	SessionMgr    *session.Manager
 	Issuer        string
@@ -111,6 +112,16 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 	}
 
 	userID := uuid.MustParse(sd.UserID)
+
+	// 应用授权检查（白名单门）
+	if h.AppGrantRepo != nil && !client.IsBuiltin {
+		allowed, _ := h.AppGrantRepo.UserAllowed(clientID, userID)
+		if !allowed {
+			errorRedirect(c, redirectURI, "access_denied", "您没有权限访问该应用", state)
+			return
+		}
+	}
+
 	autoGrant := client.IsBuiltin || h.GrantRepo.Has(userID, clientID, scope)
 	consented := c.Query("consent") == "1"
 

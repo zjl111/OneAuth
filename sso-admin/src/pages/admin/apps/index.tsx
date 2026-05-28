@@ -43,6 +43,10 @@ export default function AppListPage() {
   const [form] = Form.useForm();
   const logoUrl = Form.useWatch('logo_url', form) as string | undefined;
 
+  // 创建应用前先弹协议选择
+  const [protocolOpen, setProtocolOpen] = useState(false);
+  const [pickedProtocol, setPickedProtocol] = useState<'oidc' | 'oauth2' | 'saml' | 'cas'>('oidc');
+
   const load = () => {
     setLoading(true);
     appsApi
@@ -64,12 +68,27 @@ export default function AppListPage() {
   }, [pagination.current, pagination.pageSize]);
 
   const openCreate = () => {
+    setPickedProtocol('oidc');
+    setProtocolOpen(true);
+  };
+
+  // 协议选完后真正打开创建表单
+  const handleProtocolNext = () => {
+    if (pickedProtocol === 'saml' || pickedProtocol === 'cas') {
+      message.info(
+        pickedProtocol === 'saml'
+          ? 'SAML 2.0 接入即将推出，敬请期待'
+          : 'CAS 接入即将推出，敬请期待'
+      );
+      return;
+    }
+    setProtocolOpen(false);
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({
       client_type: 'confidential',
       redirect_uris: ['http://localhost:3000/callback'],
-      scope: 'openid profile email',
+      scope: pickedProtocol === 'oidc' ? 'openid profile email' : 'profile email',
       is_active: true,
     });
     setDrawerOpen(true);
@@ -381,7 +400,115 @@ export default function AppListPage() {
           </Form.Item>
         </Form>
       </Drawer>
+
+      {/* 协议选择 */}
+      <Modal
+        title={
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600 }}>创建应用</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>请选择应用接入方式</div>
+          </div>
+        }
+        open={protocolOpen}
+        onCancel={() => setProtocolOpen(false)}
+        onOk={handleProtocolNext}
+        okText="下一步"
+        width={680}
+        centered
+      >
+        <ProtocolPicker value={pickedProtocol} onChange={setPickedProtocol} />
+      </Modal>
       </Card>
     </>
+  );
+}
+
+// ─── 协议选择卡片 ──────────────────────────
+type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas';
+function ProtocolPicker({ value, onChange }: { value: Proto; onChange: (v: Proto) => void }) {
+  const protos: Array<{ key: Proto; title: string; short: string; color: string; soon?: boolean }> = [
+    { key: 'oidc',   title: 'OIDC',     short: '适用于现代 Web、移动端应用单点登录', color: '#1677ff' },
+    { key: 'oauth2', title: 'OAuth2',   short: '适用于第三方授权与 API 访问',     color: '#06b6d4' },
+    { key: 'saml',   title: 'SAML 2.0', short: '适用于企业系统与标准身份联合场景', color: '#8b5cf6', soon: true },
+    { key: 'cas',    title: 'CAS',      short: '适用于传统单点登录系统接入',       color: '#10b981', soon: true },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '8px 0' }}>
+      {protos.map((p) => {
+        const active = value === p.key;
+        return (
+          <div
+            key={p.key}
+            onClick={() => onChange(p.key)}
+            style={{
+              cursor: 'pointer',
+              padding: 20,
+              borderRadius: 12,
+              border: active ? '2px solid #1677ff' : '1px solid #eef0f5',
+              background: active ? 'rgba(22,119,255,0.04)' : '#fff',
+              position: 'relative',
+              transition: 'all 0.15s',
+              boxShadow: active ? '0 8px 20px rgba(22,119,255,0.10)' : 'none',
+            }}
+          >
+            {active && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: '#1677ff',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                }}
+              >
+                ✓
+              </span>
+            )}
+            {p.soon && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  left: 12,
+                  fontSize: 11,
+                  padding: '1px 8px',
+                  borderRadius: 999,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                }}
+              >
+                即将推出
+              </span>
+            )}
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 14,
+                background: p.color,
+                color: '#fff',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 22,
+                fontWeight: 600,
+                marginBottom: 14,
+                marginTop: p.soon ? 18 : 0,
+              }}
+            >
+              {p.key === 'oidc' ? '🔐' : p.key === 'oauth2' ? '🔑' : p.key === 'saml' ? '🛡️' : 'CAS'}
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: '#1d2c5b' }}>{p.title}</div>
+            <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 6, lineHeight: 1.55 }}>{p.short}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

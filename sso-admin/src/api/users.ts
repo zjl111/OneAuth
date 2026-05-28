@@ -7,6 +7,13 @@ export interface User {
   email: string | null;
   phone: string | null;
   avatar: string;
+  position?: string;
+  gender?: string;
+  employee_no?: string;
+  domain_account?: string;
+  user_type?: 'internal' | 'external' | string;
+  hire_status?: 'active' | 'resigned' | string;
+  sort_order?: number;
   department_id: string | null;
   department?: { id: string; name: string };
   is_active: boolean;
