@@ -238,9 +238,18 @@ func seedBuiltinClient(db *gorm.DB) error {
 }
 
 func seedDemoClients(db *gorm.DB) error {
-	var count int64
-	db.Model(&model.OAuth2Client{}).Where("client_id LIKE ?", "demo-%").Count(&count)
-	if count > 0 {
+	// 用 SystemConfig.platform.demo_apps_seeded 作为"曾经 seed 过"的标记。
+	// 这样用户在管理界面删掉 demo 应用之后，重启 backend 不会再被 seed 回来。
+	const markerCat, markerKey = "platform", "demo_apps_seeded"
+	var marker model.SystemConfig
+	if err := db.Where("category = ? AND key = ?", markerCat, markerKey).First(&marker).Error; err == nil && marker.Value == "true" {
+		return nil
+	}
+	// 兼容老数据：标记不存在但仓库里已经有 demo-* 客户端，也认为已 seed，直接补标记
+	var existing int64
+	db.Model(&model.OAuth2Client{}).Where("client_id LIKE ?", "demo-%").Count(&existing)
+	if existing > 0 {
+		db.Save(&model.SystemConfig{Category: markerCat, Key: markerKey, Value: "true", Description: "demo 应用一次性 seed 标记，删除标记后下次启动会重新 seed"})
 		return nil
 	}
 	demos := []struct {
@@ -288,6 +297,8 @@ func seedDemoClients(db *gorm.DB) error {
 		}
 		db.Create(&monitor)
 	}
+	// 写入"已 seed"标记
+	db.Save(&model.SystemConfig{Category: markerCat, Key: markerKey, Value: "true", Description: "demo 应用一次性 seed 标记，删除标记后下次启动会重新 seed"})
 	return nil
 }
 
