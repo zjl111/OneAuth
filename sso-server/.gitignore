@@ -3,7 +3,6 @@
 *.pem
 *.db
 *.log
-go.sum
 bin/
 dist/
 .env
