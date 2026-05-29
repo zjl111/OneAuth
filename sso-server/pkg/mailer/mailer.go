@@ -24,6 +24,12 @@ type Config struct {
 	FromName      string
 	UseTLS        string // ssl | starttls | none
 	ResetLinkBase string
+
+	// 邮件模板
+	SubjectPrefix string // 所有邮件主题前缀，如 "[OneAuth]"
+	ResetSubject  string // 重置密码邮件主题
+	ResetGreeting string // 重置密码邮件问候语
+	ResetBody     string // 重置密码邮件正文模板（HTML，支持占位符 {{name}} {{link}}）
 }
 
 // Mailer 通过 ConfigRepo 动态读取配置，不持有静态字段，便于运营时改配置立即生效
@@ -62,6 +68,14 @@ func (m *Mailer) LoadConfig() (*Config, error) {
 			c.UseTLS = strings.ToLower(it.Value)
 		case "reset_link_base":
 			c.ResetLinkBase = strings.TrimRight(strings.TrimSpace(it.Value), "/")
+		case "subject_prefix":
+			c.SubjectPrefix = strings.TrimSpace(it.Value)
+		case "reset_subject":
+			c.ResetSubject = it.Value
+		case "reset_greeting":
+			c.ResetGreeting = it.Value
+		case "reset_body":
+			c.ResetBody = it.Value
 		}
 	}
 	return c, nil

@@ -173,7 +173,7 @@ export default function UserListPage() {
     <>
       <PageToolbar>
         <Input
-          placeholder="搜索用户名"
+          placeholder="搜索登录账号"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onPressEnter={load}
@@ -201,8 +201,8 @@ export default function UserListPage() {
           onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
         }}
         columns={[
-          { title: '用户名', dataIndex: 'username', width: 140 },
-          { title: '昵称', dataIndex: 'nickname', width: 140 },
+          { title: '登录账号', dataIndex: 'username', width: 140 },
+          { title: '姓名', dataIndex: 'nickname', width: 140 },
           { title: '邮箱', dataIndex: 'email', width: 200, render: (v) => v || '-' },
           {
             title: '部门',
@@ -315,6 +315,16 @@ export default function UserListPage() {
                     <Col span={14}>
                       {!editing && (
                         <Form.Item
+                          name="username"
+                          label="登录账号"
+                          rules={[{ required: true, message: '请输入登录账号' }]}
+                          extra="登录账号为唯一标识，创建后不可更改"
+                        >
+                          <Input placeholder="字母/数字/点/下划线" />
+                        </Form.Item>
+                      )}
+                      {!editing && (
+                        <Form.Item
                           name="nickname"
                           label="姓名"
                           rules={[{ required: true, message: '请输入姓名' }]}
@@ -325,16 +335,6 @@ export default function UserListPage() {
                       {editing && (
                         <Form.Item name="nickname" label="姓名">
                           <Input placeholder="请输入姓名" />
-                        </Form.Item>
-                      )}
-                      {!editing && (
-                        <Form.Item
-                          name="username"
-                          label="登录账号"
-                          rules={[{ required: true, message: '请输入登录账号' }]}
-                          extra="用户名为账号唯一标识，创建后不可更改"
-                        >
-                          <Input placeholder="字母/数字/点/下划线" />
                         </Form.Item>
                       )}
                       {!editing && (

@@ -25,12 +25,18 @@ func JWTAuth(ts *oauth.TokenService, userSvc *service.UserService) gin.HandlerFu
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 4001, "message": "Token 无效"})
 			return
 		}
-		c.Set("user_id", claims.Subject)
+		// uid 永远是 UUID（OneAuth 内部主键）；sub 可能被 client.subject_type 改成 username/email 等。
+		// 优先用 uid，兼容旧 token 时回退到 sub。
+		userIDStr := claims.UID
+		if userIDStr == "" {
+			userIDStr = claims.Subject
+		}
+		c.Set("user_id", userIDStr)
 		c.Set("client_id", claims.ClientID)
 		c.Set("scope", claims.Scope)
 		c.Set("username", claims.Username)
 
-		uid, err := uuid.Parse(claims.Subject)
+		uid, err := uuid.Parse(userIDStr)
 		if err == nil {
 			if u, err := userSvc.GetByID(uid); err == nil {
 				c.Set("user", u)

@@ -294,6 +294,7 @@ func seedDemoClients(db *gorm.DB) error {
 func seedSystemConfigs(db *gorm.DB) error {
 	configs := []model.SystemConfig{
 		{Category: "platform", Key: "name", Value: "OneAuth", Description: "平台名称"},
+		{Category: "platform", Key: "site_url", Value: "", Description: "当前站点 URL（生产环境必填，作为 OIDC Issuer 与回调链接基址；空时回退到 config.yaml 中的 oauth.issuer）"},
 		{Category: "platform", Key: "logo", Value: "", Description: "平台 Logo"},
 		{Category: "platform", Key: "theme_color", Value: "#1677ff", Description: "主题色"},
 		{Category: "platform", Key: "hero_title", Value: "OneAuth", Description: "首页主标题（一般等于平台名）"},
@@ -325,7 +326,11 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "smtp", Key: "from_address", Value: "", Description: "发件邮箱地址（建议与账号一致）"},
 		{Category: "smtp", Key: "from_name", Value: "OneAuth", Description: "发件人显示名称"},
 		{Category: "smtp", Key: "use_tls", Value: "ssl", Description: "加密方式：ssl / starttls / none"},
-		{Category: "smtp", Key: "reset_link_base", Value: "", Description: "重置密码链接前缀（空则用 issuer，例如 https://sso.example.com）"},
+		{Category: "smtp", Key: "reset_link_base", Value: "", Description: "重置密码链接前缀（留空则使用平台信息中的当前站点 URL）"},
+		{Category: "smtp", Key: "subject_prefix", Value: "", Description: "邮件主题前缀，会附加在所有邮件主题前（例如：[OneAuth]）"},
+		{Category: "smtp", Key: "reset_subject", Value: "重置 OneAuth 密码", Description: "重置密码邮件主题"},
+		{Category: "smtp", Key: "reset_greeting", Value: "Hello", Description: "重置密码邮件问候语"},
+		{Category: "smtp", Key: "reset_body", Value: "", Description: "重置密码邮件正文（留空使用默认模板）"},
 	}
 	for _, c := range configs {
 		c.UpdatedAt = time.Now()

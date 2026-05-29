@@ -78,36 +78,16 @@ export default function AppListPage() {
     setDrawerOpen(true);
   };
 
-  const handleWizardSubmit = async (values: any) => {
+  const handleWizardSubmit = async (values: any): Promise<OAuth2Client> => {
     if (editing) {
-      await appsApi.update(editing.id, values);
+      const r = await appsApi.update(editing.id, values);
       message.success('已更新');
       load();
-    } else {
-      const r = await appsApi.create(values);
-      showSecret(r.client_id, r.client_secret || '');
-      load();
+      return r;
     }
-  };
-
-  const showSecret = (clientId: string, secret: string) => {
-    modal.success({
-      title: '应用已创建',
-      width: 540,
-      content: (
-        <div>
-          <p>请妥善保存以下凭证，<b>client_secret 仅显示一次</b>：</p>
-          <Paragraph copyable={{ icon: <CopyOutlined /> }}>
-            <b>client_id：</b>
-            {clientId}
-          </Paragraph>
-          <Paragraph copyable>
-            <b>client_secret：</b>
-            <code>{secret}</code>
-          </Paragraph>
-        </div>
-      ),
-    });
+    const r = await appsApi.create(values);
+    load();
+    return r;
   };
 
   const handleRotate = (c: OAuth2Client) => {
@@ -116,7 +96,20 @@ export default function AppListPage() {
       content: '轮换后旧密钥立即失效，需要重新配置应用端。',
       onOk: async () => {
         const r = await appsApi.rotateSecret(c.id);
-        showSecret(c.client_id, r.client_secret);
+        modal.success({
+          title: '新客户端密钥（仅显示一次）',
+          width: 540,
+          content: (
+            <div>
+              <Paragraph copyable={{ icon: <CopyOutlined /> }}>
+                <b>客户端 ID：</b>{c.client_id}
+              </Paragraph>
+              <Paragraph copyable>
+                <b>客户端密钥：</b><code>{r.client_secret}</code>
+              </Paragraph>
+            </div>
+          ),
+        });
       },
     });
   };
@@ -198,7 +191,15 @@ export default function AppListPage() {
               );
             },
           },
-          { title: 'Client ID', dataIndex: 'client_id', width: 180 },
+          {
+            title: '客户端 ID',
+            dataIndex: 'client_id',
+            width: 180,
+            render: (v: string, r) =>
+              (r.protocol === 'saml' || r.protocol === 'cas')
+                ? <span style={{ color: '#cbd5e1' }}>—</span>
+                : v,
+          },
           {
             title: '协议',
             dataIndex: 'protocol',
@@ -259,9 +260,11 @@ export default function AppListPage() {
                 <Button type="link" size="small" onClick={() => openEdit(r)}>
                   编辑
                 </Button>
-                <Button type="link" size="small" icon={<KeyOutlined />} onClick={() => handleRotate(r)}>
-                  轮换密钥
-                </Button>
+                {(r.protocol === 'oidc' || r.protocol === 'oauth2' || !r.protocol) && (
+                  <Button type="link" size="small" icon={<KeyOutlined />} onClick={() => handleRotate(r)}>
+                    轮换密钥
+                  </Button>
+                )}
                 <Button type="link" size="small" onClick={() => handleToggle(r)}>
                   {r.is_active ? '禁用' : '启用'}
                 </Button>
@@ -292,7 +295,7 @@ export default function AppListPage() {
         title={editing ? `编辑应用 - ${editing.client_name}` : '新建应用'}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={900}
+        width={1100}
         destroyOnClose
       >
         <AppWizard

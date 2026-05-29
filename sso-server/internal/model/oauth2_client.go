@@ -34,14 +34,19 @@ type OAuth2Client struct {
 	SubjectType     string      `gorm:"size:30;default:'username'" json:"subject_type"` // username / user_id / email / mobile
 	RequirePKCE     bool        `gorm:"default:false" json:"require_pkce"`
 	RequireConsent  bool        `gorm:"default:false" json:"require_consent"` // true=强制 false=自动
-	AccessTokenTTL  int         `gorm:"default:3600" json:"access_token_ttl"`
-	RefreshTokenTTL int         `gorm:"default:604800" json:"refresh_token_ttl"`
+	AccessTokenTTL    int  `gorm:"default:3600" json:"access_token_ttl"`
+	RefreshTokenTTL   int  `gorm:"default:604800" json:"refresh_token_ttl"`
+	IDTokenTTL        int  `gorm:"default:3600" json:"id_token_ttl"`
+	// 默认 false（GORM 零值陷阱）；service 层会把缺省值显式置 true。
+	IssueRefreshToken bool `json:"issue_refresh_token"`
 
 	// === OIDC 额外字段（仅 protocol=oidc 生效） ===
 	OIDCIssuer            string `gorm:"size:255" json:"oidc_issuer"`
 	OIDCAudience          string `gorm:"size:255" json:"oidc_audience"`
 	OIDCIDTokenSigningAlg string `gorm:"size:20" json:"oidc_id_token_signing_alg"` // RS256 / RS384 / RS512 / HS256 / HS384 / HS512
 	OIDCUserInfoResponse  string `gorm:"size:30" json:"oidc_userinfo_response"`    // NORMAL / SIGNING / ENCRYPTION / SIGNING_ENCRYPTION
+	// 决定 id_token / /userinfo 下发哪些用户字段；空数组表示全发
+	OIDCClaims StringSlice `gorm:"type:text" json:"oidc_claims"`
 
 	// === SAML 2.0 协议配置（仅 protocol=saml 生效） ===
 	SAMLEntityID            string `gorm:"size:512" json:"saml_entity_id"`

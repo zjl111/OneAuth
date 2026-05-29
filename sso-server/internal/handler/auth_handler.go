@@ -34,9 +34,20 @@ type AuthHandler struct {
 	Store         oauth.Store
 	LogRepo       *repository.LogRepository
 	LoginRuleRepo *repository.LoginRuleRepository
+	ConfigRepo    *repository.ConfigRepository
 	Mailer        *mailer.Mailer
-	Issuer        string
+	Issuer        string // 兜底 issuer（config.yaml）
 	FrontendBase  string
+}
+
+// effectiveIssuer 与 OAuthHandler 同：platform.site_url 优先
+func (h *AuthHandler) effectiveIssuer() string {
+	if h.ConfigRepo != nil {
+		if v := h.ConfigRepo.SiteURL(); v != "" {
+			return v
+		}
+	}
+	return h.Issuer
 }
 
 const (
@@ -132,8 +143,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	h.setSSOCookie(c, sd)
 
-	access, _ := h.TokenService.IssueAccessToken(user.ID.String(), AdminClientID, user.Username, AdminDefaultScope)
-	refresh, err := h.TokenService.SaveRefreshToken(c.Request.Context(), user.ID.String(), AdminClientID, AdminDefaultScope)
+	access, _ := h.TokenService.IssueAccessToken(user.Username, user.ID.String(), AdminClientID, user.Username, AdminDefaultScope, 0)
+	refresh, err := h.TokenService.SaveRefreshToken(c.Request.Context(), user.ID.String(), AdminClientID, AdminDefaultScope, 0)
 	if err != nil {
 		response.ServerError(c, "签发刷新令牌失败")
 		return
@@ -183,8 +194,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	_ = h.TokenService.DeleteRefreshToken(c.Request.Context(), req.RefreshToken)
-	access, _ := h.TokenService.IssueAccessToken(rt.UserID, rt.ClientID, user.Username, rt.Scope)
-	newRT, err := h.TokenService.SaveRefreshToken(c.Request.Context(), rt.UserID, rt.ClientID, rt.Scope)
+	access, _ := h.TokenService.IssueAccessToken(user.Username, rt.UserID, rt.ClientID, user.Username, rt.Scope, 0)
+	newRT, err := h.TokenService.SaveRefreshToken(c.Request.Context(), rt.UserID, rt.ClientID, rt.Scope, 0)
 	if err != nil {
 		response.ServerError(c, "签发刷新令牌失败")
 		return
@@ -319,24 +330,44 @@ func (h *AuthHandler) sendResetMail(user *model.User, email string) {
 		return
 	}
 
+	// 重置密码邮件链接前缀：smtp.reset_link_base（显式覆盖，极少用） > platform.site_url > oauth.issuer
 	cfg, _ := h.Mailer.LoadConfig()
 	base := cfg.ResetLinkBase
 	if base == "" {
-		if h.FrontendBase != "" {
-			base = h.FrontendBase
-		} else {
-			base = h.Issuer
-		}
+		base = h.effectiveIssuer()
 	}
 	link := fmt.Sprintf("%s/oauth/reset-password?token=%s", strings.TrimRight(base, "/"), token)
 
-	subject := "重置 OneAuth 密码"
-	body := fmt.Sprintf(`<!DOCTYPE html>
+	// 主题：使用模板配置 + 可选前缀
+	subject := cfg.ResetSubject
+	if subject == "" {
+		subject = "重置 OneAuth 密码"
+	}
+	if cfg.SubjectPrefix != "" {
+		subject = cfg.SubjectPrefix + " " + subject
+	}
+
+	// 正文：管理员配置自定义模板时使用；否则使用默认模板
+	greeting := cfg.ResetGreeting
+	if greeting == "" {
+		greeting = "Hello"
+	}
+	name := user.Nickname
+	if name == "" {
+		name = user.Username
+	}
+	var body string
+	if cfg.ResetBody != "" {
+		body = strings.ReplaceAll(cfg.ResetBody, "{{name}}", name)
+		body = strings.ReplaceAll(body, "{{greeting}}", greeting)
+		body = strings.ReplaceAll(body, "{{link}}", link)
+	} else {
+		body = fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <body style="font-family: -apple-system, sans-serif; line-height: 1.6; color: #1d2c5b; padding: 20px;">
   <div style="max-width:560px; margin:auto; background:#fff; border-radius:12px; padding:32px; border:1px solid #eef0f5;">
     <h2 style="color:#1677ff; margin-top:0;">重置密码</h2>
-    <p>您好 <b>%s</b>，</p>
+    <p>%s <b>%s</b>，</p>
     <p>我们收到了重置您 OneAuth 账号密码的请求。请点击下面的按钮设置新密码：</p>
     <p style="text-align:center; margin:32px 0;">
       <a href="%s" style="display:inline-block; background:#1677ff; color:#fff; padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">重置密码</a>
@@ -347,7 +378,8 @@ func (h *AuthHandler) sendResetMail(user *model.User, email string) {
     <p style="font-size:12px; color:#94a3b8;">链接 30 分钟内有效。如非本人操作请忽略本邮件。</p>
   </div>
 </body>
-</html>`, user.Nickname, link, link)
+</html>`, greeting, name, link, link)
+	}
 
 	_ = h.Mailer.Send([]string{email}, subject, body)
 }

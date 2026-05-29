@@ -28,12 +28,15 @@ export interface OAuth2Client {
   require_consent?: boolean;
   access_token_ttl?: number;
   refresh_token_ttl?: number;
+  id_token_ttl?: number;
+  issue_refresh_token?: boolean;
 
   // OIDC
   oidc_issuer?: string;
   oidc_audience?: string;
   oidc_id_token_signing_alg?: string;
   oidc_userinfo_response?: string;
+  oidc_claims?: string[];
 
   // SAML 2.0
   saml_entity_id?: string;

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"strconv"
+	"sync"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -82,10 +83,51 @@ func (r *PermissionRepository) ListAll() ([]model.Permission, error) {
 }
 
 // ConfigRepository ----------------------------------
-type ConfigRepository struct{ db *gorm.DB }
+type ConfigRepository struct {
+	db       *gorm.DB
+	mu       sync.RWMutex
+	siteURL  string // 缓存 platform.site_url，避免每次签发 token 都查 DB
+	loaded   bool
+}
 
 func NewConfigRepository(db *gorm.DB) *ConfigRepository {
 	return &ConfigRepository{db: db}
+}
+
+// Get 读取单个 config 的 value；不存在返回 ""
+func (r *ConfigRepository) Get(category, key string) string {
+	var c model.SystemConfig
+	if err := r.db.Where("category = ? AND key = ?", category, key).First(&c).Error; err != nil {
+		return ""
+	}
+	return c.Value
+}
+
+// SiteURL 返回当前 platform.site_url（带内存缓存）；空字符串表示未配置。
+func (r *ConfigRepository) SiteURL() string {
+	r.mu.RLock()
+	if r.loaded {
+		v := r.siteURL
+		r.mu.RUnlock()
+		return v
+	}
+	r.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.loaded {
+		return r.siteURL
+	}
+	r.siteURL = r.Get("platform", "site_url")
+	r.loaded = true
+	return r.siteURL
+}
+
+// InvalidateSiteURL 在 Set 后让缓存失效
+func (r *ConfigRepository) InvalidateSiteURL() {
+	r.mu.Lock()
+	r.loaded = false
+	r.mu.Unlock()
 }
 
 func (r *ConfigRepository) ListAll() ([]model.SystemConfig, error) {
@@ -101,6 +143,9 @@ func (r *ConfigRepository) GetByCategory(category string) ([]model.SystemConfig,
 }
 
 func (r *ConfigRepository) Set(category, key, value string) error {
+	if category == "platform" && key == "site_url" {
+		defer r.InvalidateSiteURL()
+	}
 	var c model.SystemConfig
 	if err := r.db.Where("category = ? AND key = ?", category, key).First(&c).Error; err == gorm.ErrRecordNotFound {
 		c = model.SystemConfig{Category: category, Key: key, Value: value}

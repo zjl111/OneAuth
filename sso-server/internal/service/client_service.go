@@ -40,14 +40,17 @@ type CreateClientInput struct {
 	SubjectType     string   `json:"subject_type"`
 	RequirePKCE     bool     `json:"require_pkce"`
 	RequireConsent  bool     `json:"require_consent"`
-	AccessTokenTTL  int      `json:"access_token_ttl"`
-	RefreshTokenTTL int      `json:"refresh_token_ttl"`
+	AccessTokenTTL    int  `json:"access_token_ttl"`
+	RefreshTokenTTL   int  `json:"refresh_token_ttl"`
+	IDTokenTTL        int  `json:"id_token_ttl"`
+	IssueRefreshToken *bool `json:"issue_refresh_token"`
 
 	// OIDC
-	OIDCIssuer            string `json:"oidc_issuer"`
-	OIDCAudience          string `json:"oidc_audience"`
-	OIDCIDTokenSigningAlg string `json:"oidc_id_token_signing_alg"`
-	OIDCUserInfoResponse  string `json:"oidc_userinfo_response"`
+	OIDCIssuer            string   `json:"oidc_issuer"`
+	OIDCAudience          string   `json:"oidc_audience"`
+	OIDCIDTokenSigningAlg string   `json:"oidc_id_token_signing_alg"`
+	OIDCUserInfoResponse  string   `json:"oidc_userinfo_response"`
+	OIDCClaims            []string `json:"oidc_claims"`
 
 	// SAML 2.0
 	SAMLEntityID           string `json:"saml_entity_id"`
@@ -125,11 +128,14 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		RequireConsent:  in.RequireConsent,
 		AccessTokenTTL:  defaultInt(in.AccessTokenTTL, 3600),
 		RefreshTokenTTL: defaultInt(in.RefreshTokenTTL, 604800),
+		IDTokenTTL:      defaultInt(in.IDTokenTTL, 3600),
+		IssueRefreshToken: in.IssueRefreshToken == nil || *in.IssueRefreshToken,
 
 		OIDCIssuer:            in.OIDCIssuer,
 		OIDCAudience:          in.OIDCAudience,
 		OIDCIDTokenSigningAlg: defaultStr(in.OIDCIDTokenSigningAlg, "RS256"),
 		OIDCUserInfoResponse:  defaultStr(in.OIDCUserInfoResponse, "NORMAL"),
+		OIDCClaims:            in.OIDCClaims,
 
 		SAMLEntityID:           in.SAMLEntityID,
 		SAMLACSURL:             in.SAMLACSURL,
@@ -183,13 +189,16 @@ type UpdateClientInput struct {
 	SubjectType     *string   `json:"subject_type"`
 	RequirePKCE     *bool     `json:"require_pkce"`
 	RequireConsent  *bool     `json:"require_consent"`
-	AccessTokenTTL  *int      `json:"access_token_ttl"`
-	RefreshTokenTTL *int      `json:"refresh_token_ttl"`
+	AccessTokenTTL    *int  `json:"access_token_ttl"`
+	RefreshTokenTTL   *int  `json:"refresh_token_ttl"`
+	IDTokenTTL        *int  `json:"id_token_ttl"`
+	IssueRefreshToken *bool `json:"issue_refresh_token"`
 
-	OIDCIssuer            *string `json:"oidc_issuer"`
-	OIDCAudience          *string `json:"oidc_audience"`
-	OIDCIDTokenSigningAlg *string `json:"oidc_id_token_signing_alg"`
-	OIDCUserInfoResponse  *string `json:"oidc_userinfo_response"`
+	OIDCIssuer            *string   `json:"oidc_issuer"`
+	OIDCAudience          *string   `json:"oidc_audience"`
+	OIDCIDTokenSigningAlg *string   `json:"oidc_id_token_signing_alg"`
+	OIDCUserInfoResponse  *string   `json:"oidc_userinfo_response"`
+	OIDCClaims            *[]string `json:"oidc_claims"`
 
 	SAMLEntityID           *string `json:"saml_entity_id"`
 	SAMLACSURL             *string `json:"saml_acs_url"`
@@ -251,6 +260,12 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.RefreshTokenTTL != nil {
 		c.RefreshTokenTTL = *in.RefreshTokenTTL
 	}
+	if in.IDTokenTTL != nil {
+		c.IDTokenTTL = *in.IDTokenTTL
+	}
+	if in.IssueRefreshToken != nil {
+		c.IssueRefreshToken = *in.IssueRefreshToken
+	}
 	if in.LogoURL != nil {
 		c.LogoURL = *in.LogoURL
 	}
@@ -278,6 +293,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	}
 	if in.OIDCUserInfoResponse != nil {
 		c.OIDCUserInfoResponse = *in.OIDCUserInfoResponse
+	}
+	if in.OIDCClaims != nil {
+		c.OIDCClaims = *in.OIDCClaims
 	}
 
 	if in.SAMLEntityID != nil {

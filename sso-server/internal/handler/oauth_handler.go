@@ -29,9 +29,20 @@ type OAuthHandler struct {
 	GrantRepo     *repository.GrantRepository
 	AppGrantRepo  *repository.AppGrantRepository
 	LogRepo       *repository.LogRepository
+	ConfigRepo    *repository.ConfigRepository
 	SessionMgr    *session.Manager
-	Issuer        string
+	Issuer        string // 兜底 issuer（config.yaml 配置）
 	FrontendBase  string
+}
+
+// effectiveIssuer 返回有效 issuer：SystemConfig.platform.site_url 优先，否则用配置文件兜底
+func (h *OAuthHandler) effectiveIssuer() string {
+	if h.ConfigRepo != nil {
+		if v := h.ConfigRepo.SiteURL(); v != "" {
+			return v
+		}
+	}
+	return h.Issuer
 }
 
 // --- helpers -------------------------------------------------------------
@@ -122,7 +133,9 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 		}
 	}
 
-	autoGrant := client.IsBuiltin || h.GrantRepo.Has(userID, clientID, scope)
+	// require_consent=false：不弹同意页（内置应用或客户端自助声明跳过）；
+	// require_consent=true：每次都弹，除非本次已 consent=1 回投。
+	autoGrant := client.IsBuiltin || !client.RequireConsent || h.GrantRepo.Has(userID, clientID, scope)
 	consented := c.Query("consent") == "1"
 
 	if !autoGrant && !consented {
@@ -232,28 +245,38 @@ func (h *OAuthHandler) handleAuthCodeGrant(c *gin.Context, client *model.OAuth2C
 		return
 	}
 
-	accessToken, err := h.TokenService.IssueAccessToken(authCode.UserID, client.ClientID, user.Username, authCode.Scope)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-		return
-	}
-	refreshToken, err := h.TokenService.SaveRefreshToken(c.Request.Context(), authCode.UserID, client.ClientID, authCode.Scope)
+	sub := resolveSubject(user, client.SubjectType)
+	accessTTL := time.Duration(client.AccessTokenTTL) * time.Second
+	idTTL := time.Duration(client.IDTokenTTL) * time.Second
+	refreshTTL := time.Duration(client.RefreshTokenTTL) * time.Second
+	accessToken, err := h.TokenService.IssueAccessToken(sub, authCode.UserID, client.ClientID, user.Username, authCode.Scope, accessTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 	h.LogRepo.RecordLogin(&uid, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "oauth_code", "success", "client="+client.ClientID)
 
+	expiresIn := client.AccessTokenTTL
+	if expiresIn <= 0 {
+		expiresIn = int(h.TokenService.AccessTTL().Seconds())
+	}
 	resp := gin.H{
-		"access_token":  accessToken,
-		"token_type":    "Bearer",
-		"expires_in":    int(h.TokenService.AccessTTL().Seconds()),
-		"refresh_token": refreshToken,
-		"scope":         authCode.Scope,
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   expiresIn,
+		"scope":        authCode.Scope,
+	}
+	if client.IssueRefreshToken {
+		refreshToken, err := h.TokenService.SaveRefreshToken(c.Request.Context(), authCode.UserID, client.ClientID, authCode.Scope, refreshTTL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		resp["refresh_token"] = refreshToken
 	}
 	if strings.Contains(authCode.Scope, "openid") {
 		info := userToInfo(user)
-		idToken, err := h.TokenService.IssueIDToken(authCode.UserID, client.ClientID, authCode.Nonce, time.Unix(authCode.AuthTime, 0), info)
+		idToken, err := h.TokenService.IssueIDToken(sub, authCode.UserID, client.ClientID, authCode.Nonce, time.Unix(authCode.AuthTime, 0), info, idTTL, buildIDTokenOptions(client))
 		if err == nil {
 			resp["id_token"] = idToken
 		}
@@ -286,24 +309,32 @@ func (h *OAuthHandler) handleRefreshTokenGrant(c *gin.Context, client *model.OAu
 		return
 	}
 
-	accessToken, _ := h.TokenService.IssueAccessToken(data.UserID, client.ClientID, user.Username, data.Scope)
-	newRT, err := h.TokenService.SaveRefreshToken(c.Request.Context(), data.UserID, client.ClientID, data.Scope)
+	sub := resolveSubject(user, client.SubjectType)
+	accessTTL := time.Duration(client.AccessTokenTTL) * time.Second
+	idTTL := time.Duration(client.IDTokenTTL) * time.Second
+	refreshTTL := time.Duration(client.RefreshTokenTTL) * time.Second
+	accessToken, _ := h.TokenService.IssueAccessToken(sub, data.UserID, client.ClientID, user.Username, data.Scope, accessTTL)
+	newRT, err := h.TokenService.SaveRefreshToken(c.Request.Context(), data.UserID, client.ClientID, data.Scope, refreshTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
 	h.LogRepo.RecordLogin(&uid, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "refresh_token", "success", "client="+client.ClientID)
 
+	expiresIn := client.AccessTokenTTL
+	if expiresIn <= 0 {
+		expiresIn = int(h.TokenService.AccessTTL().Seconds())
+	}
 	resp := gin.H{
 		"access_token":  accessToken,
 		"token_type":    "Bearer",
-		"expires_in":    int(h.TokenService.AccessTTL().Seconds()),
+		"expires_in":    expiresIn,
 		"refresh_token": newRT,
 		"scope":         data.Scope,
 	}
 	if strings.Contains(data.Scope, "openid") {
 		info := userToInfo(user)
-		idToken, err := h.TokenService.IssueIDToken(data.UserID, client.ClientID, "", time.Now(), info)
+		idToken, err := h.TokenService.IssueIDToken(sub, data.UserID, client.ClientID, "", time.Now(), info, idTTL, buildIDTokenOptions(client))
 		if err == nil {
 			resp["id_token"] = idToken
 		}
@@ -324,7 +355,12 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token", "error_description": err.Error()})
 		return
 	}
-	uid, err := uuid.Parse(claims.Subject)
+	// 优先使用 UID（永远是 UUID）；兼容旧 token 时回退 Subject
+	uidStr := claims.UID
+	if uidStr == "" {
+		uidStr = claims.Subject
+	}
+	uid, err := uuid.Parse(uidStr)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
 		return
@@ -334,55 +370,123 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
 		return
 	}
-	resp := gin.H{"sub": user.ID.String()}
+
+	// 找到对应客户端，决定响应格式 / claims 白名单
+	var client *model.OAuth2Client
+	if claims.ClientID != "" {
+		client, _ = h.ClientService.GetByClientID(claims.ClientID)
+	}
+	allow := map[string]bool{}
+	hasWhitelist := false
+	if client != nil && len(client.OIDCClaims) > 0 {
+		hasWhitelist = true
+		for _, k := range client.OIDCClaims {
+			allow[k] = true
+		}
+	}
+	pick := func(key string) bool { return !hasWhitelist || allow[key] }
+
+	// sub claim 按 client.SubjectType 选择（与 access/id_token 一致）
+	subType := ""
+	if client != nil {
+		subType = client.SubjectType
+	}
+	resp := gin.H{"sub": resolveSubject(user, subType)}
+
 	scopes := strings.Fields(claims.Scope)
 	for _, s := range scopes {
 		switch s {
 		case "profile":
-			resp["name"] = user.Nickname
-			if resp["name"] == "" {
-				resp["name"] = user.Username
+			if pick("name") {
+				if user.Nickname != "" {
+					resp["name"] = user.Nickname
+				} else {
+					resp["name"] = user.Username
+				}
 			}
 			resp["preferred_username"] = user.Username
-			resp["picture"] = user.Avatar
+			if user.Avatar != "" {
+				resp["picture"] = user.Avatar
+			}
 		case "email":
-			if user.Email != nil {
+			if pick("email") && user.Email != nil {
 				resp["email"] = *user.Email
 				resp["email_verified"] = true
 			}
 		case "phone":
-			if user.Phone != nil {
+			if pick("phone") && user.Phone != nil {
 				resp["phone_number"] = *user.Phone
 			}
 		case "roles":
-			roles := []string{}
-			for _, r := range user.Roles {
-				roles = append(roles, r.Code)
+			if pick("roles") {
+				roles := []string{}
+				for _, r := range user.Roles {
+					roles = append(roles, r.Code)
+				}
+				resp["roles"] = roles
 			}
-			resp["roles"] = roles
-			resp["is_staff"] = user.IsStaff
+			if pick("is_staff") {
+				resp["is_staff"] = user.IsStaff
+			}
 		}
 	}
-	c.JSON(http.StatusOK, resp)
+
+	// 按 client.OIDCUserInfoResponse 决定输出格式
+	format := "NORMAL"
+	if client != nil && client.OIDCUserInfoResponse != "" {
+		format = client.OIDCUserInfoResponse
+	}
+	switch format {
+	case "SIGNING", "ENCRYPTION", "SIGNING_ENCRYPTION":
+		// 这三种都用 JWT 输出。ENCRYPTION/SIGNING_ENCRYPTION 暂未实现 JWE，
+		// 安全降级为 SIGNING（带 Warning 头），不阻塞接入。
+		issuer := h.effectiveIssuer()
+		aud := claims.ClientID
+		if client != nil {
+			if client.OIDCIssuer != "" {
+				issuer = client.OIDCIssuer
+			}
+			if client.OIDCAudience != "" {
+				aud = client.OIDCAudience
+			}
+		}
+		alg := ""
+		if client != nil {
+			alg = client.OIDCIDTokenSigningAlg
+		}
+		jwtStr, err := h.TokenService.IssueUserInfoJWT(resp, issuer, aud, alg, h.TokenService.AccessTTL())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		if format != "SIGNING" {
+			c.Header("Warning", `199 - "encryption_not_implemented: falling back to SIGNING"`)
+		}
+		c.Header("Content-Type", "application/jwt")
+		c.String(http.StatusOK, jwtStr)
+	default:
+		c.JSON(http.StatusOK, resp)
+	}
 }
 
 // Discovery OIDC 发现端点
 func (h *OAuthHandler) Discovery(c *gin.Context) {
 	c.Header("Cache-Control", "max-age=86400")
 	c.Header("Access-Control-Allow-Origin", "*")
+	iss := h.effectiveIssuer()
 	c.JSON(http.StatusOK, gin.H{
-		"issuer":                                h.Issuer,
-		"authorization_endpoint":                h.Issuer + "/oauth/authorize",
-		"token_endpoint":                        h.Issuer + "/oauth/token",
-		"userinfo_endpoint":                     h.Issuer + "/oauth/userinfo",
-		"jwks_uri":                              h.Issuer + "/oauth/jwks.json",
-		"end_session_endpoint":                  h.Issuer + "/oauth/end_session",
-		"revocation_endpoint":                   h.Issuer + "/oauth/revoke",
+		"issuer":                                iss,
+		"authorization_endpoint":                iss + "/oauth/authorize",
+		"token_endpoint":                        iss + "/oauth/token",
+		"userinfo_endpoint":                     iss + "/oauth/userinfo",
+		"jwks_uri":                              iss + "/oauth/jwks.json",
+		"end_session_endpoint":                  iss + "/oauth/end_session",
+		"revocation_endpoint":                   iss + "/oauth/revoke",
 		"scopes_supported":                      []string{"openid", "profile", "email", "phone", "roles"},
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"subject_types_supported":               []string{"public"},
-		"id_token_signing_alg_values_supported": []string{"RS256"},
+		"id_token_signing_alg_values_supported": []string{"RS256", "RS384", "RS512"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported": []string{
 			"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr",
@@ -448,6 +552,39 @@ func verifyPKCE(verifier, challenge, method string) bool {
 	h := sha256.Sum256([]byte(verifier))
 	computed := base64.RawURLEncoding.EncodeToString(h[:])
 	return computed == challenge
+}
+
+// buildIDTokenOptions 从 client 字段构造 id_token 签发选项；空字段保持库默认。
+func buildIDTokenOptions(client *model.OAuth2Client) *oauth.IDTokenOptions {
+	return &oauth.IDTokenOptions{
+		Issuer:      client.OIDCIssuer,
+		Audience:    client.OIDCAudience,
+		SigningAlg:  client.OIDCIDTokenSigningAlg,
+		AllowClaims: []string(client.OIDCClaims),
+	}
+}
+
+// resolveSubject 按客户端配置选择 JWT `sub` claim 用哪个用户字段；
+// 若选项对应的用户字段为空，回退到稳定的 UUID，确保 sub 永不为空。
+func resolveSubject(user *model.User, subjectType string) string {
+	switch subjectType {
+	case "user_id":
+		return user.ID.String()
+	case "email":
+		if user.Email != nil && *user.Email != "" {
+			return *user.Email
+		}
+		return user.ID.String()
+	case "mobile":
+		if user.Phone != nil && *user.Phone != "" {
+			return *user.Phone
+		}
+		return user.ID.String()
+	case "username":
+		fallthrough
+	default:
+		return user.Username
+	}
 }
 
 func userToInfo(user *model.User) *oauth.UserInfo {

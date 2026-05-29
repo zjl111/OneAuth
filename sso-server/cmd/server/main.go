@@ -87,6 +87,8 @@ func main() {
 		time.Duration(cfg.OAuth.AccessTokenTTL)*time.Second,
 		time.Duration(cfg.OAuth.RefreshTokenTTL)*time.Second,
 	)
+	// 让 token 签发时优先使用 SystemConfig.platform.site_url 作为 issuer
+	tokenService.SetIssuerResolver(func() string { return configRepo.SiteURL() })
 	authCodeStore := oauth.NewAuthCodeStore(store, time.Duration(cfg.OAuth.AuthCodeTTL)*time.Second)
 	sessionMgr := session.New(store, session.DefaultTTL)
 
@@ -164,6 +166,7 @@ func main() {
 			GrantRepo:     grantRepo,
 			AppGrantRepo:  appGrantRepo,
 			LogRepo:       logRepo,
+			ConfigRepo:    configRepo,
 			SessionMgr:    sessionMgr,
 			Issuer:        cfg.OAuth.Issuer,
 			FrontendBase:  frontendBase,
@@ -175,6 +178,7 @@ func main() {
 			Store:         store,
 			LogRepo:       logRepo,
 			LoginRuleRepo: loginRuleRepo,
+			ConfigRepo:    configRepo,
 			Mailer:        mailService,
 			Issuer:        cfg.OAuth.Issuer,
 			FrontendBase:  frontendBase,

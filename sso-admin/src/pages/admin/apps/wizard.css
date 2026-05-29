@@ -1,18 +1,20 @@
 .app-wizard {
-  padding: 8px 0 96px;
   background: #f5f7fb;
   min-height: 100%;
   margin: -24px -24px -24px;
-  padding: 24px;
+  padding: 24px 32px 0;     /* 底部 padding 交给 footer 处理，避免与 sticky 叠加 */
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
+.app-wizard * { box-sizing: border-box; }
 
 .app-wizard .ant-steps-item-title { font-weight: 500; }
 
 .app-wizard-footer {
   position: sticky;
   bottom: 0;
-  margin: 24px -24px -24px;
-  padding: 14px 28px;
+  margin: 24px -32px 0;     /* 不向下溢出，避免 Drawer 把它裁掉 */
+  padding: 14px 32px;
   background: #fff;
   border-top: 1px solid #eef0f5;
   display: flex;
