@@ -18,25 +18,25 @@ import { useAuthStore } from '@/store/authStore';
 import type { OAuth2Client } from '@/api/apps';
 import './wizard.css';
 
-// Proto 既是协议家族也是 backend `protocol` 字段值。
-// 注意：'oidc' 不是独立家族 — 它属于 OAuth 家族下的版本选项，仅作为 backend 标识符存在。
+// 协议家族（== backend.protocol 字段值）
 export type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas';
-
-// 协议家族（UI 视角，OIDC 合并到 OAuth 中）
-export type ProtoFamily = 'oauth' | 'saml' | 'cas';
+export type ProtoFamily = Proto;
 
 const FAMILY_LABEL: Record<ProtoFamily, string> = {
-  oauth: 'OAuth 2.x / OpenID Connect',
-  saml:  'SAML 2.0',
-  cas:   'CAS',
+  oidc:   'OpenID Connect',
+  oauth2: 'OAuth 2.0',
+  saml:   'SAML 2.0',
+  cas:    'CAS',
 };
 
-// 每个协议家族下可选的版本（MaxKey 同款）
+// 每个协议家族下可选的版本
 const PROTOCOL_VERSIONS: Record<ProtoFamily, { value: string; label: string }[]> = {
-  oauth: [
-    { value: 'OAuth_v2.0',          label: 'OAuth v2.0' },
-    { value: 'OAuth_v2.1',          label: 'OAuth v2.1' },
+  oidc: [
     { value: 'OpenID_Connect_v1.0', label: 'OpenID Connect 1.0' },
+  ],
+  oauth2: [
+    { value: 'OAuth_v2.0', label: 'OAuth v2.0' },
+    { value: 'OAuth_v2.1', label: 'OAuth v2.1' },
   ],
   saml: [
     { value: 'SAML_v2.0', label: 'SAML 2.0' },
@@ -53,25 +53,16 @@ function defaultProtocolVersion(f: ProtoFamily) {
   return PROTOCOL_VERSIONS[f][0].value;
 }
 
-// 由家族 + 版本反推 backend.protocol
-function toBackendProtocol(family: ProtoFamily, version: string): Proto {
-  if (family === 'saml') return 'saml';
-  if (family === 'cas') return 'cas';
-  return version === 'OpenID_Connect_v1.0' ? 'oidc' : 'oauth2';
-}
-
-// 由 backend.protocol 推断家族
-function toFamily(p: Proto): ProtoFamily {
-  if (p === 'saml') return 'saml';
-  if (p === 'cas') return 'cas';
-  return 'oauth'; // oidc / oauth2 都属于 oauth 家族
-}
-
 // 各家族在 Step2 需要校验的字段
 const STEP2_FIELDS: Record<ProtoFamily, string[]> = {
-  oauth: [
+  oauth2: [
     'redirect_uris', 'grant_types', 'subject_type', 'scope',
     'require_consent', 'require_pkce', 'access_token_ttl', 'refresh_token_ttl',
+  ],
+  oidc: [
+    'redirect_uris', 'grant_types', 'subject_type', 'scope',
+    'require_consent', 'require_pkce', 'access_token_ttl', 'refresh_token_ttl',
+    'oidc_id_token_signing_alg', 'oidc_userinfo_response',
   ],
   saml: [
     'saml_entity_id', 'saml_acs_url', 'saml_binding', 'saml_nameid_format',
@@ -156,17 +147,14 @@ export default function AppWizard({
   const [form] = Form.useForm<WizardValues>();
   const [saving, setSaving] = useState(false);
   const logoUrl = Form.useWatch('logo_url', form);
-  const watchedVersion = (Form.useWatch('protocol_version', form) as string) || defaultProtocolVersion(family);
-  const isOIDC = watchedVersion === 'OpenID_Connect_v1.0';
+  const isOIDC = family === 'oidc';
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     if (editing) {
-      const p = ((editing.protocol as Proto) || 'oauth2') as Proto;
-      const editFamily = toFamily(p);
-      const editVersion = editing.protocol_version
-        || (p === 'oidc' ? 'OpenID_Connect_v1.0' : defaultProtocolVersion(editFamily));
+      const p = ((editing.protocol as Proto) || family) as Proto;
+      const editVersion = editing.protocol_version || defaultProtocolVersion(p);
       form.setFieldsValue({
         client_id: editing.client_id,
         client_secret_preview: '••••••••（已加密保存）',
@@ -212,12 +200,11 @@ export default function AppWizard({
       });
     } else {
       const initVersion = defaultProtocolVersion(family);
-      const initProto: Proto = toBackendProtocol(family, initVersion);
       form.resetFields();
       form.setFieldsValue({
         client_id: genId(),
         client_secret_preview: genSecret(),
-        protocol: initProto,
+        protocol: family,
         protocol_version: initVersion,
         is_active: true,
 
@@ -225,7 +212,7 @@ export default function AppWizard({
         redirect_uris: [],
         grant_types: ['authorization_code', 'refresh_token'],
         subject_type: 'username',
-        scope: initProto === 'oidc' ? ['openid', 'profile', 'email'] : ['profile', 'email'],
+        scope: family === 'oidc' ? ['openid', 'profile', 'email'] : ['profile', 'email'],
         require_consent: false,
         require_pkce: false,
         access_token_ttl: 3600,
@@ -268,8 +255,7 @@ export default function AppWizard({
 
   const handleSubmit = async () => {
     const v = await form.validateFields();
-    // 由 family + version 推 backend.protocol，保证一致
-    const backendProtocol = toBackendProtocol(family, v.protocol_version);
+    const backendProtocol: Proto = family;
     const base = {
       client_name: v.client_name,
       protocol: backendProtocol,
@@ -342,11 +328,13 @@ export default function AppWizard({
 
   return (
     <div className="app-wizard">
-      <Steps
-        current={step}
-        items={[{ title: '应用信息' }, { title: '协议配置' }, { title: '信息确认' }]}
-        style={{ marginBottom: 28, maxWidth: 720, margin: '0 auto 28px' }}
-      />
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+        <Steps
+          current={step}
+          items={[{ title: '应用信息' }, { title: '协议配置' }, { title: '信息确认' }]}
+          style={{ width: 640 }}
+        />
+      </div>
 
       <Form form={form} layout="horizontal" labelCol={{ flex: '120px' }} labelAlign="right" colon>
         {/* ============== Step 1 应用信息（共用） ============== */}
@@ -535,7 +523,7 @@ export default function AppWizard({
 
         {/* ============== Step 2 协议配置（按协议切换） ============== */}
         <div style={{ display: step === 1 ? 'block' : 'none' }}>
-          {family === 'oauth' && <OAuth2OIDCConfig isOIDC={isOIDC} />}
+          {(family === 'oidc' || family === 'oauth2') && <OAuth2OIDCConfig isOIDC={isOIDC} />}
           {family === 'saml' && <SAMLConfig />}
           {family === 'cas' && <CASConfig />}
         </div>
@@ -568,7 +556,7 @@ export default function AppWizard({
           </Descriptions>
 
           <Descriptions title="协议配置" column={2} bordered size="middle">
-            {family === 'oauth' && (
+            {(family === 'oidc' || family === 'oauth2') && (
               <>
                 <Descriptions.Item label="认证地址" span={2}>
                   {(summary.redirect_uris || []).map((u: string) => (

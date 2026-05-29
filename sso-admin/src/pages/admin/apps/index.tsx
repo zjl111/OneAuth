@@ -38,7 +38,7 @@ export default function AppListPage() {
 
   // 创建应用前先弹协议家族选择
   const [protocolOpen, setProtocolOpen] = useState(false);
-  const [pickedFamily, setPickedFamily] = useState<ProtoFamily>('oauth');
+  const [pickedFamily, setPickedFamily] = useState<ProtoFamily>('oidc');
 
   const load = () => {
     setLoading(true);
@@ -61,7 +61,7 @@ export default function AppListPage() {
   }, [pagination.current, pagination.pageSize]);
 
   const openCreate = () => {
-    setPickedFamily('oauth');
+    setPickedFamily('oidc');
     setProtocolOpen(true);
   };
 
@@ -74,9 +74,7 @@ export default function AppListPage() {
 
   const openEdit = (c: OAuth2Client) => {
     setEditing(c);
-    const p = (c.protocol as Proto) || 'oauth2';
-    const f: ProtoFamily = p === 'saml' ? 'saml' : p === 'cas' ? 'cas' : 'oauth';
-    setPickedFamily(f);
+    setPickedFamily(((c.protocol as Proto) || 'oidc') as ProtoFamily);
     setDrawerOpen(true);
   };
 
@@ -341,26 +339,32 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
   };
   const protos: Item[] = [
     {
-      key: 'oauth', title: 'OAuth 2.x / OIDC',
-      short: '支持 OAuth 2.0、OAuth 2.1 和 OpenID Connect 1.0',
+      key: 'oidc',   title: 'OIDC',
+      short: '适用于现代 Web、移动端应用单点登录',
       accent: '#1677ff', tag: '推荐',
       tagBg: '#e6f0ff', tagColor: '#1677ff',
     },
     {
-      key: 'saml',  title: 'SAML 2.0',
+      key: 'oauth2', title: 'OAuth2',
+      short: '适用于第三方授权与 API 访问（OAuth 2.0 / 2.1）',
+      accent: '#10b981', tag: '标准协议',
+      tagBg: '#d1fae5', tagColor: '#047857',
+    },
+    {
+      key: 'saml',   title: 'SAML 2.0',
       short: '适用于企业系统与标准身份联合场景',
       accent: '#8b5cf6', tag: '企业常用',
       tagBg: '#ede9fe', tagColor: '#6d28d9',
     },
     {
-      key: 'cas',   title: 'CAS',
-      short: '适用于传统单点登录系统接入（CAS 1.0/2.0/3.0/SAML 1.1）',
+      key: 'cas',    title: 'CAS',
+      short: '适用于传统单点登录（CAS 1.0/2.0/3.0/SAML 1.1）',
       accent: '#f59e0b', tag: '企业常用',
       tagBg: '#fef3c7', tagColor: '#92400e',
     },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, padding: '8px 0' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '8px 0' }}>
       {protos.map((p) => {
         const active = value === p.key;
         return (
