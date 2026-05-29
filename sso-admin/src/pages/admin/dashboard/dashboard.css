@@ -170,7 +170,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 0;
+  padding: 7px 0;
   border-bottom: 1px dashed #eef0f5;
 }
 .rank-list li:last-child { border-bottom: none; padding-bottom: 0; }
@@ -217,3 +217,24 @@
   padding: 1px 6px;
   border-radius: 999px;
 }
+
+/* ── 中国地图卡 ───────────────────── */
+.region-card .ant-card-head-title { padding: 12px 0; }
+.region-bars { list-style: none; margin: 0; padding: 8px 4px; }
+.region-bars li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0;
+}
+.region-bars .rb-rank {
+  width: 22px; height: 22px; border-radius: 50%; background: #f1f5fa;
+  color: #6b7280; font-size: 11px; display: grid; place-items: center; font-weight: 600;
+}
+.region-bars .rb-name { width: 80px; color: #1d2c5b; font-size: 13px; }
+.region-bars .rb-bar {
+  flex: 1; height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden;
+}
+.region-bars .rb-bar > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, #60a5fa, #1677ff);
+}
+.region-bars .rb-count { width: 60px; text-align: right; color: #1d2c5b; font-size: 13px; }

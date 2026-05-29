@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"sso-server/internal/config"
+	"sso-server/internal/geoip"
 	"sso-server/internal/handler"
 	"sso-server/internal/model"
 	"sso-server/internal/monitor"
@@ -49,6 +50,11 @@ func main() {
 	configRepo := repository.NewConfigRepository(db)
 	repository.ApplyOAuthOverrides(configRepo, &cfg.OAuth)
 	log.Println("[startup] database ready")
+
+	// 初始化 IP -> 省份 离线库（找不到文件时降级为空字符串）
+	if err := geoip.Init("./data/ip2region.xdb"); err != nil {
+		log.Printf("[startup] geoip init skipped: %v", err)
+	}
 
 	mailService := mailer.New(configRepo)
 

@@ -210,6 +210,8 @@ export const dashboardApi = {
     get<Array<OperationLog>>('/dashboard/recent-operations', { limit }),
   loginMethods: (days = 30) =>
     get<Array<{ method: string; count: number }>>('/dashboard/login-methods', { days }),
+  regionTop10: (days = 30) =>
+    get<Array<{ province: string; count: number }>>('/dashboard/region-top10', { days }),
 };
 
 export const portalApi = {

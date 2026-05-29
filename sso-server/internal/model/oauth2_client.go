@@ -14,18 +14,56 @@ type OAuth2Client struct {
 	ClientSecretHash string      `gorm:"size:256;not null" json:"-"`
 	ClientName       string      `gorm:"size:255;not null" json:"client_name"`
 	ClientType       string      `gorm:"size:20;not null;default:'confidential'" json:"client_type"`
+	Protocol         string      `gorm:"size:20;not null;default:'oidc'" json:"protocol"` // oidc / oauth2 / saml / cas
 	Description      string      `gorm:"type:text" json:"description"`
-	RedirectURIs     StringSlice `gorm:"type:text;not null" json:"redirect_uris"`
-	GrantTypes       StringSlice `gorm:"type:text;not null" json:"grant_types"`
-	ResponseTypes    StringSlice `gorm:"type:text;not null" json:"response_types"`
-	Scope            string      `gorm:"size:512;default:'openid profile email'" json:"scope"`
-	LogoURL          string      `gorm:"size:512" json:"logo_url"`
-	HomeURL          string      `gorm:"size:512" json:"home_url"`
-	IsActive         bool        `gorm:"default:true" json:"is_active"`
-	IsBuiltin        bool        `gorm:"default:false" json:"is_builtin"`
-	HealthCheckURL   string      `gorm:"size:512" json:"health_check_url"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+
+	// === 通用：基本信息 ===
+	LogoURL        string `gorm:"size:512" json:"logo_url"`
+	HomeURL        string `gorm:"size:512" json:"home_url"`
+	LoginURL       string `gorm:"size:512" json:"login_url"`
+	IsActive       bool   `gorm:"default:true" json:"is_active"`
+	IsBuiltin      bool   `gorm:"default:false" json:"is_builtin"`
+	HealthCheckURL string `gorm:"size:512" json:"health_check_url"`
+
+	// === OAuth 2.0 / OIDC 协议配置 ===
+	RedirectURIs    StringSlice `gorm:"type:text;not null" json:"redirect_uris"`
+	GrantTypes      StringSlice `gorm:"type:text;not null" json:"grant_types"`
+	ResponseTypes   StringSlice `gorm:"type:text;not null" json:"response_types"`
+	Scope           string      `gorm:"size:512;default:'openid profile email'" json:"scope"`
+	SubjectType     string      `gorm:"size:30;default:'username'" json:"subject_type"` // username / user_id / email / mobile
+	RequirePKCE     bool        `gorm:"default:false" json:"require_pkce"`
+	RequireConsent  bool        `gorm:"default:false" json:"require_consent"` // true=强制 false=自动
+	AccessTokenTTL  int         `gorm:"default:3600" json:"access_token_ttl"`
+	RefreshTokenTTL int         `gorm:"default:604800" json:"refresh_token_ttl"`
+
+	// === OIDC 额外字段（仅 protocol=oidc 生效） ===
+	OIDCIssuer            string `gorm:"size:255" json:"oidc_issuer"`
+	OIDCAudience          string `gorm:"size:255" json:"oidc_audience"`
+	OIDCIDTokenSigningAlg string `gorm:"size:20" json:"oidc_id_token_signing_alg"` // RS256 / RS384 / RS512 / HS256 / HS384 / HS512
+	OIDCUserInfoResponse  string `gorm:"size:30" json:"oidc_userinfo_response"`    // NORMAL / SIGNING / ENCRYPTION / SIGNING_ENCRYPTION
+
+	// === SAML 2.0 协议配置（仅 protocol=saml 生效） ===
+	SAMLEntityID            string `gorm:"size:512" json:"saml_entity_id"`
+	SAMLACSURL              string `gorm:"size:512" json:"saml_acs_url"`
+	SAMLAudience            string `gorm:"size:512" json:"saml_audience"`
+	SAMLIssuer              string `gorm:"size:512" json:"saml_issuer"`
+	SAMLBinding             string `gorm:"size:30" json:"saml_binding"`         // Redirect-Post / Post-Post / IdpInit-Post
+	SAMLNameIDFormat        string `gorm:"size:60" json:"saml_nameid_format"`   // unspecified / persistent / transient / emailAddress / ...
+	SAMLNameIDConvert       string `gorm:"size:20" json:"saml_nameid_convert"`  // original / uppercase / lowercase
+	SAMLSignatureAlgorithm  string `gorm:"size:30" json:"saml_signature_algorithm"`
+	SAMLDigestAlgorithm     string `gorm:"size:30" json:"saml_digest_algorithm"`
+	SAMLEncrypted           bool   `gorm:"default:false" json:"saml_encrypted"`
+	SAMLValiditySeconds     int    `gorm:"default:300" json:"saml_validity_seconds"`
+	SAMLCertificate         string `gorm:"type:text" json:"saml_certificate"` // PEM 证书内容
+
+	// === CAS 协议配置（仅 protocol=cas 生效） ===
+	CASService        string `gorm:"size:512" json:"cas_service"`
+	CASCallbackURL    string `gorm:"size:512" json:"cas_callback_url"`
+	CASUserAttribute  string `gorm:"size:30" json:"cas_user_attribute"` // username / user_id / email / mobile
+	CASExpiresSeconds int    `gorm:"default:300" json:"cas_expires_seconds"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (OAuth2Client) TableName() string { return "sso_oauth2_client" }

@@ -6,16 +6,54 @@ export interface OAuth2Client {
   client_secret?: string;
   client_name: string;
   client_type: string;
+  protocol?: string;
   description: string;
+
+  // 通用
+  logo_url: string;
+  home_url: string;
+  login_url?: string;
+  health_check_url: string;
+  is_active: boolean;
+  is_builtin: boolean;
+
+  // OAuth2 / OIDC
   redirect_uris: string[];
   grant_types: string[];
   response_types: string[];
   scope: string;
-  logo_url: string;
-  home_url: string;
-  health_check_url: string;
-  is_active: boolean;
-  is_builtin: boolean;
+  subject_type?: string;
+  require_pkce?: boolean;
+  require_consent?: boolean;
+  access_token_ttl?: number;
+  refresh_token_ttl?: number;
+
+  // OIDC
+  oidc_issuer?: string;
+  oidc_audience?: string;
+  oidc_id_token_signing_alg?: string;
+  oidc_userinfo_response?: string;
+
+  // SAML 2.0
+  saml_entity_id?: string;
+  saml_acs_url?: string;
+  saml_audience?: string;
+  saml_issuer?: string;
+  saml_binding?: string;
+  saml_nameid_format?: string;
+  saml_nameid_convert?: string;
+  saml_signature_algorithm?: string;
+  saml_digest_algorithm?: string;
+  saml_encrypted?: boolean;
+  saml_validity_seconds?: number;
+  saml_certificate?: string;
+
+  // CAS
+  cas_service?: string;
+  cas_callback_url?: string;
+  cas_user_attribute?: string;
+  cas_expires_seconds?: number;
+
   created_at: string;
   updated_at: string;
 }

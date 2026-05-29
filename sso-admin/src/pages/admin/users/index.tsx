@@ -15,7 +15,6 @@ import {
   Tabs,
   Row,
   Col,
-  InputNumber,
   Upload,
   App as AntdApp,
 } from 'antd';
@@ -304,9 +303,6 @@ export default function UserListPage() {
           initialValues={{
             is_active: true,
             user_type: 'internal',
-            hire_status: 'active',
-            sort_order: 1,
-            gender: 'male',
           }}
         >
           <Tabs
@@ -364,14 +360,8 @@ export default function UserListPage() {
                           />
                         </Form.Item>
                       )}
-                      <Form.Item name="gender" label="性别">
-                        <Select
-                          options={[
-                            { value: 'male', label: '男' },
-                            { value: 'female', label: '女' },
-                          ]}
-                          style={{ width: 200 }}
-                        />
+                      <Form.Item name="phone" label="手机号码">
+                        <Input />
                       </Form.Item>
                     </Col>
                     <Col span={10}>
@@ -411,22 +401,6 @@ export default function UserListPage() {
                     </Col>
 
                     <Col span={12}>
-                      <Form.Item name="employee_no" label="员工编号">
-                        <Input placeholder="如 E1001" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="domain_account" label="域账号">
-                        <Input placeholder="如 corp\\zhangsan" />
-                      </Form.Item>
-                    </Col>
-
-                    <Col span={12}>
-                      <Form.Item name="phone" label="手机号码">
-                        <Input />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
                       <Form.Item name="email" label="电子邮箱">
                         <Input />
                       </Form.Item>
@@ -444,30 +418,6 @@ export default function UserListPage() {
                             { value: 'external', label: '外部协作' },
                           ]}
                         />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item
-                        name="hire_status"
-                        label="用户状态"
-                        rules={[{ required: true }]}
-                      >
-                        <Select
-                          options={[
-                            { value: 'active', label: '在职' },
-                            { value: 'resigned', label: '离职' },
-                          ]}
-                        />
-                      </Form.Item>
-                    </Col>
-
-                    <Col span={12}>
-                      <Form.Item
-                        name="sort_order"
-                        label="排序"
-                        rules={[{ required: true }]}
-                      >
-                        <InputNumber min={0} max={9999} style={{ width: '100%' }} />
                       </Form.Item>
                     </Col>
                     <Col span={12}>

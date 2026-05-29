@@ -85,3 +85,10 @@ func (h *DashboardHandler) LoginMethods(c *gin.Context) {
 	data, _ := h.LogRepo.LoginMethodDistribution(days)
 	response.OK(c, data)
 }
+
+// RegionTop10 仪表盘"30 日 TOP10 访问统计"
+func (h *DashboardHandler) RegionTop10(c *gin.Context) {
+	days := parseInt(c.Query("days"), 30)
+	data, _ := h.LogRepo.RegionTop10(days)
+	response.OK(c, data)
+}

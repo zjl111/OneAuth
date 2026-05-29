@@ -21,15 +21,52 @@ func NewClientService(r *repository.ClientRepository, m *repository.MonitorRepos
 }
 
 type CreateClientInput struct {
-	ClientName     string   `json:"client_name" binding:"required"`
-	ClientType     string   `json:"client_type"`
-	Description    string   `json:"description"`
-	RedirectURIs   []string `json:"redirect_uris" binding:"required"`
-	GrantTypes     []string `json:"grant_types"`
-	Scope          string   `json:"scope"`
-	LogoURL        string   `json:"logo_url"`
-	HomeURL        string   `json:"home_url"`
-	HealthCheckURL string   `json:"health_check_url"`
+	ClientName  string `json:"client_name" binding:"required"`
+	ClientType  string `json:"client_type"`
+	Protocol    string `json:"protocol"`
+	Description string `json:"description"`
+
+	// 通用
+	LogoURL        string `json:"logo_url"`
+	HomeURL        string `json:"home_url"`
+	LoginURL       string `json:"login_url"`
+	HealthCheckURL string `json:"health_check_url"`
+
+	// OAuth2 / OIDC
+	RedirectURIs    []string `json:"redirect_uris"`
+	GrantTypes      []string `json:"grant_types"`
+	Scope           string   `json:"scope"`
+	SubjectType     string   `json:"subject_type"`
+	RequirePKCE     bool     `json:"require_pkce"`
+	RequireConsent  bool     `json:"require_consent"`
+	AccessTokenTTL  int      `json:"access_token_ttl"`
+	RefreshTokenTTL int      `json:"refresh_token_ttl"`
+
+	// OIDC
+	OIDCIssuer            string `json:"oidc_issuer"`
+	OIDCAudience          string `json:"oidc_audience"`
+	OIDCIDTokenSigningAlg string `json:"oidc_id_token_signing_alg"`
+	OIDCUserInfoResponse  string `json:"oidc_userinfo_response"`
+
+	// SAML 2.0
+	SAMLEntityID           string `json:"saml_entity_id"`
+	SAMLACSURL             string `json:"saml_acs_url"`
+	SAMLAudience           string `json:"saml_audience"`
+	SAMLIssuer             string `json:"saml_issuer"`
+	SAMLBinding            string `json:"saml_binding"`
+	SAMLNameIDFormat       string `json:"saml_nameid_format"`
+	SAMLNameIDConvert      string `json:"saml_nameid_convert"`
+	SAMLSignatureAlgorithm string `json:"saml_signature_algorithm"`
+	SAMLDigestAlgorithm    string `json:"saml_digest_algorithm"`
+	SAMLEncrypted          bool   `json:"saml_encrypted"`
+	SAMLValiditySeconds    int    `json:"saml_validity_seconds"`
+	SAMLCertificate        string `json:"saml_certificate"`
+
+	// CAS
+	CASService        string `json:"cas_service"`
+	CASCallbackURL    string `json:"cas_callback_url"`
+	CASUserAttribute  string `json:"cas_user_attribute"`
+	CASExpiresSeconds int    `json:"cas_expires_seconds"`
 }
 
 // ClientWithSecret 创建/轮换时一次性返回的明文 secret 包装。
@@ -40,8 +77,22 @@ type ClientWithSecret struct {
 }
 
 func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) {
-	if len(in.RedirectURIs) == 0 {
-		return nil, errors.New("redirect_uris 不能为空")
+	protocol := defaultStr(in.Protocol, "oidc")
+
+	// 不同协议必填校验：OAuth2/OIDC 必须有 redirect_uris；SAML 必须有 EntityID + ACS；CAS 必须有 service
+	switch protocol {
+	case "oauth2", "oidc":
+		if len(in.RedirectURIs) == 0 {
+			return nil, errors.New("redirect_uris 不能为空")
+		}
+	case "saml":
+		if in.SAMLEntityID == "" || in.SAMLACSURL == "" {
+			return nil, errors.New("SAML 应用必须填写 Entity ID 与 ACS URL")
+		}
+	case "cas":
+		if in.CASService == "" {
+			return nil, errors.New("CAS 应用必须填写服务地址 (service)")
+		}
 	}
 	secret := utils.RandomString(48)
 	hash, err := bcrypt.GenerateFromPassword([]byte(secret), 12)
@@ -55,15 +106,46 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		ClientSecretHash: string(hash),
 		ClientName:       in.ClientName,
 		ClientType:       defaultStr(in.ClientType, model.ClientTypeConfidential),
+		Protocol:         protocol,
 		Description:      in.Description,
-		RedirectURIs:     in.RedirectURIs,
-		GrantTypes:       defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
-		ResponseTypes:    []string{"code"},
-		Scope:            defaultStr(in.Scope, "openid profile email"),
 		LogoURL:          in.LogoURL,
 		HomeURL:          in.HomeURL,
+		LoginURL:         in.LoginURL,
 		HealthCheckURL:   in.HealthCheckURL,
 		IsActive:         true,
+
+		RedirectURIs:    in.RedirectURIs,
+		GrantTypes:      defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
+		ResponseTypes:   []string{"code"},
+		Scope:           defaultStr(in.Scope, "openid profile email"),
+		SubjectType:     defaultStr(in.SubjectType, "username"),
+		RequirePKCE:     in.RequirePKCE,
+		RequireConsent:  in.RequireConsent,
+		AccessTokenTTL:  defaultInt(in.AccessTokenTTL, 3600),
+		RefreshTokenTTL: defaultInt(in.RefreshTokenTTL, 604800),
+
+		OIDCIssuer:            in.OIDCIssuer,
+		OIDCAudience:          in.OIDCAudience,
+		OIDCIDTokenSigningAlg: defaultStr(in.OIDCIDTokenSigningAlg, "RS256"),
+		OIDCUserInfoResponse:  defaultStr(in.OIDCUserInfoResponse, "NORMAL"),
+
+		SAMLEntityID:           in.SAMLEntityID,
+		SAMLACSURL:             in.SAMLACSURL,
+		SAMLAudience:           defaultStr(in.SAMLAudience, in.SAMLEntityID),
+		SAMLIssuer:             in.SAMLIssuer,
+		SAMLBinding:            defaultStr(in.SAMLBinding, "Redirect-Post"),
+		SAMLNameIDFormat:       defaultStr(in.SAMLNameIDFormat, "unspecified"),
+		SAMLNameIDConvert:      defaultStr(in.SAMLNameIDConvert, "original"),
+		SAMLSignatureAlgorithm: defaultStr(in.SAMLSignatureAlgorithm, "RSAwithSHA256"),
+		SAMLDigestAlgorithm:    defaultStr(in.SAMLDigestAlgorithm, "SHA256"),
+		SAMLEncrypted:          in.SAMLEncrypted,
+		SAMLValiditySeconds:    defaultInt(in.SAMLValiditySeconds, 300),
+		SAMLCertificate:        in.SAMLCertificate,
+
+		CASService:        in.CASService,
+		CASCallbackURL:    defaultStr(in.CASCallbackURL, in.CASService),
+		CASUserAttribute:  defaultStr(in.CASUserAttribute, "username"),
+		CASExpiresSeconds: defaultInt(in.CASExpiresSeconds, 300),
 	}
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
@@ -82,14 +164,47 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 }
 
 type UpdateClientInput struct {
-	ClientName     *string   `json:"client_name"`
-	Description    *string   `json:"description"`
-	RedirectURIs   *[]string `json:"redirect_uris"`
-	Scope          *string   `json:"scope"`
-	LogoURL        *string   `json:"logo_url"`
-	HomeURL        *string   `json:"home_url"`
-	HealthCheckURL *string   `json:"health_check_url"`
-	IsActive       *bool     `json:"is_active"`
+	ClientName  *string `json:"client_name"`
+	Protocol    *string `json:"protocol"`
+	Description *string `json:"description"`
+
+	LogoURL        *string `json:"logo_url"`
+	HomeURL        *string `json:"home_url"`
+	LoginURL       *string `json:"login_url"`
+	HealthCheckURL *string `json:"health_check_url"`
+	IsActive       *bool   `json:"is_active"`
+
+	RedirectURIs    *[]string `json:"redirect_uris"`
+	GrantTypes      *[]string `json:"grant_types"`
+	Scope           *string   `json:"scope"`
+	SubjectType     *string   `json:"subject_type"`
+	RequirePKCE     *bool     `json:"require_pkce"`
+	RequireConsent  *bool     `json:"require_consent"`
+	AccessTokenTTL  *int      `json:"access_token_ttl"`
+	RefreshTokenTTL *int      `json:"refresh_token_ttl"`
+
+	OIDCIssuer            *string `json:"oidc_issuer"`
+	OIDCAudience          *string `json:"oidc_audience"`
+	OIDCIDTokenSigningAlg *string `json:"oidc_id_token_signing_alg"`
+	OIDCUserInfoResponse  *string `json:"oidc_userinfo_response"`
+
+	SAMLEntityID           *string `json:"saml_entity_id"`
+	SAMLACSURL             *string `json:"saml_acs_url"`
+	SAMLAudience           *string `json:"saml_audience"`
+	SAMLIssuer             *string `json:"saml_issuer"`
+	SAMLBinding            *string `json:"saml_binding"`
+	SAMLNameIDFormat       *string `json:"saml_nameid_format"`
+	SAMLNameIDConvert      *string `json:"saml_nameid_convert"`
+	SAMLSignatureAlgorithm *string `json:"saml_signature_algorithm"`
+	SAMLDigestAlgorithm    *string `json:"saml_digest_algorithm"`
+	SAMLEncrypted          *bool   `json:"saml_encrypted"`
+	SAMLValiditySeconds    *int    `json:"saml_validity_seconds"`
+	SAMLCertificate        *string `json:"saml_certificate"`
+
+	CASService        *string `json:"cas_service"`
+	CASCallbackURL    *string `json:"cas_callback_url"`
+	CASUserAttribute  *string `json:"cas_user_attribute"`
+	CASExpiresSeconds *int    `json:"cas_expires_seconds"`
 }
 
 func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth2Client, error) {
@@ -100,14 +215,35 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.ClientName != nil {
 		c.ClientName = *in.ClientName
 	}
+	if in.Protocol != nil {
+		c.Protocol = *in.Protocol
+	}
 	if in.Description != nil {
 		c.Description = *in.Description
 	}
 	if in.RedirectURIs != nil {
 		c.RedirectURIs = *in.RedirectURIs
 	}
+	if in.GrantTypes != nil {
+		c.GrantTypes = *in.GrantTypes
+	}
 	if in.Scope != nil {
 		c.Scope = *in.Scope
+	}
+	if in.SubjectType != nil {
+		c.SubjectType = *in.SubjectType
+	}
+	if in.RequirePKCE != nil {
+		c.RequirePKCE = *in.RequirePKCE
+	}
+	if in.RequireConsent != nil {
+		c.RequireConsent = *in.RequireConsent
+	}
+	if in.AccessTokenTTL != nil {
+		c.AccessTokenTTL = *in.AccessTokenTTL
+	}
+	if in.RefreshTokenTTL != nil {
+		c.RefreshTokenTTL = *in.RefreshTokenTTL
 	}
 	if in.LogoURL != nil {
 		c.LogoURL = *in.LogoURL
@@ -115,12 +251,79 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.HomeURL != nil {
 		c.HomeURL = *in.HomeURL
 	}
+	if in.LoginURL != nil {
+		c.LoginURL = *in.LoginURL
+	}
 	if in.HealthCheckURL != nil {
 		c.HealthCheckURL = *in.HealthCheckURL
 	}
 	if in.IsActive != nil {
 		c.IsActive = *in.IsActive
 	}
+
+	if in.OIDCIssuer != nil {
+		c.OIDCIssuer = *in.OIDCIssuer
+	}
+	if in.OIDCAudience != nil {
+		c.OIDCAudience = *in.OIDCAudience
+	}
+	if in.OIDCIDTokenSigningAlg != nil {
+		c.OIDCIDTokenSigningAlg = *in.OIDCIDTokenSigningAlg
+	}
+	if in.OIDCUserInfoResponse != nil {
+		c.OIDCUserInfoResponse = *in.OIDCUserInfoResponse
+	}
+
+	if in.SAMLEntityID != nil {
+		c.SAMLEntityID = *in.SAMLEntityID
+	}
+	if in.SAMLACSURL != nil {
+		c.SAMLACSURL = *in.SAMLACSURL
+	}
+	if in.SAMLAudience != nil {
+		c.SAMLAudience = *in.SAMLAudience
+	}
+	if in.SAMLIssuer != nil {
+		c.SAMLIssuer = *in.SAMLIssuer
+	}
+	if in.SAMLBinding != nil {
+		c.SAMLBinding = *in.SAMLBinding
+	}
+	if in.SAMLNameIDFormat != nil {
+		c.SAMLNameIDFormat = *in.SAMLNameIDFormat
+	}
+	if in.SAMLNameIDConvert != nil {
+		c.SAMLNameIDConvert = *in.SAMLNameIDConvert
+	}
+	if in.SAMLSignatureAlgorithm != nil {
+		c.SAMLSignatureAlgorithm = *in.SAMLSignatureAlgorithm
+	}
+	if in.SAMLDigestAlgorithm != nil {
+		c.SAMLDigestAlgorithm = *in.SAMLDigestAlgorithm
+	}
+	if in.SAMLEncrypted != nil {
+		c.SAMLEncrypted = *in.SAMLEncrypted
+	}
+	if in.SAMLValiditySeconds != nil {
+		c.SAMLValiditySeconds = *in.SAMLValiditySeconds
+	}
+	if in.SAMLCertificate != nil {
+		c.SAMLCertificate = *in.SAMLCertificate
+	}
+
+	if in.CASService != nil {
+		c.CASService = *in.CASService
+	}
+	if in.CASCallbackURL != nil {
+		c.CASCallbackURL = *in.CASCallbackURL
+	}
+	if in.CASUserAttribute != nil {
+		c.CASUserAttribute = *in.CASUserAttribute
+	}
+	if in.CASExpiresSeconds != nil {
+		c.CASExpiresSeconds = *in.CASExpiresSeconds
+	}
+
 	if err := s.repo.Update(c); err != nil {
 		return nil, err
 	}
@@ -187,6 +390,13 @@ func defaultStr(v, fallback string) string {
 
 func defaultSlice(v []string, fallback []string) []string {
 	if len(v) == 0 {
+		return fallback
+	}
+	return v
+}
+
+func defaultInt(v, fallback int) int {
+	if v <= 0 {
 		return fallback
 	}
 	return v

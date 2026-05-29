@@ -7,13 +7,10 @@ import {
   Space,
   Tag,
   Modal,
-  Form,
   Drawer,
   Popconfirm,
-  Switch,
   App as AntdApp,
   Typography,
-  Upload,
 } from 'antd';
 import {
   PlusOutlined,
@@ -21,17 +18,15 @@ import {
   KeyOutlined,
   CopyOutlined,
   AppstoreOutlined,
-  UploadOutlined,
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
-import { useAuthStore } from '@/store/authStore';
 import PageToolbar from '@/components/PageToolbar';
+import AppWizard, { type Proto } from './AppWizard';
 
 const { Paragraph } = Typography;
 
 export default function AppListPage() {
   const { message, modal } = AntdApp.useApp();
-  const accessToken = useAuthStore((s) => s.accessToken);
   const [data, setData] = useState<OAuth2Client[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -40,12 +35,10 @@ export default function AppListPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<OAuth2Client | null>(null);
-  const [form] = Form.useForm();
-  const logoUrl = Form.useWatch('logo_url', form) as string | undefined;
 
   // 创建应用前先弹协议选择
   const [protocolOpen, setProtocolOpen] = useState(false);
-  const [pickedProtocol, setPickedProtocol] = useState<'oidc' | 'oauth2' | 'saml' | 'cas'>('oidc');
+  const [pickedProtocol, setPickedProtocol] = useState<Proto>('oidc');
 
   const load = () => {
     setLoading(true);
@@ -74,54 +67,26 @@ export default function AppListPage() {
 
   // 协议选完后真正打开创建表单
   const handleProtocolNext = () => {
-    if (pickedProtocol === 'saml' || pickedProtocol === 'cas') {
-      message.info(
-        pickedProtocol === 'saml'
-          ? 'SAML 2.0 接入即将推出，敬请期待'
-          : 'CAS 接入即将推出，敬请期待'
-      );
-      return;
-    }
     setProtocolOpen(false);
     setEditing(null);
-    form.resetFields();
-    form.setFieldsValue({
-      client_type: 'confidential',
-      redirect_uris: ['http://localhost:3000/callback'],
-      scope: pickedProtocol === 'oidc' ? 'openid profile email' : 'profile email',
-      is_active: true,
-    });
     setDrawerOpen(true);
   };
 
   const openEdit = (c: OAuth2Client) => {
     setEditing(c);
+    setPickedProtocol(((c.protocol as Proto) || 'oidc') as Proto);
     setDrawerOpen(true);
-    // Drawer 用了 destroyOnClose+Form preserve=false，Form 在打开后才挂载，
-    // 这里推迟到下一帧再回填，保证 is_active 等字段能正确回显。
-    setTimeout(() => form.setFieldsValue(c), 0);
   };
 
-  const handleSave = async () => {
-    const values = await form.validateFields();
-    // 把多行字符串转成数组
-    if (typeof values.redirect_uris === 'string') {
-      values.redirect_uris = values.redirect_uris.split('\n').map((s: string) => s.trim()).filter(Boolean);
-    }
-    try {
-      if (editing) {
-        await appsApi.update(editing.id, values);
-        message.success('已更新');
-        setDrawerOpen(false);
-        load();
-      } else {
-        const r = await appsApi.create(values);
-        showSecret(r.client_id, r.client_secret || '');
-        setDrawerOpen(false);
-        load();
-      }
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || '保存失败');
+  const handleWizardSubmit = async (values: any) => {
+    if (editing) {
+      await appsApi.update(editing.id, values);
+      message.success('已更新');
+      load();
+    } else {
+      const r = await appsApi.create(values);
+      showSecret(r.client_id, r.client_secret || '');
+      load();
     }
   };
 
@@ -236,15 +201,28 @@ export default function AppListPage() {
           { title: 'Client ID', dataIndex: 'client_id', width: 180 },
           {
             title: '协议',
-            dataIndex: 'response_types',
-            width: 80,
-            render: () => <Tag color="purple">OIDC</Tag>,
+            dataIndex: 'protocol',
+            width: 110,
+            render: (p: string) => {
+              const map: Record<string, { label: string; color: string }> = {
+                oidc:   { label: 'OIDC',     color: 'purple' },
+                oauth2: { label: 'OAuth2',   color: 'green' },
+                saml:   { label: 'SAML 2.0', color: 'volcano' },
+                cas:    { label: 'CAS',      color: 'gold' },
+              };
+              const v = map[p || 'oidc'] || map.oidc;
+              return <Tag color={v.color}>{v.label}</Tag>;
+            },
           },
           {
-            title: '回调地址',
+            title: '接入地址',
             dataIndex: 'redirect_uris',
             width: 280,
-            render: (uris: string[]) => uris?.[0] || '-',
+            render: (uris: string[], r) => {
+              if (r.protocol === 'saml') return r.saml_acs_url || '-';
+              if (r.protocol === 'cas')  return r.cas_service  || '-';
+              return uris?.[0] || '-';
+            },
           },
           {
             title: '状态',
@@ -294,111 +272,16 @@ export default function AppListPage() {
         title={editing ? `编辑应用 - ${editing.client_name}` : '新建应用'}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={520}
-        extra={
-          <Space>
-            <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            <Button type="primary" onClick={handleSave}>
-              保存
-            </Button>
-          </Space>
-        }
+        width={900}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" preserve={false}>
-          <Form.Item name="client_name" label="应用名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：Jumpserver 演示环境" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={2} placeholder="一句话描述该应用" />
-          </Form.Item>
-          <Form.Item name="logo_url" label="图标" extra="可上传图片，或填写 Emoji / URL">
-            <Space size={12} align="center">
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  border: '1px dashed #d9d9d9',
-                  borderRadius: 8,
-                  background: '#fafafa',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  fontSize: 24,
-                  flexShrink: 0,
-                }}
-              >
-                {!logoUrl ? (
-                  <AppstoreOutlined style={{ color: '#cbd5e1' }} />
-                ) : logoUrl.length <= 4 ? (
-                  <span>{logoUrl}</span>
-                ) : (
-                  <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                )}
-              </div>
-              <Upload
-                name="file"
-                action="/api/v1/configs/upload-image"
-                headers={{ Authorization: `Bearer ${accessToken}` }}
-                data={{ prefix: 'app' }}
-                accept=".png,.jpg,.jpeg,.svg,.webp,.gif"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  if (file.size > 2 * 1024 * 1024) {
-                    message.error('图标不能超过 2MB');
-                    return Upload.LIST_IGNORE;
-                  }
-                  return true;
-                }}
-                onChange={(info) => {
-                  if (info.file.status === 'done') {
-                    const url = info.file.response?.data?.url;
-                    if (url) {
-                      form.setFieldValue('logo_url', url);
-                      message.success('图标已上传');
-                    }
-                  } else if (info.file.status === 'error') {
-                    message.error(info.file.response?.message || '上传失败');
-                  }
-                }}
-              >
-                <Button icon={<UploadOutlined />}>上传</Button>
-              </Upload>
-              <Input
-                placeholder="📊 或 URL"
-                value={logoUrl}
-                onChange={(e) => form.setFieldValue('logo_url', e.target.value)}
-                style={{ width: 200 }}
-              />
-            </Space>
-          </Form.Item>
-          <Form.Item name="home_url" label="应用首页">
-            <Input placeholder="https://app.example.com" />
-          </Form.Item>
-          <Form.Item
-            name="redirect_uris"
-            label="回调地址（每行一个）"
-            rules={[{ required: true }]}
-            getValueFromEvent={(e) =>
-              typeof e?.target?.value === 'string'
-                ? e.target.value.split('\n')
-                : e
-            }
-            getValueProps={(v) => ({ value: Array.isArray(v) ? v.join('\n') : v })}
-          >
-            <Input.TextArea rows={3} placeholder="https://example.com/callback" />
-          </Form.Item>
-          <Form.Item name="scope" label="Scope">
-            <Input placeholder="openid profile email roles" />
-          </Form.Item>
-          <Form.Item name="health_check_url" label="健康检查 URL">
-            <Input placeholder="https://app.example.com/health" />
-          </Form.Item>
-          <Form.Item name="is_active" label="启用" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
+        <AppWizard
+          open={drawerOpen}
+          protocol={pickedProtocol}
+          editing={editing}
+          onClose={() => setDrawerOpen(false)}
+          onSubmit={handleWizardSubmit}
+        />
       </Drawer>
 
       {/* 协议选择 */}
@@ -424,13 +307,41 @@ export default function AppListPage() {
 }
 
 // ─── 协议选择卡片 ──────────────────────────
-type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas';
 function ProtocolPicker({ value, onChange }: { value: Proto; onChange: (v: Proto) => void }) {
-  const protos: Array<{ key: Proto; title: string; short: string; color: string; soon?: boolean }> = [
-    { key: 'oidc',   title: 'OIDC',     short: '适用于现代 Web、移动端应用单点登录', color: '#1677ff' },
-    { key: 'oauth2', title: 'OAuth2',   short: '适用于第三方授权与 API 访问',     color: '#06b6d4' },
-    { key: 'saml',   title: 'SAML 2.0', short: '适用于企业系统与标准身份联合场景', color: '#8b5cf6', soon: true },
-    { key: 'cas',    title: 'CAS',      short: '适用于传统单点登录系统接入',       color: '#10b981', soon: true },
+  type Item = {
+    key: Proto;
+    title: string;
+    short: string;
+    accent: string;   // 顶部色条 & 边框色
+    tag: string;      // 标签文案
+    tagBg: string;
+    tagColor: string;
+  };
+  const protos: Item[] = [
+    {
+      key: 'oidc',  title: 'OIDC',
+      short: '适用于现代 Web、移动端应用单点登录',
+      accent: '#1677ff', tag: '推荐',
+      tagBg: '#e6f0ff', tagColor: '#1677ff',
+    },
+    {
+      key: 'oauth2', title: 'OAuth2',
+      short: '适用于第三方授权与 API 访问',
+      accent: '#10b981', tag: '标准协议',
+      tagBg: '#d1fae5', tagColor: '#047857',
+    },
+    {
+      key: 'saml',  title: 'SAML 2.0',
+      short: '适用于企业系统与标准身份联合场景',
+      accent: '#8b5cf6', tag: '企业常用',
+      tagBg: '#ede9fe', tagColor: '#6d28d9',
+    },
+    {
+      key: 'cas',   title: 'CAS',
+      short: '适用于传统单点登录系统接入',
+      accent: '#f59e0b', tag: '企业常用',
+      tagBg: '#fef3c7', tagColor: '#92400e',
+    },
   ];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '8px 0' }}>
@@ -442,70 +353,66 @@ function ProtocolPicker({ value, onChange }: { value: Proto; onChange: (v: Proto
             onClick={() => onChange(p.key)}
             style={{
               cursor: 'pointer',
-              padding: 20,
+              padding: '22px 22px 20px 28px',
               borderRadius: 12,
-              border: active ? '2px solid #1677ff' : '1px solid #eef0f5',
-              background: active ? 'rgba(22,119,255,0.04)' : '#fff',
+              border: active ? `1.5px solid ${p.accent}` : '1px solid #eef0f5',
+              background: active ? `${p.accent}0d` : '#fff',
               position: 'relative',
               transition: 'all 0.15s',
-              boxShadow: active ? '0 8px 20px rgba(22,119,255,0.10)' : 'none',
+              boxShadow: active ? `0 6px 18px ${p.accent}1f` : 'none',
+              overflow: 'hidden',
             }}
           >
+            {/* 左侧彩色竖条 */}
+            <span
+              style={{
+                position: 'absolute',
+                left: 0, top: 0, bottom: 0,
+                width: 4,
+                background: p.accent,
+              }}
+            />
+            {/* 选中态：右上角对勾 */}
             {active && (
               <span
                 style={{
                   position: 'absolute',
-                  top: 12,
-                  right: 12,
-                  width: 18,
-                  height: 18,
+                  top: 14, right: 14,
+                  width: 18, height: 18,
                   borderRadius: '50%',
-                  background: '#1677ff',
+                  background: p.accent,
                   color: '#fff',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 12,
+                  fontSize: 11,
                 }}
               >
                 ✓
               </span>
             )}
-            {p.soon && (
+
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1d2c5b', lineHeight: 1.2 }}>
+              {p.title}
+            </div>
+            <div style={{ marginTop: 10 }}>
               <span
                 style={{
-                  position: 'absolute',
-                  top: 12,
-                  left: 12,
-                  fontSize: 11,
-                  padding: '1px 8px',
-                  borderRadius: 999,
-                  background: '#fef3c7',
-                  color: '#92400e',
+                  display: 'inline-block',
+                  padding: '2px 10px',
+                  borderRadius: 6,
+                  background: p.tagBg,
+                  color: p.tagColor,
+                  fontSize: 12,
+                  fontWeight: 500,
                 }}
               >
-                即将推出
+                {p.tag}
               </span>
-            )}
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 14,
-                background: p.color,
-                color: '#fff',
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 22,
-                fontWeight: 600,
-                marginBottom: 14,
-                marginTop: p.soon ? 18 : 0,
-              }}
-            >
-              {p.key === 'oidc' ? '🔐' : p.key === 'oauth2' ? '🔑' : p.key === 'saml' ? '🛡️' : 'CAS'}
             </div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: '#1d2c5b' }}>{p.title}</div>
-            <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 6, lineHeight: 1.55 }}>{p.short}</div>
+            <div style={{ marginTop: 16, fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
+              {p.short}
+            </div>
           </div>
         );
       })}

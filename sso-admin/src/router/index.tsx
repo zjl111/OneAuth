@@ -14,7 +14,8 @@ import UserGroupsPage from '@/pages/admin/user-groups';
 import RolePage from '@/pages/admin/roles';
 import AppPermsPage from '@/pages/admin/app-perms';
 import AppListPage from '@/pages/admin/apps';
-import AccessPage from '@/pages/admin/access';
+import LoginRulesPage from '@/pages/admin/login-rules';
+import OnlineSessionsPage from '@/pages/admin/sessions';
 import SettingsPage from '@/pages/admin/settings';
 import LogsPage from '@/pages/admin/logs';
 import MonitorPage from '@/pages/admin/monitor';
@@ -70,7 +71,9 @@ export const router = createBrowserRouter([
       { path: 'roles', element: <RolePage /> },
       { path: 'app-perms', element: <AppPermsPage /> },
       { path: 'apps', element: <AppListPage /> },
-      { path: 'access', element: <AccessPage /> },
+      { path: 'access', element: <Navigate to="/admin/access/login-rules" replace /> },
+      { path: 'access/login-rules', element: <LoginRulesPage /> },
+      { path: 'access/sessions', element: <OnlineSessionsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'monitor', element: <MonitorPage /> },
       { path: 'logs', element: <LogsPage /> },

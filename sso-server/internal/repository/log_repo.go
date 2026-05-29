@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"sso-server/internal/geoip"
 	"sso-server/internal/model"
 )
 
@@ -22,6 +23,7 @@ func (r *LogRepository) RecordLogin(userID *uuid.UUID, username, ip, ua, method,
 		UserID:    userID,
 		Username:  username,
 		IPAddress: ip,
+		Province:  geoip.LookupProvince(ip),
 		UserAgent: ua,
 		Method:    method,
 		Status:    status,
@@ -75,9 +77,39 @@ func (r *LogRepository) RecordAccess(userID *uuid.UUID, username, clientID, clie
 		ClientID:   clientID,
 		ClientName: clientName,
 		IPAddress:  ip,
+		Province:   geoip.LookupProvince(ip),
 		CreatedAt:  time.Now(),
 	}
 	go r.db.Create(log)
+}
+
+// RegionStat 仪表盘"中国地图 TOP10 访问"统计
+type RegionStat struct {
+	Province string `json:"province"`
+	Count    int64  `json:"count"`
+}
+
+// RegionTop10 返回近 days 天 (login_log 成功登录 ∪ access_log) 按 province 聚合 top10 省份。
+// 口径：忽略空 province（本地/未知）。
+func (r *LogRepository) RegionTop10(days int) ([]RegionStat, error) {
+	if days <= 0 {
+		days = 30
+	}
+	start := time.Now().AddDate(0, 0, -days)
+	var items []RegionStat
+	sql := `
+SELECT province, SUM(c) AS count FROM (
+  SELECT province, COUNT(*) AS c FROM sso_login_log
+    WHERE created_at >= ? AND status = 'success' AND province <> '' GROUP BY province
+  UNION ALL
+  SELECT province, COUNT(*) AS c FROM sso_access_log
+    WHERE created_at >= ? AND province <> '' GROUP BY province
+) AS t
+GROUP BY province
+ORDER BY count DESC
+LIMIT 10`
+	err := r.db.Raw(sql, start, start).Scan(&items).Error
+	return items, err
 }
 
 type LogQuery struct {

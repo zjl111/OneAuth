@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#6FC754"/>
+  <text x="32" y="40" text-anchor="middle" fill="#fff" font-family="-apple-system, sans-serif" font-size="20" font-weight="800" letter-spacing="0.5">CAS</text>
+  <text x="32" y="54" text-anchor="middle" fill="#fff" opacity="0.85" font-family="-apple-system, sans-serif" font-size="8" font-weight="500">Apereo</text>
+</svg>

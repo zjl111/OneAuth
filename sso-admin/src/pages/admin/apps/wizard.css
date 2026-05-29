@@ -1,0 +1,49 @@
+.app-wizard {
+  padding: 8px 0 96px;
+  background: #f5f7fb;
+  min-height: 100%;
+  margin: -24px -24px -24px;
+  padding: 24px;
+}
+
+.app-wizard .ant-steps-item-title { font-weight: 500; }
+
+.app-wizard-footer {
+  position: sticky;
+  bottom: 0;
+  margin: 24px -24px -24px;
+  padding: 14px 28px;
+  background: #fff;
+  border-top: 1px solid #eef0f5;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  z-index: 2;
+}
+
+/* Drawer 内部 reset 一下边距，让卡片底色露出 */
+.ant-drawer-body:has(.app-wizard) {
+  padding: 0 !important;
+  background: #f5f7fb;
+}
+
+/* Step2 网格 label 上下对齐 */
+.app-wizard-step2 .ant-form-item-label > label {
+  height: auto !important;
+  white-space: normal;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #1d2c5b;
+}
+.app-wizard-step2 .ant-radio-group {
+  height: 36px;
+}
+.app-wizard-step2 .ant-radio-button-wrapper {
+  height: 36px;
+  line-height: 34px;
+  min-width: 64px;
+  text-align: center;
+}
+.app-wizard-step2 .ant-form-item {
+  margin-bottom: 22px;
+}

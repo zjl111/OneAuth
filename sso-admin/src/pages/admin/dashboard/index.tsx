@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Card, Col, Row, Empty, Tag, Space } from 'antd';
+import { useEffect, useState } from 'react';
+import { Card, Col, Row, Empty, Tag, Space, Table } from 'antd';
+import ChinaMap from '@/components/ChinaMap';
 import {
   UserOutlined,
   AppstoreOutlined,
@@ -8,15 +9,12 @@ import {
   RiseOutlined,
   ClockCircleOutlined,
   ArrowRightOutlined,
-  TrophyFilled,
-  SafetyCertificateOutlined,
   MailOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { Line, Pie } from '@ant-design/charts';
-import dayjs from 'dayjs';
+import { DualAxes } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
-import { dashboardApi, type OperationLog } from '@/api/misc';
+import { dashboardApi } from '@/api/misc';
 import './dashboard.css';
 
 type StatCard = {
@@ -44,45 +42,6 @@ const TONE_FG: Record<StatCard['tone'], string> = {
   orange: '#f59e0b',
 };
 
-const RESOURCE_LABEL: Record<string, string> = {
-  users: '用户管理', roles: '角色权限', departments: '组织机构', apps: '应用中心',
-  configs: '系统配置', access: '访问控制', monitor: '状态监控', dictionaries: '字典',
-  auth: '账户', permissions: '权限',
-};
-const ACTION_LABEL: Record<string, string> = {
-  create: '创建', update: '更新', delete: '删除', patch: '更新', post: '创建', put: '更新',
-};
-const SUFFIX_LABEL: Record<string, string> = {
-  'reset-password': '重置密码', lock: '锁定/解锁', roles: '设置角色', avatar: '上传头像',
-  'rotate-secret': '轮换密钥', 'toggle-status': '启用/禁用', probe: '立即探测',
-  maintenance: '维护模式', 'batch-delete': '批量删除', 'upload-logo': '上传 Logo',
-  'upload-image': '上传图片', profile: '个人资料', 'change-password': '修改密码',
-};
-
-function translateAction(action: string): string {
-  if (ACTION_LABEL[action]) return ACTION_LABEL[action];
-  const i = action.indexOf('.');
-  if (i > 0) {
-    const v = action.slice(0, i);
-    const s = action.slice(i + 1);
-    return `${ACTION_LABEL[v] || v}·${SUFFIX_LABEL[s] || s}`;
-  }
-  return action || '-';
-}
-
-function describeOp(log: OperationLog): string {
-  switch (log.action) {
-    case 'create':
-      return `创建${RESOURCE_LABEL[log.resource_type] || log.resource_type}`;
-    case 'update':
-      return `更新${RESOURCE_LABEL[log.resource_type] || log.resource_type}`;
-    case 'delete':
-      return `删除${RESOURCE_LABEL[log.resource_type] || log.resource_type}`;
-    default:
-      return `${RESOURCE_LABEL[log.resource_type] || log.resource_type} · ${translateAction(log.action)}`;
-  }
-}
-
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -92,13 +51,13 @@ export default function DashboardPage() {
   });
   const [trend, setTrend] = useState<Array<{ date: string; count: number }>>([]);
   const [dist, setDist] = useState<Array<{ client_id: string; client_name: string; count: number }>>([]);
-  const [recentOps, setRecentOps] = useState<OperationLog[]>([]);
+  const [regionTop, setRegionTop] = useState<Array<{ province: string; count: number }>>([]);
 
   useEffect(() => {
     dashboardApi.stats().then(setStats);
     dashboardApi.loginTrends(30).then((d) => setTrend(d || []));
     dashboardApi.appDistribution(30).then((d) => setDist(d || []));
-    dashboardApi.recentOperations(5).then((d) => setRecentOps(d || []));
+    dashboardApi.regionTop10(30).then((d) => setRegionTop(d || []));
   }, []);
 
   const winMin = stats.active_window_minutes || 120;
@@ -117,8 +76,6 @@ export default function DashboardPage() {
       tone: 'orange',
     },
   ];
-
-  const totalAccess = useMemo(() => dist.reduce((s, x) => s + Number(x.count), 0), [dist]);
 
   return (
     <div className="dashboard">
@@ -140,9 +97,46 @@ export default function DashboardPage() {
         ))}
       </Row>
 
-      {/* 2. 中部：登录趋势 + 应用访问占比 */}
+      {/* 1.5 中国地图 TOP10 访问统计 */}
+      <Card
+        className="dash-card region-card"
+        style={{ marginTop: 16 }}
+        title={<span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>30 日 TOP10 访问统计</span>}
+      >
+        <Row gutter={[16, 16]} align="middle">
+          <Col xs={24} xl={14}>
+            {regionTop.length === 0 ? (
+              <Empty description="暂无访问数据，启动后会按 IP 自动落库" />
+            ) : (
+              <ChinaMap data={regionTop} height={420} />
+            )}
+          </Col>
+          <Col xs={24} xl={10}>
+            <Table
+              size="middle"
+              pagination={false}
+              rowKey={(r) => `${r.province}-${r.count}`}
+              dataSource={regionTop}
+              locale={{ emptyText: '暂无数据' }}
+              columns={[
+                {
+                  title: '序号',
+                  key: 'idx',
+                  width: 70,
+                  align: 'center',
+                  render: (_, _r, i) => <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>,
+                },
+                { title: '省份', dataIndex: 'province', align: 'center' },
+                { title: '浏览量(PV)', dataIndex: 'count', align: 'center' },
+              ]}
+            />
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 2. 中部：登录趋势(柱+线) + 热门应用排行（窄） */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} xl={16}>
+        <Col xs={24} xl={18}>
           <Card
             className="dash-card"
             title={
@@ -156,95 +150,51 @@ export default function DashboardPage() {
             {trend.length === 0 ? (
               <Empty description="暂无数据" />
             ) : (
-              <Line
-                data={trend}
+              <DualAxes
+                data={[trend, trend]}
                 xField="date"
-                yField="count"
-                smooth
+                yField={['count', 'count']}
                 height={300}
-                area={{ style: { fillOpacity: 0.18 } }}
-                color="#1677ff"
-                point={{ size: 3, shape: 'circle', style: { fill: '#1677ff', stroke: '#fff', lineWidth: 1 } }}
-                xAxis={{ tickCount: 8 }}
+                geometryOptions={[
+                  {
+                    geometry: 'column',
+                    color: '#3b82f6',
+                    columnWidthRatio: 0.55,
+                    label: undefined,
+                  },
+                  {
+                    geometry: 'line',
+                    color: '#1677ff',
+                    lineStyle: { lineWidth: 2 },
+                    point: {
+                      size: 3,
+                      shape: 'circle',
+                      style: { fill: '#fff', stroke: '#1677ff', lineWidth: 2 },
+                    },
+                  },
+                ]}
+                legend={{
+                  layout: 'horizontal',
+                  position: 'top-left',
+                  itemName: {
+                    formatter: (text: string) => (text === 'count' ? '登录次数' : '趋势'),
+                  },
+                }}
+                yAxis={{
+                  count: {
+                    grid: { line: { style: { lineDash: [3, 3], stroke: '#eef0f5' } } },
+                  },
+                  count2: { grid: null as any, label: null as any },
+                }}
+                xAxis={{ tickCount: 14, label: { autoRotate: false } }}
+                meta={{
+                  count: { alias: '登录次数' },
+                }}
               />
             )}
           </Card>
         </Col>
-        <Col xs={24} xl={8}>
-          <Card className="dash-card" title="应用访问占比">
-            {dist.length === 0 ? (
-              <Empty description="暂无数据" />
-            ) : (
-              <>
-                <div style={{ height: 220, position: 'relative' }}>
-                  <Pie
-                    data={dist}
-                    angleField="count"
-                    colorField="client_name"
-                    radius={0.85}
-                    innerRadius={0.65}
-                    height={220}
-                    legend={false}
-                    label={false}
-                    statistic={{
-                      title: { content: '总访问次数', style: { fontSize: 12, color: '#94a3b8' } },
-                      content: { content: `${totalAccess}`, style: { fontSize: 22, fontWeight: 600, color: '#1d2c5b' } },
-                    }}
-                  />
-                </div>
-                <ul className="dash-legend">
-                  {dist.slice(0, 5).map((d, i) => (
-                    <li key={d.client_id}>
-                      <span className="dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <span className="name">{d.client_name}</span>
-                      <span className="pct">
-                        {totalAccess > 0 ? ((Number(d.count) / totalAccess) * 100).toFixed(1) : 0}%
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* 3. 下部：最近操作日志 + 热门应用排行 */}
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} xl={12}>
-          <Card
-            className="dash-card"
-            title="最近操作日志"
-            extra={
-              <a onClick={() => navigate('/admin/logs')}>
-                查看全部 <ArrowRightOutlined />
-              </a>
-            }
-          >
-            {recentOps.length === 0 ? (
-              <Empty description="暂无操作记录" />
-            ) : (
-              <ul className="op-list">
-                {recentOps.map((log) => (
-                  <li key={log.id}>
-                    <div className="op-icon">
-                      <SafetyCertificateOutlined />
-                    </div>
-                    <div className="op-text">
-                      <div className="op-title">{describeOp(log)}</div>
-                      <div className="op-sub">
-                        用户 <b>{log.username || '-'}</b> · {log.description}
-                      </div>
-                    </div>
-                    <div className="op-time">{dayjs(log.created_at).format('MM-DD HH:mm:ss')}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24} xl={12}>
+        <Col xs={24} xl={6}>
           <Card
             className="dash-card"
             title="热门应用排行"
@@ -258,16 +208,14 @@ export default function DashboardPage() {
               <Empty description="暂无访问数据" />
             ) : (
               <ul className="rank-list">
-                {dist.slice(0, 5).map((d, i) => (
+                {dist.slice(0, 10).map((d, i) => (
                   <li key={d.client_id}>
-                    <span className={`rank-badge rank-${i + 1}`}>
-                      {i < 3 ? <TrophyFilled /> : i + 1}
-                    </span>
+                    <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>
                     <span className="rank-icon">
                       <MailOutlined />
                     </span>
                     <span className="rank-name">{d.client_name}</span>
-                    <span className="rank-count">{d.count} 次</span>
+                    <span className="rank-count">{d.count.toLocaleString()}</span>
                   </li>
                 ))}
               </ul>
@@ -278,5 +226,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-const PIE_COLORS = ['#1677ff', '#10b981', '#8b5cf6', '#f59e0b', '#06b6d4', '#ec4899'];

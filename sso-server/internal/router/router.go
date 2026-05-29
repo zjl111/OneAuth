@@ -178,6 +178,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/dashboard/app-distribution", h.Dashboard.AppDistribution)
 		admin.GET("/dashboard/recent-operations", h.Dashboard.RecentOperations)
 		admin.GET("/dashboard/login-methods", h.Dashboard.LoginMethods)
+		admin.GET("/dashboard/region-top10", h.Dashboard.RegionTop10)
 
 		// 日志
 		admin.GET("/logs/login", h.Log.Login)

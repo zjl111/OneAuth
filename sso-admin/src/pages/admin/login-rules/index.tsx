@@ -13,7 +13,6 @@ import {
   Select,
   Switch,
   Popconfirm,
-  Collapse,
   App as AntdApp,
 } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -47,8 +46,7 @@ export default function LoginRulesPage() {
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({
-      priority: 50,
-      enabled: true,
+      priority: 30,
       user_scope: 'all',
       user_ids: [],
       ips: ['*'],
@@ -79,10 +77,12 @@ export default function LoginRulesPage() {
     setSaving(true);
     try {
       if (editing) {
-        await loginRuleApi.update(editing.id, v);
+        // 编辑沿用原 enabled，不允许在 Drawer 里改
+        await loginRuleApi.update(editing.id, { ...v, enabled: editing.enabled });
         message.success('已更新');
       } else {
-        await loginRuleApi.create(v);
+        // 新建默认启用
+        await loginRuleApi.create({ ...v, enabled: true });
         message.success('已创建');
       }
       setOpen(false);
@@ -113,7 +113,7 @@ export default function LoginRulesPage() {
   }, [users]);
 
   return (
-    <div>
+    <Card>
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ color: '#6b7280', fontSize: 13 }}>
           按规则的优先级（数字越小越优先）顺序匹配登录请求的 IP 与时段。命中首条匹配规则即决定允许或拒绝；未命中任一规则时默认放行。
@@ -123,7 +123,7 @@ export default function LoginRulesPage() {
             刷新
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建规则
+            创建规则
           </Button>
         </Space>
       </div>
@@ -188,8 +188,8 @@ export default function LoginRulesPage() {
       />
 
       <Drawer
-        title={editing ? '编辑登录规则' : '新建登录规则'}
-        width={780}
+        title={editing ? '编辑用户登录控制' : '创建用户登录控制'}
+        width={840}
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose
@@ -202,112 +202,125 @@ export default function LoginRulesPage() {
           </Space>
         }
       >
-        <Form form={form} layout="vertical" preserve={false}>
-          <Collapse
-            defaultActiveKey={['base', 'user', 'rule', 'action']}
-            ghost
-            items={[
-              {
-                key: 'base',
-                label: '基本设置',
-                children: (
-                  <>
-                    <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入规则名称' }]}>
-                      <Input placeholder="例如：拒绝外网工作时间登录" />
-                    </Form.Item>
-                    <Form.Item
-                      name="priority"
-                      label="优先级"
-                      tooltip="数字越小越优先匹配；多条规则同优先级时按创建顺序"
-                      rules={[{ required: true }]}
-                    >
-                      <InputNumber min={1} max={1000} style={{ width: 200 }} />
-                    </Form.Item>
-                    <Form.Item name="enabled" label="启用此规则" valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-                  </>
-                ),
-              },
-              {
-                key: 'user',
-                label: '用户',
-                children: (
-                  <>
-                    <Form.Item name="user_scope" label="用户" rules={[{ required: true }]}>
-                      <Radio.Group>
-                        <Radio value="all">全部用户</Radio>
-                        <Radio value="specific">指定用户</Radio>
-                      </Radio.Group>
-                    </Form.Item>
-                    {userScope === 'specific' && (
-                      <Form.Item name="user_ids" label="选择用户">
-                        <Select
-                          mode="multiple"
-                          showSearch
-                          placeholder="选择用户"
-                          optionFilterProp="label"
-                          options={users.map((u) => ({
-                            value: u.id,
-                            label: `${u.nickname || u.username} (${u.email || u.username})`,
-                          }))}
-                        />
-                      </Form.Item>
-                    )}
-                  </>
-                ),
-              },
-              {
-                key: 'rule',
-                label: '规则',
-                children: (
-                  <>
-                    <Form.Item
-                      name="ips"
-                      label="IP"
-                      tooltip="* 表示匹配所有；支持单个 IP、CIDR (如 10.0.0.0/8)、IP 区间 (如 1.1.1.1-1.1.1.10)"
-                    >
-                      <Select
-                        mode="tags"
-                        placeholder="按 Enter 添加多个 IP / CIDR / 区间"
-                        tokenSeparators={[',', ' ']}
-                        options={[{ value: '*', label: '* (全部)' }]}
-                      />
-                    </Form.Item>
-                    <Form.Item name="time_mask" label="时段" tooltip="鼠标按住拖动选择；不选 = 全时段">
-                      <TimeMaskWrapper />
-                    </Form.Item>
-                  </>
-                ),
-              },
-              {
-                key: 'action',
-                label: '动作',
-                children: (
-                  <Form.Item name="action" label="命中规则后的动作" rules={[{ required: true }]}>
-                    <Radio.Group>
-                      <Radio value="accept">
-                        <span style={{ color: '#10b981' }}>● 允许</span>
-                      </Radio>
-                      <Radio value="deny">
-                        <span style={{ color: '#ef4444' }}>● 拒绝</span>
-                      </Radio>
-                    </Radio.Group>
-                  </Form.Item>
-                ),
-              },
-            ]}
-          />
+        <Form
+          form={form}
+          labelCol={{ flex: '110px' }}
+          labelAlign="right"
+          colon={false}
+          preserve={false}
+          style={{ paddingRight: 12 }}
+        >
+          <RuleSection title="基本设置">
+            <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入规则名称' }]}>
+              <Input placeholder="名称" />
+            </Form.Item>
+            <Form.Item
+              name="priority"
+              label="优先级"
+              tooltip="数字越小越优先匹配；多条规则同优先级时按创建顺序"
+              rules={[{ required: true }]}
+            >
+              <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+            </Form.Item>
+          </RuleSection>
+
+          <RuleSection title="用户">
+            <Form.Item name="user_scope" label="用户" rules={[{ required: true }]}>
+              <Radio.Group>
+                <Radio value="all">全部用户</Radio>
+                <Radio value="specific">指定用户</Radio>
+              </Radio.Group>
+            </Form.Item>
+            {userScope === 'specific' && (
+              <Form.Item name="user_ids" label=" ">
+                <Select
+                  mode="multiple"
+                  showSearch
+                  placeholder="选择用户"
+                  optionFilterProp="label"
+                  options={users.map((u) => ({
+                    value: u.id,
+                    label: `${u.nickname || u.username} (${u.email || u.username})`,
+                  }))}
+                />
+              </Form.Item>
+            )}
+          </RuleSection>
+
+          <RuleSection title="规则">
+            <Form.Item
+              name="ips"
+              label="IP"
+              tooltip="* 表示匹配所有；支持单个 IP、CIDR (如 10.0.0.0/8)、IP 区间 (如 1.1.1.1-1.1.1.10)"
+              extra={
+                <span style={{ color: '#94a3b8' }}>
+                  * 表示匹配所有。例如: 192.168.10.1, 192.168.1.0/24, 10.1.1.1-10.1.1.20, 2001:db8:2de::e13,
+                  2001:db8:1a:1110::/64
+                </span>
+              }
+            >
+              <Select
+                mode="tags"
+                placeholder="IP (按下 Enter 继续输入)"
+                tokenSeparators={[',', ' ']}
+                options={[{ value: '*', label: '* (全部)' }]}
+              />
+            </Form.Item>
+            <Form.Item name="time_mask" label="时段">
+              <TimeMaskWrapper />
+            </Form.Item>
+          </RuleSection>
+
+          <RuleSection title="动作" last>
+            <Form.Item name="action" label="动作" rules={[{ required: true }]}>
+              <Radio.Group>
+                <Radio value="deny">
+                  <span style={{ color: '#ef4444', fontWeight: 500 }}>● 拒绝</span>
+                </Radio>
+                <Radio value="accept">
+                  <span style={{ color: '#10b981', fontWeight: 500 }}>● 接受</span>
+                </Radio>
+              </Radio.Group>
+            </Form.Item>
+          </RuleSection>
         </Form>
       </Drawer>
 
       {/* 调试：隐藏 userMap 引用，避免 TS 提示未用变量 */}
       <div style={{ display: 'none' }}>{userMap.size}</div>
-    </div>
+    </Card>
   );
 }
 
 // Form 的 Item 必须把 value/onChange 转传给子组件
 function TimeMaskWrapper({ value, onChange }: { value?: string; onChange?: (v: string) => void }) {
   return <TimeMaskPicker value={value} onChange={onChange} />;
+}
+
+// 分组 section：左侧粗体标题（带向下小箭头视觉），下方淡灰分隔线
+function RuleSection({
+  title,
+  children,
+  last,
+}: {
+  title: string;
+  children: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div style={{ paddingBottom: last ? 0 : 16, marginBottom: last ? 0 : 20, borderBottom: last ? 'none' : '1px dashed #eef0f5' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+        }}
+      >
+        <span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>{title}</span>
+        <span style={{ color: '#cbd5e1', fontSize: 12 }}>▾</span>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
 }

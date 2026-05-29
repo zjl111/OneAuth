@@ -81,6 +81,8 @@ export default function SettingsPage() {
   const grouped = useMemo(() => {
     const g: Record<string, SystemConfig[]> = {};
     data.forEach((c) => {
+      // OAuth/OIDC 协议参数已下沉到「应用」级别，配置管理不再展示
+      if (c.category === 'oauth') return;
       (g[c.category] ||= []).push(c);
     });
     return g;

@@ -21,7 +21,6 @@ export default function ProfilePage() {
       profileForm.setFieldsValue({
         nickname: user.nickname,
         email: user.email,
-        position: user.position || '',
       });
     }
   }, [user, profileForm]);
@@ -119,9 +118,6 @@ export default function ProfilePage() {
                   </Form.Item>
                   <Form.Item name="email" label="邮箱">
                     <Input />
-                  </Form.Item>
-                  <Form.Item name="position" label="职位">
-                    <Input placeholder="例如：前端工程师" />
                   </Form.Item>
                   <Button type="primary" loading={saving} onClick={handleSaveProfile}>
                     保存

@@ -48,7 +48,15 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用中心' },
-  { key: '/admin/access', icon: <LockOutlined />, label: '访问控制' },
+  {
+    key: 'access',
+    icon: <LockOutlined />,
+    label: '访问控制',
+    children: [
+      { key: '/admin/access/login-rules', icon: <SafetyOutlined />, label: '登录控制' },
+      { key: '/admin/access/sessions', icon: <UserOutlined />, label: '在线会话' },
+    ],
+  },
   { key: '/admin/settings', icon: <SettingOutlined />, label: '配置管理' },
   { key: '/admin/monitor', icon: <MonitorOutlined />, label: '状态监控' },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
@@ -62,7 +70,8 @@ const labelMap: Record<string, string> = {
   '/admin/roles': '角色权限',
   '/admin/app-perms': '应用权限',
   '/admin/apps': '应用中心',
-  '/admin/access': '访问控制',
+  '/admin/access/login-rules': '登录控制',
+  '/admin/access/sessions': '在线会话',
   '/admin/settings': '配置管理',
   '/admin/monitor': '状态监控',
   '/admin/logs': '日志审计',
@@ -75,6 +84,8 @@ const breadcrumbExtra: Record<string, string> = {
   '/admin/user-groups': '身份目录',
   '/admin/roles': '权限管理',
   '/admin/app-perms': '权限管理',
+  '/admin/access/login-rules': '访问控制',
+  '/admin/access/sessions': '访问控制',
 };
 
 export default function AdminLayout() {
@@ -113,6 +124,9 @@ export default function AdminLayout() {
     }
     if (['/admin/roles', '/admin/app-perms'].includes(location.pathname)) {
       keys.push('perms');
+    }
+    if (location.pathname.startsWith('/admin/access')) {
+      keys.push('access');
     }
     return keys;
   }, [location.pathname]);
