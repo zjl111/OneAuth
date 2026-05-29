@@ -18,49 +18,60 @@ import { useAuthStore } from '@/store/authStore';
 import type { OAuth2Client } from '@/api/apps';
 import './wizard.css';
 
+// Proto 既是协议家族也是 backend `protocol` 字段值。
+// 注意：'oidc' 不是独立家族 — 它属于 OAuth 家族下的版本选项，仅作为 backend 标识符存在。
 export type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas';
 
-const PROTOCOL_LABEL: Record<Proto, string> = {
-  oidc: 'OpenID Connect',
-  oauth2: 'OAuth 2.0',
-  saml: 'SAML 2.0',
-  cas: 'CAS',
+// 协议家族（UI 视角，OIDC 合并到 OAuth 中）
+export type ProtoFamily = 'oauth' | 'saml' | 'cas';
+
+const FAMILY_LABEL: Record<ProtoFamily, string> = {
+  oauth: 'OAuth 2.x / OpenID Connect',
+  saml:  'SAML 2.0',
+  cas:   'CAS',
 };
 
-// 每个协议家族下可选的版本（MaxKey 同款命名）
-const PROTOCOL_VERSIONS: Record<Proto, { value: string; label: string }[]> = {
-  oidc: [
+// 每个协议家族下可选的版本（MaxKey 同款）
+const PROTOCOL_VERSIONS: Record<ProtoFamily, { value: string; label: string }[]> = {
+  oauth: [
+    { value: 'OAuth_v2.0',          label: 'OAuth v2.0' },
+    { value: 'OAuth_v2.1',          label: 'OAuth v2.1' },
     { value: 'OpenID_Connect_v1.0', label: 'OpenID Connect 1.0' },
-  ],
-  oauth2: [
-    { value: 'OAuth_v2.0', label: 'OAuth 2.0' },
-    { value: 'OAuth_v2.1', label: 'OAuth 2.1' },
   ],
   saml: [
     { value: 'SAML_v2.0', label: 'SAML 2.0' },
   ],
   cas: [
-    { value: 'CAS_v3.0',     label: 'CAS 3.0' },
-    { value: 'CAS_v2.0',     label: 'CAS 2.0' },
-    { value: 'CAS_v1.0',     label: 'CAS 1.0' },
+    { value: 'CAS_v3.0',      label: 'CAS 3.0' },
+    { value: 'CAS_v2.0',      label: 'CAS 2.0' },
+    { value: 'CAS_v1.0',      label: 'CAS 1.0' },
     { value: 'CAS_SAML_v1.1', label: 'CAS SAML 1.1' },
   ],
 };
 
-function defaultProtocolVersion(p: Proto) {
-  return PROTOCOL_VERSIONS[p][0].value;
+function defaultProtocolVersion(f: ProtoFamily) {
+  return PROTOCOL_VERSIONS[f][0].value;
 }
 
-// 不同协议在 Step2 中需要校验的字段
-const STEP2_FIELDS: Record<Proto, string[]> = {
-  oauth2: [
+// 由家族 + 版本反推 backend.protocol
+function toBackendProtocol(family: ProtoFamily, version: string): Proto {
+  if (family === 'saml') return 'saml';
+  if (family === 'cas') return 'cas';
+  return version === 'OpenID_Connect_v1.0' ? 'oidc' : 'oauth2';
+}
+
+// 由 backend.protocol 推断家族
+function toFamily(p: Proto): ProtoFamily {
+  if (p === 'saml') return 'saml';
+  if (p === 'cas') return 'cas';
+  return 'oauth'; // oidc / oauth2 都属于 oauth 家族
+}
+
+// 各家族在 Step2 需要校验的字段
+const STEP2_FIELDS: Record<ProtoFamily, string[]> = {
+  oauth: [
     'redirect_uris', 'grant_types', 'subject_type', 'scope',
     'require_consent', 'require_pkce', 'access_token_ttl', 'refresh_token_ttl',
-  ],
-  oidc: [
-    'redirect_uris', 'grant_types', 'subject_type', 'scope',
-    'require_consent', 'require_pkce', 'access_token_ttl', 'refresh_token_ttl',
-    'oidc_id_token_signing_alg', 'oidc_userinfo_response',
   ],
   saml: [
     'saml_entity_id', 'saml_acs_url', 'saml_binding', 'saml_nameid_format',
@@ -128,13 +139,13 @@ type WizardValues = {
 
 export default function AppWizard({
   open,
-  protocol,
+  family,
   editing,
   onClose,
   onSubmit,
 }: {
   open: boolean;
-  protocol: Proto;
+  family: ProtoFamily;
   editing: OAuth2Client | null;
   onClose: () => void;
   onSubmit: (values: any) => Promise<void>;
@@ -145,19 +156,23 @@ export default function AppWizard({
   const [form] = Form.useForm<WizardValues>();
   const [saving, setSaving] = useState(false);
   const logoUrl = Form.useWatch('logo_url', form);
-  const watchedProtocol = (Form.useWatch('protocol', form) as Proto) || protocol;
+  const watchedVersion = (Form.useWatch('protocol_version', form) as string) || defaultProtocolVersion(family);
+  const isOIDC = watchedVersion === 'OpenID_Connect_v1.0';
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     if (editing) {
-      const p = ((editing.protocol as Proto) || protocol) as Proto;
+      const p = ((editing.protocol as Proto) || 'oauth2') as Proto;
+      const editFamily = toFamily(p);
+      const editVersion = editing.protocol_version
+        || (p === 'oidc' ? 'OpenID_Connect_v1.0' : defaultProtocolVersion(editFamily));
       form.setFieldsValue({
         client_id: editing.client_id,
         client_secret_preview: '••••••••（已加密保存）',
         client_name: editing.client_name,
         protocol: p,
-        protocol_version: editing.protocol_version || defaultProtocolVersion(p),
+        protocol_version: editVersion,
         logo_url: editing.logo_url,
         login_url: editing.login_url || editing.home_url,
         is_active: editing.is_active,
@@ -196,19 +211,21 @@ export default function AppWizard({
         cas_expires_seconds: editing.cas_expires_seconds || 300,
       });
     } else {
+      const initVersion = defaultProtocolVersion(family);
+      const initProto: Proto = toBackendProtocol(family, initVersion);
       form.resetFields();
       form.setFieldsValue({
         client_id: genId(),
         client_secret_preview: genSecret(),
-        protocol,
-        protocol_version: defaultProtocolVersion(protocol),
+        protocol: initProto,
+        protocol_version: initVersion,
         is_active: true,
 
         // OAuth2/OIDC 默认
         redirect_uris: [],
         grant_types: ['authorization_code', 'refresh_token'],
         subject_type: 'username',
-        scope: protocol === 'oidc' ? ['openid', 'profile', 'email'] : ['profile', 'email'],
+        scope: initProto === 'oidc' ? ['openid', 'profile', 'email'] : ['profile', 'email'],
         require_consent: false,
         require_pkce: false,
         access_token_ttl: 3600,
@@ -232,7 +249,7 @@ export default function AppWizard({
         cas_expires_seconds: 300,
       });
     }
-  }, [open, editing, protocol]);
+  }, [open, editing, family]);
 
   const handleNext = async () => {
     try {
@@ -241,7 +258,7 @@ export default function AppWizard({
           'client_id', 'client_secret_preview', 'client_name', 'login_url',
         ]);
       } else if (step === 1) {
-        await form.validateFields(STEP2_FIELDS[watchedProtocol]);
+        await form.validateFields(STEP2_FIELDS[family]);
       }
       setStep((s) => s + 1);
     } catch {
@@ -251,9 +268,11 @@ export default function AppWizard({
 
   const handleSubmit = async () => {
     const v = await form.validateFields();
+    // 由 family + version 推 backend.protocol，保证一致
+    const backendProtocol = toBackendProtocol(family, v.protocol_version);
     const base = {
       client_name: v.client_name,
-      protocol: v.protocol,
+      protocol: backendProtocol,
       protocol_version: v.protocol_version,
       logo_url: v.logo_url,
       home_url: v.login_url,
@@ -262,7 +281,7 @@ export default function AppWizard({
       description: v.description,
     };
     let payload: any = base;
-    if (v.protocol === 'oauth2' || v.protocol === 'oidc') {
+    if (backendProtocol === 'oauth2' || backendProtocol === 'oidc') {
       payload = {
         ...base,
         redirect_uris: v.redirect_uris || [],
@@ -274,7 +293,7 @@ export default function AppWizard({
         access_token_ttl: v.access_token_ttl,
         refresh_token_ttl: v.refresh_token_ttl,
       };
-      if (v.protocol === 'oidc') {
+      if (backendProtocol === 'oidc') {
         payload = {
           ...payload,
           oidc_issuer: v.oidc_issuer,
@@ -283,7 +302,7 @@ export default function AppWizard({
           oidc_userinfo_response: v.oidc_userinfo_response,
         };
       }
-    } else if (v.protocol === 'saml') {
+    } else if (backendProtocol === 'saml') {
       payload = {
         ...base,
         saml_entity_id: v.saml_entity_id,
@@ -299,7 +318,7 @@ export default function AppWizard({
         saml_validity_seconds: v.saml_validity_seconds,
         saml_certificate: v.saml_certificate,
       };
-    } else if (v.protocol === 'cas') {
+    } else if (backendProtocol === 'cas') {
       payload = {
         ...base,
         cas_service: v.cas_service,
@@ -369,17 +388,10 @@ export default function AppWizard({
               <Form.Item name="client_name" label="应用名称" rules={[{ required: true, message: '请输入应用名称' }]}>
                 <Input placeholder="例如：JumpServer 演示" />
               </Form.Item>
-              <Form.Item label="协议" required>
-                <Input
-                  value={PROTOCOL_LABEL[watchedProtocol]}
-                  disabled
-                  style={{ background: '#f5f7fb' }}
-                />
-                <Form.Item name="protocol" hidden><Input /></Form.Item>
+              <Form.Item name="protocol_version" label="协议" rules={[{ required: true }]}>
+                <Select options={PROTOCOL_VERSIONS[family]} />
               </Form.Item>
-              <Form.Item name="protocol_version" label="协议版本" rules={[{ required: true }]}>
-                <Select options={PROTOCOL_VERSIONS[watchedProtocol]} />
-              </Form.Item>
+              <Form.Item name="protocol" hidden><Input /></Form.Item>
               <Form.Item name="login_url" label="登录地址" rules={[{ required: true, message: '请输入应用登录地址' }]}>
                 <Input placeholder="https://app.example.com" />
               </Form.Item>
@@ -523,11 +535,9 @@ export default function AppWizard({
 
         {/* ============== Step 2 协议配置（按协议切换） ============== */}
         <div style={{ display: step === 1 ? 'block' : 'none' }}>
-          {(watchedProtocol === 'oauth2' || watchedProtocol === 'oidc') && (
-            <OAuth2OIDCConfig isOIDC={watchedProtocol === 'oidc'} />
-          )}
-          {watchedProtocol === 'saml' && <SAMLConfig />}
-          {watchedProtocol === 'cas' && <CASConfig />}
+          {family === 'oauth' && <OAuth2OIDCConfig isOIDC={isOIDC} />}
+          {family === 'saml' && <SAMLConfig />}
+          {family === 'cas' && <CASConfig />}
         </div>
 
         {/* ============== Step 3 信息确认（按协议组装） ============== */}
@@ -545,9 +555,9 @@ export default function AppWizard({
             <Descriptions.Item label="应用名称">{summary.client_name}</Descriptions.Item>
             <Descriptions.Item label="协议">
               <Tag color="blue">
-                {(PROTOCOL_VERSIONS[(summary.protocol as Proto) || 'oidc']
-                  .find((x) => x.value === summary.protocol_version)?.label)
-                  || PROTOCOL_LABEL[(summary.protocol as Proto) || 'oidc']}
+                {PROTOCOL_VERSIONS[family]
+                  .find((x) => x.value === summary.protocol_version)?.label
+                  || FAMILY_LABEL[family]}
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="登录地址" span={2}>{summary.login_url}</Descriptions.Item>
@@ -558,7 +568,7 @@ export default function AppWizard({
           </Descriptions>
 
           <Descriptions title="协议配置" column={2} bordered size="middle">
-            {(watchedProtocol === 'oauth2' || watchedProtocol === 'oidc') && (
+            {family === 'oauth' && (
               <>
                 <Descriptions.Item label="认证地址" span={2}>
                   {(summary.redirect_uris || []).map((u: string) => (
@@ -576,7 +586,7 @@ export default function AppWizard({
                 <Descriptions.Item label="PKCE">{summary.require_pkce ? '是' : '否'}</Descriptions.Item>
                 <Descriptions.Item label="accessToken 有效期">{summary.access_token_ttl} 秒</Descriptions.Item>
                 <Descriptions.Item label="refreshToken 有效期">{summary.refresh_token_ttl} 秒</Descriptions.Item>
-                {watchedProtocol === 'oidc' && (
+                {isOIDC && (
                   <>
                     <Descriptions.Item label="Issuer" span={2}>{summary.oidc_issuer || '—'}</Descriptions.Item>
                     <Descriptions.Item label="Audience" span={2}>{summary.oidc_audience || '—'}</Descriptions.Item>
@@ -586,7 +596,7 @@ export default function AppWizard({
                 )}
               </>
             )}
-            {watchedProtocol === 'saml' && (
+            {family === 'saml' && (
               <>
                 <Descriptions.Item label="Entity ID" span={2}>{summary.saml_entity_id}</Descriptions.Item>
                 <Descriptions.Item label="ACS URL" span={2}>{summary.saml_acs_url}</Descriptions.Item>
@@ -606,7 +616,7 @@ export default function AppWizard({
                 </Descriptions.Item>
               </>
             )}
-            {watchedProtocol === 'cas' && (
+            {family === 'cas' && (
               <>
                 <Descriptions.Item label="服务地址" span={2}>{summary.cas_service}</Descriptions.Item>
                 <Descriptions.Item label="回调地址" span={2}>{summary.cas_callback_url || summary.cas_service}</Descriptions.Item>

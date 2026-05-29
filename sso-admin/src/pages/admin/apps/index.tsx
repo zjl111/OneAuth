@@ -21,7 +21,7 @@ import {
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
 import PageToolbar from '@/components/PageToolbar';
-import AppWizard, { type Proto } from './AppWizard';
+import AppWizard, { type Proto, type ProtoFamily } from './AppWizard';
 
 const { Paragraph } = Typography;
 
@@ -36,9 +36,9 @@ export default function AppListPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<OAuth2Client | null>(null);
 
-  // 创建应用前先弹协议选择
+  // 创建应用前先弹协议家族选择
   const [protocolOpen, setProtocolOpen] = useState(false);
-  const [pickedProtocol, setPickedProtocol] = useState<Proto>('oidc');
+  const [pickedFamily, setPickedFamily] = useState<ProtoFamily>('oauth');
 
   const load = () => {
     setLoading(true);
@@ -61,7 +61,7 @@ export default function AppListPage() {
   }, [pagination.current, pagination.pageSize]);
 
   const openCreate = () => {
-    setPickedProtocol('oidc');
+    setPickedFamily('oauth');
     setProtocolOpen(true);
   };
 
@@ -74,7 +74,9 @@ export default function AppListPage() {
 
   const openEdit = (c: OAuth2Client) => {
     setEditing(c);
-    setPickedProtocol(((c.protocol as Proto) || 'oidc') as Proto);
+    const p = (c.protocol as Proto) || 'oauth2';
+    const f: ProtoFamily = p === 'saml' ? 'saml' : p === 'cas' ? 'cas' : 'oauth';
+    setPickedFamily(f);
     setDrawerOpen(true);
   };
 
@@ -297,7 +299,7 @@ export default function AppListPage() {
       >
         <AppWizard
           open={drawerOpen}
-          protocol={pickedProtocol}
+          family={pickedFamily}
           editing={editing}
           onClose={() => setDrawerOpen(false)}
           onSubmit={handleWizardSubmit}
@@ -319,7 +321,7 @@ export default function AppListPage() {
         width={680}
         centered
       >
-        <ProtocolPicker value={pickedProtocol} onChange={setPickedProtocol} />
+        <ProtocolPicker value={pickedFamily} onChange={setPickedFamily} />
       </Modal>
       </Card>
     </>
@@ -327,28 +329,22 @@ export default function AppListPage() {
 }
 
 // ─── 协议选择卡片 ──────────────────────────
-function ProtocolPicker({ value, onChange }: { value: Proto; onChange: (v: Proto) => void }) {
+function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v: ProtoFamily) => void }) {
   type Item = {
-    key: Proto;
+    key: ProtoFamily;
     title: string;
     short: string;
-    accent: string;   // 顶部色条 & 边框色
-    tag: string;      // 标签文案
+    accent: string;
+    tag: string;
     tagBg: string;
     tagColor: string;
   };
   const protos: Item[] = [
     {
-      key: 'oidc',  title: 'OIDC',
-      short: '适用于现代 Web、移动端应用单点登录',
+      key: 'oauth', title: 'OAuth 2.x / OIDC',
+      short: '支持 OAuth 2.0、OAuth 2.1 和 OpenID Connect 1.0',
       accent: '#1677ff', tag: '推荐',
       tagBg: '#e6f0ff', tagColor: '#1677ff',
-    },
-    {
-      key: 'oauth2', title: 'OAuth2',
-      short: '适用于第三方授权与 API 访问',
-      accent: '#10b981', tag: '标准协议',
-      tagBg: '#d1fae5', tagColor: '#047857',
     },
     {
       key: 'saml',  title: 'SAML 2.0',
@@ -358,13 +354,13 @@ function ProtocolPicker({ value, onChange }: { value: Proto; onChange: (v: Proto
     },
     {
       key: 'cas',   title: 'CAS',
-      short: '适用于传统单点登录系统接入',
+      short: '适用于传统单点登录系统接入（CAS 1.0/2.0/3.0/SAML 1.1）',
       accent: '#f59e0b', tag: '企业常用',
       tagBg: '#fef3c7', tagColor: '#92400e',
     },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '8px 0' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, padding: '8px 0' }}>
       {protos.map((p) => {
         const active = value === p.key;
         return (
