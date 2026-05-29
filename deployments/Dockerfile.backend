@@ -18,6 +18,16 @@ WORKDIR /app
 COPY --from=builder /out/sso-server .
 COPY --from=builder /app/configs ./configs
 RUN adduser -D -H sso && mkdir -p keys data/uploads && chown -R sso:sso keys data
-USER sso
 EXPOSE 8080
-CMD ["./sso-server", "--config", "./configs/config.yaml"]
+
+# 启动时修一次 keys/uploads 所有权——volume 首次挂载会用 root 拥有目录，
+# 而二进制以 sso 身份运行；不修就写不进去。
+COPY <<'EOF' /entrypoint.sh
+#!/bin/sh
+set -e
+chown -R sso:sso /app/keys /app/data 2>/dev/null || true
+exec su-exec sso /app/sso-server --config /app/configs/config.yaml
+EOF
+RUN chmod +x /entrypoint.sh && apk --no-cache add su-exec
+
+CMD ["/entrypoint.sh"]
