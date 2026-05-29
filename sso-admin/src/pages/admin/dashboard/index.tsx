@@ -11,6 +11,7 @@ import {
   ArrowRightOutlined,
   MailOutlined,
   TeamOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
 import { DualAxes } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
@@ -101,31 +102,38 @@ export default function DashboardPage() {
       <Card
         className="dash-card region-card"
         style={{ marginTop: 16 }}
-        title={<span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>30 日 TOP10 访问统计</span>}
+        title={
+          <Space>
+            <EnvironmentOutlined style={{ color: '#1677ff' }} />
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>30 日 TOP10 访问统计</span>
+          </Space>
+        }
       >
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} xl={14}>
-            <ChinaMap data={regionTop} height={420} />
+          <Col xs={24} xl={16}>
+            <ChinaMap data={regionTop} height={520} />
           </Col>
-          <Col xs={24} xl={10}>
-            <Table
-              size="middle"
-              pagination={false}
-              rowKey={(r) => `${r.province}-${r.count}`}
-              dataSource={regionTop}
-              locale={{ emptyText: '暂无数据' }}
-              columns={[
-                {
-                  title: '序号',
-                  key: 'idx',
-                  width: 70,
-                  align: 'center',
-                  render: (_, _r, i) => <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>,
-                },
-                { title: '省份', dataIndex: 'province', align: 'center' },
-                { title: '浏览量(PV)', dataIndex: 'count', align: 'center' },
-              ]}
-            />
+          <Col xs={24} xl={8} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div style={{ width: '80%' }}>
+              <Table
+                size="middle"
+                pagination={false}
+                rowKey={(r) => `${r.province}-${r.count}`}
+                dataSource={regionTop}
+                locale={{ emptyText: '暂无数据' }}
+                columns={[
+                  {
+                    title: '序号',
+                    key: 'idx',
+                    width: 60,
+                    align: 'center',
+                    render: (_, _r, i) => <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>,
+                  },
+                  { title: '省份', dataIndex: 'province', align: 'center' },
+                  { title: '浏览量(PV)', dataIndex: 'count', align: 'center' },
+                ]}
+              />
+            </div>
           </Col>
         </Row>
       </Card>

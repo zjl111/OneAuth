@@ -106,6 +106,9 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
             type: 'map',
             map: 'china',
             roam: false,
+            aspectScale: 0.78,
+            layoutCenter: ['50%', '50%'],
+            layoutSize: '95%',
             label: { show: true, fontSize: 10, color: '#6b7280' },
             itemStyle: { areaColor: '#f1f5f9', borderColor: '#cbd5e1' },
             emphasis: {
