@@ -202,16 +202,36 @@ export default function AppListPage() {
           {
             title: '协议',
             dataIndex: 'protocol',
-            width: 110,
-            render: (p: string) => {
-              const map: Record<string, { label: string; color: string }> = {
-                oidc:   { label: 'OIDC',     color: 'purple' },
-                oauth2: { label: 'OAuth2',   color: 'green' },
-                saml:   { label: 'SAML 2.0', color: 'volcano' },
-                cas:    { label: 'CAS',      color: 'gold' },
+            width: 150,
+            render: (p: string, r) => {
+              const family = (p || 'oidc') as 'oidc' | 'oauth2' | 'saml' | 'cas';
+              const colorMap: Record<string, string> = {
+                oidc:   'purple',
+                oauth2: 'green',
+                saml:   'volcano',
+                cas:    'gold',
               };
-              const v = map[p || 'oidc'] || map.oidc;
-              return <Tag color={v.color}>{v.label}</Tag>;
+              const versionLabel: Record<string, string> = {
+                'OpenID_Connect_v1.0': 'OpenID Connect 1.0',
+                'OAuth_v2.0':          'OAuth 2.0',
+                'OAuth_v2.1':          'OAuth 2.1',
+                'SAML_v2.0':           'SAML 2.0',
+                'CAS_v3.0':            'CAS 3.0',
+                'CAS_v2.0':            'CAS 2.0',
+                'CAS_v1.0':            'CAS 1.0',
+                'CAS_SAML_v1.1':       'CAS SAML 1.1',
+              };
+              const fallback: Record<string, string> = {
+                oidc:   'OpenID Connect',
+                oauth2: 'OAuth 2.0',
+                saml:   'SAML 2.0',
+                cas:    'CAS',
+              };
+              return (
+                <Tag color={colorMap[family]}>
+                  {versionLabel[r.protocol_version || ''] || fallback[family]}
+                </Tag>
+              );
             },
           },
           {

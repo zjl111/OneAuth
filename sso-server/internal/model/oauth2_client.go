@@ -15,6 +15,7 @@ type OAuth2Client struct {
 	ClientName       string      `gorm:"size:255;not null" json:"client_name"`
 	ClientType       string      `gorm:"size:20;not null;default:'confidential'" json:"client_type"`
 	Protocol         string      `gorm:"size:20;not null;default:'oidc'" json:"protocol"` // oidc / oauth2 / saml / cas
+	ProtocolVersion  string      `gorm:"size:40" json:"protocol_version"`                 // 协议版本，如 OpenID_Connect_v1.0 / OAuth_v2.0 / SAML_v2.0 / CAS_v3.0
 	Description      string      `gorm:"type:text" json:"description"`
 
 	// === 通用：基本信息 ===

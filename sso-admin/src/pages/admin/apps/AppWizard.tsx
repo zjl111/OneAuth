@@ -27,6 +27,30 @@ const PROTOCOL_LABEL: Record<Proto, string> = {
   cas: 'CAS',
 };
 
+// 每个协议家族下可选的版本（MaxKey 同款命名）
+const PROTOCOL_VERSIONS: Record<Proto, { value: string; label: string }[]> = {
+  oidc: [
+    { value: 'OpenID_Connect_v1.0', label: 'OpenID Connect 1.0' },
+  ],
+  oauth2: [
+    { value: 'OAuth_v2.0', label: 'OAuth 2.0' },
+    { value: 'OAuth_v2.1', label: 'OAuth 2.1' },
+  ],
+  saml: [
+    { value: 'SAML_v2.0', label: 'SAML 2.0' },
+  ],
+  cas: [
+    { value: 'CAS_v3.0',     label: 'CAS 3.0' },
+    { value: 'CAS_v2.0',     label: 'CAS 2.0' },
+    { value: 'CAS_v1.0',     label: 'CAS 1.0' },
+    { value: 'CAS_SAML_v1.1', label: 'CAS SAML 1.1' },
+  ],
+};
+
+function defaultProtocolVersion(p: Proto) {
+  return PROTOCOL_VERSIONS[p][0].value;
+}
+
 // 不同协议在 Step2 中需要校验的字段
 const STEP2_FIELDS: Record<Proto, string[]> = {
   oauth2: [
@@ -59,6 +83,7 @@ type WizardValues = {
   client_secret_preview: string;
   client_name: string;
   protocol: Proto;
+  protocol_version: string;
   logo_url?: string;
   login_url?: string;
   is_active: boolean;
@@ -132,6 +157,7 @@ export default function AppWizard({
         client_secret_preview: '••••••••（已加密保存）',
         client_name: editing.client_name,
         protocol: p,
+        protocol_version: editing.protocol_version || defaultProtocolVersion(p),
         logo_url: editing.logo_url,
         login_url: editing.login_url || editing.home_url,
         is_active: editing.is_active,
@@ -175,6 +201,7 @@ export default function AppWizard({
         client_id: genId(),
         client_secret_preview: genSecret(),
         protocol,
+        protocol_version: defaultProtocolVersion(protocol),
         is_active: true,
 
         // OAuth2/OIDC 默认
@@ -227,6 +254,7 @@ export default function AppWizard({
     const base = {
       client_name: v.client_name,
       protocol: v.protocol,
+      protocol_version: v.protocol_version,
       logo_url: v.logo_url,
       home_url: v.login_url,
       login_url: v.login_url,
@@ -341,16 +369,16 @@ export default function AppWizard({
               <Form.Item name="client_name" label="应用名称" rules={[{ required: true, message: '请输入应用名称' }]}>
                 <Input placeholder="例如：JumpServer 演示" />
               </Form.Item>
-              <Form.Item name="protocol" label="协议" rules={[{ required: true }]}>
-                <Select
-                  disabled={!!editing}
-                  options={[
-                    { value: 'oidc',   label: 'OpenID Connect' },
-                    { value: 'oauth2', label: 'OAuth 2.0' },
-                    { value: 'saml',   label: 'SAML 2.0' },
-                    { value: 'cas',    label: 'CAS' },
-                  ]}
+              <Form.Item label="协议" required>
+                <Input
+                  value={PROTOCOL_LABEL[watchedProtocol]}
+                  disabled
+                  style={{ background: '#f5f7fb' }}
                 />
+                <Form.Item name="protocol" hidden><Input /></Form.Item>
+              </Form.Item>
+              <Form.Item name="protocol_version" label="协议版本" rules={[{ required: true }]}>
+                <Select options={PROTOCOL_VERSIONS[watchedProtocol]} />
               </Form.Item>
               <Form.Item name="login_url" label="登录地址" rules={[{ required: true, message: '请输入应用登录地址' }]}>
                 <Input placeholder="https://app.example.com" />
@@ -516,7 +544,11 @@ export default function AppWizard({
             <Descriptions.Item label="编码" span={2}>{summary.client_id}</Descriptions.Item>
             <Descriptions.Item label="应用名称">{summary.client_name}</Descriptions.Item>
             <Descriptions.Item label="协议">
-              <Tag color="blue">{PROTOCOL_LABEL[(summary.protocol as Proto) || 'oidc']}</Tag>
+              <Tag color="blue">
+                {(PROTOCOL_VERSIONS[(summary.protocol as Proto) || 'oidc']
+                  .find((x) => x.value === summary.protocol_version)?.label)
+                  || PROTOCOL_LABEL[(summary.protocol as Proto) || 'oidc']}
+              </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="登录地址" span={2}>{summary.login_url}</Descriptions.Item>
             <Descriptions.Item label="状态">

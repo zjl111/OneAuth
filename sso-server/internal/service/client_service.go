@@ -21,10 +21,11 @@ func NewClientService(r *repository.ClientRepository, m *repository.MonitorRepos
 }
 
 type CreateClientInput struct {
-	ClientName  string `json:"client_name" binding:"required"`
-	ClientType  string `json:"client_type"`
-	Protocol    string `json:"protocol"`
-	Description string `json:"description"`
+	ClientName      string `json:"client_name" binding:"required"`
+	ClientType      string `json:"client_type"`
+	Protocol        string `json:"protocol"`
+	ProtocolVersion string `json:"protocol_version"`
+	Description     string `json:"description"`
 
 	// 通用
 	LogoURL        string `json:"logo_url"`
@@ -107,6 +108,7 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		ClientName:       in.ClientName,
 		ClientType:       defaultStr(in.ClientType, model.ClientTypeConfidential),
 		Protocol:         protocol,
+		ProtocolVersion:  defaultStr(in.ProtocolVersion, defaultProtocolVersion(protocol)),
 		Description:      in.Description,
 		LogoURL:          in.LogoURL,
 		HomeURL:          in.HomeURL,
@@ -164,9 +166,10 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 }
 
 type UpdateClientInput struct {
-	ClientName  *string `json:"client_name"`
-	Protocol    *string `json:"protocol"`
-	Description *string `json:"description"`
+	ClientName      *string `json:"client_name"`
+	Protocol        *string `json:"protocol"`
+	ProtocolVersion *string `json:"protocol_version"`
+	Description     *string `json:"description"`
 
 	LogoURL        *string `json:"logo_url"`
 	HomeURL        *string `json:"home_url"`
@@ -217,6 +220,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	}
 	if in.Protocol != nil {
 		c.Protocol = *in.Protocol
+	}
+	if in.ProtocolVersion != nil {
+		c.ProtocolVersion = *in.ProtocolVersion
 	}
 	if in.Description != nil {
 		c.Description = *in.Description
@@ -393,6 +399,21 @@ func defaultSlice(v []string, fallback []string) []string {
 		return fallback
 	}
 	return v
+}
+
+func defaultProtocolVersion(protocol string) string {
+	switch protocol {
+	case "oidc":
+		return "OpenID_Connect_v1.0"
+	case "oauth2":
+		return "OAuth_v2.0"
+	case "saml":
+		return "SAML_v2.0"
+	case "cas":
+		return "CAS_v3.0"
+	default:
+		return ""
+	}
 }
 
 func defaultInt(v, fallback int) int {

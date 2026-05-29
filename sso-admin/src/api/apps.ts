@@ -7,6 +7,7 @@ export interface OAuth2Client {
   client_name: string;
   client_type: string;
   protocol?: string;
+  protocol_version?: string;
   description: string;
 
   // 通用
