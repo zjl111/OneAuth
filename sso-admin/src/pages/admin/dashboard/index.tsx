@@ -155,9 +155,12 @@ export default function DashboardPage() {
               <Empty description="暂无数据" />
             ) : (
               <DualAxes
-                data={[trend, trend]}
+                data={[
+                  trend.map((r) => ({ date: r.date, bar: r.count })),
+                  trend.map((r) => ({ date: r.date, line: r.count })),
+                ]}
                 xField="date"
-                yField={['count', 'count']}
+                yField={['bar', 'line']}
                 height={300}
                 geometryOptions={[
                   {
@@ -181,18 +184,17 @@ export default function DashboardPage() {
                   layout: 'horizontal',
                   position: 'top-left',
                   itemName: {
-                    formatter: (text: string) => (text === 'count' ? '登录次数' : '趋势'),
+                    formatter: (text: string) => (text === 'bar' ? '登录次数' : '趋势'),
                   },
                 }}
                 yAxis={{
-                  count: {
-                    grid: { line: { style: { lineDash: [3, 3], stroke: '#eef0f5' } } },
-                  },
-                  count2: { grid: null as any, label: null as any },
+                  bar: { grid: { line: { style: { lineDash: [3, 3], stroke: '#eef0f5' } } } },
+                  line: { grid: null as any, label: null as any },
                 }}
                 xAxis={{ tickCount: 14, label: { autoRotate: false } }}
                 meta={{
-                  count: { alias: '登录次数' },
+                  bar: { alias: '登录次数' },
+                  line: { alias: '趋势' },
                 }}
               />
             )}

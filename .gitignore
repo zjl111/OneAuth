@@ -32,3 +32,8 @@ dist/
 .idea/
 *.swp
 .claude/
+
+# 编译产物
+sso-server/seed-fake
+sso-server/sso-server
+sso-server/bin/
