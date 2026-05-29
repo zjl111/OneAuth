@@ -105,11 +105,7 @@ export default function DashboardPage() {
       >
         <Row gutter={[16, 16]} align="middle">
           <Col xs={24} xl={14}>
-            {regionTop.length === 0 ? (
-              <Empty description="暂无访问数据，启动后会按 IP 自动落库" />
-            ) : (
-              <ChinaMap data={regionTop} height={420} />
-            )}
+            <ChinaMap data={regionTop} height={420} />
           </Col>
           <Col xs={24} xl={10}>
             <Table

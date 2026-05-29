@@ -42,6 +42,21 @@ export interface ProvinceCount {
   count: number;
 }
 
+// 把 max 向上取整到 6 的整数倍，让每档跨度是整数
+function niceCeil(n: number): number {
+  if (n <= 6) return 6;
+  if (n <= 12) return 12;
+  if (n <= 30) return 30;
+  if (n <= 60) return 60;
+  if (n <= 120) return 120;
+  if (n <= 300) return 300;
+  if (n <= 600) return 600;
+  // 大于 600 时取最近的 1000 倍数对 6 友好的值
+  const mag = Math.pow(10, Math.floor(Math.log10(n)));
+  const r = Math.ceil(n / mag) * mag;
+  return Math.ceil(r / 6) * 6;
+}
+
 export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]; height?: number }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -54,8 +69,23 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
       if (!chartRef.current) {
         chartRef.current = echarts.init(ref.current);
       }
-      const max = Math.max(50, ...data.map((d) => d.count));
       const mapped = data.map((d) => ({ name: FULL_NAME[d.province] || d.province, value: d.count }));
+
+      // 动态分档：按当前数据的 max 划成 6 档（高 → 低）；没有数据时也展示一个范围 0
+      const max = Math.max(...data.map((d) => d.count), 0);
+      const ceil = max <= 0 ? 6 : niceCeil(max);
+      const step = ceil / 6;
+      const palette = ['#1e40af', '#3b82f6', '#60a5fa', '#7dd3fc', '#bae6fd', '#e0f2fe'];
+      const pieces: any[] = [];
+      for (let i = 0; i < 6; i++) {
+        const hi = Math.round(ceil - i * step);
+        const lo = Math.round(ceil - (i + 1) * step);
+        if (i === 0) {
+          pieces.push({ gte: lo, lte: hi, label: `${lo} - ${hi}`, color: palette[i] });
+        } else {
+          pieces.push({ gte: lo, lt: hi, label: `${lo} - ${hi}`, color: palette[i] });
+        }
+      }
 
       const option: echarts.ComposeOption<MapSeriesOption> = {
         tooltip: {
@@ -69,18 +99,7 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
           itemWidth: 14,
           itemHeight: 14,
           textStyle: { color: '#6b7280', fontSize: 12 },
-          pieces: [
-            { gte: 450, lte: 500, label: '450 - 500', color: '#ef4444' },
-            { gte: 400, lt: 450, label: '400 - 450', color: '#3b82f6' },
-            { gte: 350, lt: 400, label: '350 - 400', color: '#c4b5fd' },
-            { gte: 300, lt: 350, label: '300 - 350', color: '#4f46e5' },
-            { gte: 250, lt: 300, label: '250 - 300', color: '#6366f1' },
-            { gte: 200, lt: 250, label: '200 - 250', color: '#10b981' },
-            { gte: 150, lt: 200, label: '150 - 200', color: '#22d3ee' },
-            { gte: 100, lt: 150, label: '100 - 150', color: '#f59e0b' },
-            { gte: 50, lt: 100, label: '50 - 100', color: '#fde68a' },
-            { gte: 0, lt: 50, label: '0 - 50', color: '#e0f2fe' },
-          ],
+          pieces,
         } as any,
         series: [
           {
@@ -98,8 +117,6 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
         ],
       };
       chartRef.current.setOption(option, true);
-      // 隐藏暗示：用 max 是为了未来扩展，这里保持依赖以免 lint 抱怨
-      void max;
     })();
     return () => {
       disposed = true;
