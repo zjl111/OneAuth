@@ -109,11 +109,11 @@ export default function DashboardPage() {
           </Space>
         }
       >
-        <Row gutter={[16, 16]} align="middle">
+        <Row gutter={[16, 16]} align="top">
           <Col xs={24} xl={16}>
             <ChinaMap data={regionTop} height={520} />
           </Col>
-          <Col xs={24} xl={8} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <Col xs={24} xl={8} style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: 0 }}>
             <div style={{ width: '80%' }}>
               <Table
                 size="middle"

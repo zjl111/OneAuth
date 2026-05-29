@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts/core';
-import { MapChart, type MapSeriesOption } from 'echarts/charts';
+import { MapChart } from 'echarts/charts';
 import {
   TooltipComponent,
   VisualMapComponent,
@@ -28,13 +28,54 @@ const FULL_NAME: Record<string, string> = {
   香港: '香港特别行政区', 澳门: '澳门特别行政区',
 };
 
-let registered = false;
+// 用版本号让过滤逻辑变更后强制重新注册地图（避免 HMR / 浏览器缓存命中旧 china map）
+const MAP_VERSION = 'china_v3_trim_south_sea';
+let registeredVersion = '';
+
+// 把任意嵌套坐标数组拍平成 [lon, lat][]
+function collectPoints(coords: any, out: number[][] = []): number[][] {
+  if (Array.isArray(coords)) {
+    if (coords.length === 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+      out.push(coords as number[]);
+    } else {
+      for (const c of coords) collectPoints(c, out);
+    }
+  }
+  return out;
+}
+
+// MultiPolygon 里剔除所有 lat 平均值 < 18（即南海远岛）的子多边形，只保留海南本岛主体
+function trimSouthSeaIslands(feature: any): any {
+  const g = feature?.geometry;
+  if (!g) return feature;
+  const filterPoly = (poly: any) => {
+    const pts = collectPoints(poly);
+    if (pts.length === 0) return false;
+    const avgLat = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    return avgLat >= 18;
+  };
+  if (g.type === 'MultiPolygon' && Array.isArray(g.coordinates)) {
+    g.coordinates = g.coordinates.filter(filterPoly);
+  }
+  return feature;
+}
+
 async function ensureChinaRegistered() {
-  if (registered) return;
+  if (registeredVersion === MAP_VERSION) return;
   const res = await fetch('/china.json');
   const geo = await res.json();
+  if (Array.isArray(geo?.features)) {
+    geo.features = geo.features
+      // 1) 移除"南海诸岛"虚线框（properties.name 为空 / "南海诸岛"）
+      .filter((f: any) => {
+        const n = f?.properties?.name;
+        return n && n !== '南海诸岛';
+      })
+      // 2) 海南省里剔除南海远岛多边形，避免地图下方那串虚线轮廓
+      .map((f: any) => (f?.properties?.name === '海南省' ? trimSouthSeaIslands(f) : f));
+  }
   echarts.registerMap('china', geo);
-  registered = true;
+  registeredVersion = MAP_VERSION;
 }
 
 export interface ProvinceCount {
@@ -42,20 +83,6 @@ export interface ProvinceCount {
   count: number;
 }
 
-// 把 max 向上取整到 6 的整数倍，让每档跨度是整数
-function niceCeil(n: number): number {
-  if (n <= 6) return 6;
-  if (n <= 12) return 12;
-  if (n <= 30) return 30;
-  if (n <= 60) return 60;
-  if (n <= 120) return 120;
-  if (n <= 300) return 300;
-  if (n <= 600) return 600;
-  // 大于 600 时取最近的 1000 倍数对 6 友好的值
-  const mag = Math.pow(10, Math.floor(Math.log10(n)));
-  const r = Math.ceil(n / mag) * mag;
-  return Math.ceil(r / 6) * 6;
-}
 
 export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]; height?: number }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -71,23 +98,17 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
       }
       const mapped = data.map((d) => ({ name: FULL_NAME[d.province] || d.province, value: d.count }));
 
-      // 动态分档：按当前数据的 max 划成 6 档（高 → 低）；没有数据时也展示一个范围 0
-      const max = Math.max(...data.map((d) => d.count), 0);
-      const ceil = max <= 0 ? 6 : niceCeil(max);
-      const step = ceil / 6;
-      const palette = ['#1e40af', '#3b82f6', '#60a5fa', '#7dd3fc', '#bae6fd', '#e0f2fe'];
-      const pieces: any[] = [];
-      for (let i = 0; i < 6; i++) {
-        const hi = Math.round(ceil - i * step);
-        const lo = Math.round(ceil - (i + 1) * step);
-        if (i === 0) {
-          pieces.push({ gte: lo, lte: hi, label: `${lo} - ${hi}`, color: palette[i] });
-        } else {
-          pieces.push({ gte: lo, lt: hi, label: `${lo} - ${hi}`, color: palette[i] });
-        }
-      }
+      // 固定分档，颜色从深到浅
+      const pieces = [
+        { gt: 2000,             label: '2000 以上',     color: '#1e40af' },
+        { gte: 1001, lte: 2000, label: '1001 - 2000',  color: '#3b82f6' },
+        { gte: 501,  lte: 1000, label: '501 - 1000',   color: '#60a5fa' },
+        { gte: 301,  lte: 500,  label: '301 - 500',    color: '#7dd3fc' },
+        { gte: 101,  lte: 300,  label: '101 - 300',    color: '#bae6fd' },
+        { gte: 1,    lte: 100,  label: '1 - 100',      color: '#e0f2fe' },
+      ];
 
-      const option: echarts.ComposeOption<MapSeriesOption> = {
+      const option: any = {
         tooltip: {
           trigger: 'item',
           formatter: (p: any) => `${p.name}<br/>访问量: ${p.value ?? 0}`,
@@ -108,8 +129,8 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
             roam: false,
             aspectScale: 0.78,
             layoutCenter: ['50%', '50%'],
-            layoutSize: '95%',
-            label: { show: true, fontSize: 10, color: '#6b7280' },
+            layoutSize: '134%',
+            label: { show: true, fontSize: 11, color: '#6b7280' },
             itemStyle: { areaColor: '#f1f5f9', borderColor: '#cbd5e1' },
             emphasis: {
               label: { color: '#1d2c5b', fontWeight: 'bold' as any },
