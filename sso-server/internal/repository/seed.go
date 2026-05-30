@@ -164,25 +164,6 @@ func seedAdminUser(db *gorm.DB) error {
 		db.Model(&admin).Association("Roles").Append(&superRole)
 	}
 
-	// 创建一个示例普通用户
-	uhash, _ := password.Hash("User@123456")
-	uemail := "jinli@example.com"
-	user := model.User{
-		ID:           uuid.New(),
-		Username:     "jinli",
-		Nickname:     "金丽",
-		Email:        &uemail,
-		PasswordHash: uhash,
-		IsActive:     true,
-		IsStaff:      false,
-	}
-	if err := db.Create(&user).Error; err != nil {
-		return err
-	}
-	var userRole model.Role
-	if err := db.Where("code = ?", "user").First(&userRole).Error; err == nil {
-		db.Model(&user).Association("Roles").Append(&userRole)
-	}
 	return nil
 }
 

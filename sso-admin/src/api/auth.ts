@@ -5,6 +5,7 @@ export interface UserInfo {
   username: string;
   nickname: string;
   email: string;
+  phone?: string;
   avatar: string;
   position?: string;
   is_staff: boolean;

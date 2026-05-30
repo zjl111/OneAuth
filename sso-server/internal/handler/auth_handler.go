@@ -80,6 +80,7 @@ type UserInfoPublic struct {
 	Username string   `json:"username"`
 	Nickname string   `json:"nickname"`
 	Email    string   `json:"email"`
+	Phone    string   `json:"phone"`
 	Avatar   string   `json:"avatar"`
 	IsStaff  bool     `json:"is_staff"`
 	IsActive bool     `json:"is_active"`
@@ -95,11 +96,16 @@ func toUserInfoPublic(u *model.User) UserInfoPublic {
 	if u.Email != nil {
 		email = *u.Email
 	}
+	phone := ""
+	if u.Phone != nil {
+		phone = *u.Phone
+	}
 	return UserInfoPublic{
 		ID:       u.ID.String(),
 		Username: u.Username,
 		Nickname: u.Nickname,
 		Email:    email,
+		Phone:    phone,
 		Avatar:   u.Avatar,
 		IsStaff:  u.IsStaff,
 		IsActive: u.IsActive,

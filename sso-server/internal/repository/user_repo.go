@@ -45,6 +45,14 @@ func (r *UserRepository) GetByEmail(email string) (*model.User, error) {
 	return &u, nil
 }
 
+func (r *UserRepository) GetByPhone(phone string) (*model.User, error) {
+	var u model.User
+	if err := r.db.Preload("Roles").First(&u, "phone = ?", phone).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 type UserQuery struct {
 	Username      string
 	Email         string

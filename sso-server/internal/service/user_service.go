@@ -97,9 +97,23 @@ func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
 	if in.IsActive != nil {
 		u.IsActive = *in.IsActive
 	}
+	// 创建前预检：精确告诉用户是哪一项重复
+	if _, err := s.repo.GetByUsername(in.Username); err == nil {
+		return nil, errors.New("登录账号 " + in.Username + " 已存在")
+	}
+	if in.Email != "" {
+		if _, err := s.repo.GetByEmail(in.Email); err == nil {
+			return nil, errors.New("邮箱 " + in.Email + " 已被其他用户使用")
+		}
+	}
+	if in.Phone != "" {
+		if _, err := s.repo.GetByPhone(in.Phone); err == nil {
+			return nil, errors.New("手机号 " + in.Phone + " 已被其他用户使用")
+		}
+	}
 	if err := s.repo.Create(u); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "duplicate") {
-			return nil, errors.New("用户名/邮箱/手机号已存在")
+			return nil, errors.New("登录账号 / 邮箱 / 手机号已存在")
 		}
 		return nil, err
 	}
