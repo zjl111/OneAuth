@@ -67,7 +67,8 @@ type OAuth2Client struct {
 	CASService        string `gorm:"size:512" json:"cas_service"`
 	CASCallbackURL    string `gorm:"size:512" json:"cas_callback_url"`
 	CASUserAttribute  string `gorm:"size:30" json:"cas_user_attribute"` // username / user_id / email / mobile
-	CASExpiresSeconds int    `gorm:"default:300" json:"cas_expires_seconds"`
+	CASExpiresSeconds   int  `gorm:"default:300" json:"cas_expires_seconds"`
+	CASReturnAttributes bool `gorm:"default:true" json:"cas_return_attributes"` // 是否在 ticket validate 响应中返回用户属性 (cas:attributes)
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -100,6 +100,7 @@ export type WizardValues = {
   cas_callback_url?: string;
   cas_user_attribute?: string;
   cas_expires_seconds?: number;
+  cas_return_attributes?: boolean;
 };
 
 export const USERINFO_LABEL: Record<string, string> = {

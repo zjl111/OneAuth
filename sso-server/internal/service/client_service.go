@@ -67,10 +67,11 @@ type CreateClientInput struct {
 	SAMLCertificate        string `json:"saml_certificate"`
 
 	// CAS
-	CASService        string `json:"cas_service"`
-	CASCallbackURL    string `json:"cas_callback_url"`
-	CASUserAttribute  string `json:"cas_user_attribute"`
-	CASExpiresSeconds int    `json:"cas_expires_seconds"`
+	CASService          string `json:"cas_service"`
+	CASCallbackURL      string `json:"cas_callback_url"`
+	CASUserAttribute    string `json:"cas_user_attribute"`
+	CASExpiresSeconds   int    `json:"cas_expires_seconds"`
+	CASReturnAttributes *bool  `json:"cas_return_attributes"`
 }
 
 // ClientWithSecret 创建/轮换时一次性返回的明文 secret 包装。
@@ -155,10 +156,11 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		SAMLValiditySeconds:    defaultInt(in.SAMLValiditySeconds, 300),
 		SAMLCertificate:        in.SAMLCertificate,
 
-		CASService:        in.CASService,
-		CASCallbackURL:    defaultStr(in.CASCallbackURL, in.CASService),
-		CASUserAttribute:  defaultStr(in.CASUserAttribute, "username"),
-		CASExpiresSeconds: defaultInt(in.CASExpiresSeconds, 300),
+		CASService:          in.CASService,
+		CASCallbackURL:      defaultStr(in.CASCallbackURL, in.CASService),
+		CASUserAttribute:    defaultStr(in.CASUserAttribute, "username"),
+		CASExpiresSeconds:   defaultInt(in.CASExpiresSeconds, 300),
+		CASReturnAttributes: defaultBoolPtr(in.CASReturnAttributes, true),
 	}
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
@@ -220,10 +222,11 @@ type UpdateClientInput struct {
 	SAMLValiditySeconds    *int    `json:"saml_validity_seconds"`
 	SAMLCertificate        *string `json:"saml_certificate"`
 
-	CASService        *string `json:"cas_service"`
-	CASCallbackURL    *string `json:"cas_callback_url"`
-	CASUserAttribute  *string `json:"cas_user_attribute"`
-	CASExpiresSeconds *int    `json:"cas_expires_seconds"`
+	CASService          *string `json:"cas_service"`
+	CASCallbackURL      *string `json:"cas_callback_url"`
+	CASUserAttribute    *string `json:"cas_user_attribute"`
+	CASExpiresSeconds   *int    `json:"cas_expires_seconds"`
+	CASReturnAttributes *bool   `json:"cas_return_attributes"`
 }
 
 func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth2Client, error) {
@@ -354,6 +357,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.CASExpiresSeconds != nil {
 		c.CASExpiresSeconds = *in.CASExpiresSeconds
 	}
+	if in.CASReturnAttributes != nil {
+		c.CASReturnAttributes = *in.CASReturnAttributes
+	}
 
 	if err := s.repo.Update(c); err != nil {
 		return nil, err
@@ -449,6 +455,13 @@ func defaultProtocolVersion(protocol string) string {
 	default:
 		return ""
 	}
+}
+
+func defaultBoolPtr(v *bool, fallback bool) bool {
+	if v == nil {
+		return fallback
+	}
+	return *v
 }
 
 func defaultInt(v, fallback int) int {

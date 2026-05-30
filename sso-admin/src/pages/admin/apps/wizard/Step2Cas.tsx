@@ -1,4 +1,4 @@
-import { Form, Input, Select, InputNumber } from 'antd';
+import { Form, Input, Select, InputNumber, Switch } from 'antd';
 
 export default function Step2Cas() {
   return (
@@ -48,6 +48,19 @@ export default function Step2Cas() {
           <InputNumber min={30} max={3600} addonAfter="秒" style={{ width: '100%' }} />
         </Form.Item>
       </div>
+
+      <Form.Item
+        name="cas_return_attributes"
+        label="返回用户属性"
+        valuePropName="checked"
+        extra={
+          <span style={{ color: '#94a3b8', fontSize: 12 }}>
+            开启后 ticket validate 响应里会带 cas:attributes（姓名 / 邮箱 / 手机号 / 部门等）
+          </span>
+        }
+      >
+        <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+      </Form.Item>
     </div>
   );
 }

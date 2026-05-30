@@ -129,6 +129,7 @@ export default function AppWizard({
         cas_callback_url: editing.cas_callback_url,
         cas_user_attribute: editing.cas_user_attribute || 'username',
         cas_expires_seconds: editing.cas_expires_seconds || 300,
+        cas_return_attributes: editing.cas_return_attributes !== false,
       });
     } else {
       const initVersion = defaultProtocolVersion(family);
@@ -161,6 +162,7 @@ export default function AppWizard({
         saml_validity_seconds: 300,
         cas_user_attribute: 'username',
         cas_expires_seconds: 300,
+        cas_return_attributes: true,
       });
     }
   }, [open, editing, family]);
@@ -223,6 +225,7 @@ export default function AppWizard({
         cas_callback_url: v.cas_callback_url || v.cas_service,
         cas_user_attribute: v.cas_user_attribute,
         cas_expires_seconds: v.cas_expires_seconds,
+        cas_return_attributes: !!v.cas_return_attributes,
       });
     }
     return base;
