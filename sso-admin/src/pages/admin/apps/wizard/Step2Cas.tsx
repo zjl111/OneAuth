@@ -13,7 +13,7 @@ export default function Step2Cas() {
     >
       <Form.Item
         name="cas_service"
-        label="应用服务地址 (service)"
+        label="服务地址"
         rules={[
           { required: true, message: '请输入对端应用的 service URL' },
           {
@@ -33,7 +33,7 @@ export default function Step2Cas() {
 
       <Form.Item
         name="cas_callback_url"
-        label="应用回调地址"
+        label="回调地址"
         rules={[
           {
             validator: (_, v) => {
