@@ -1,4 +1,5 @@
-/data/
+/data/*
+!/data/ip2region.xdb
 /keys/
 *.pem
 *.db

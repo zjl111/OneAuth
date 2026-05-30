@@ -9,7 +9,8 @@
 *.log
 
 # ---- 后端 ----
-sso-server/data/
+sso-server/data/*
+!sso-server/data/ip2region.xdb
 sso-server/keys/
 sso-server/bin/
 sso-server/*.db

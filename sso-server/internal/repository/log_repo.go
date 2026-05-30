@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -255,7 +256,23 @@ func (r *LogRepository) LoginTrend(days int) ([]DailyLoginCount, error) {
 		case time.Time:
 			d.Date = v.Format("2006-01-02")
 		case string:
-			d.Date = v
+			if len(v) >= 10 {
+				d.Date = v[:10]
+			} else {
+				d.Date = v
+			}
+		case []byte:
+			s := string(v)
+			if len(s) >= 10 {
+				d.Date = s[:10]
+			} else {
+				d.Date = s
+			}
+		default:
+			d.Date = fmt.Sprintf("%v", v)
+		}
+		if d.Date == "" {
+			continue
 		}
 		results = append(results, d)
 	}
@@ -269,12 +286,17 @@ type AppAccessCount struct {
 }
 
 func (r *LogRepository) AppAccessDistribution(days int) ([]AppAccessCount, error) {
+	// 按 client_id 聚合，client_name 取客户端表里的最新值（access_log 里写的是访问时的快照，
+	// 后续改名/删除会让前端展示同名多条或残留已删应用）。
+	// 隐藏：sso-admin 管理后台自身、已经删除的 client（c.id is null）。
 	results := []AppAccessCount{}
 	start := time.Now().AddDate(0, 0, -days)
-	r.db.Model(&model.AccessLog{}).
-		Where("created_at >= ?", start).
-		Select("client_id, client_name, COUNT(*) as count").
-		Group("client_id, client_name").
+	r.db.Table("sso_access_log AS a").
+		Select("a.client_id AS client_id, COALESCE(c.client_name, a.client_name) AS client_name, COUNT(*) AS count").
+		Joins("LEFT JOIN sso_oauth2_client AS c ON c.client_id = a.client_id").
+		Where("a.created_at >= ? AND a.client_id <> ?", start, "sso-admin").
+		Where("c.id IS NOT NULL").
+		Group("a.client_id, COALESCE(c.client_name, a.client_name)").
 		Order("count DESC").
 		Limit(10).
 		Scan(&results)
