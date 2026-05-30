@@ -55,15 +55,21 @@ export default function AppWizard({
   // Step3 展示的"真实"应用数据：新建模式 = 后端 Create 返回；编辑模式 = 传入的 editing
   const [submitted, setSubmitted] = useState<OAuth2Client | null>(null);
 
-  // 拉取 OIDC discovery（仅 OIDC/OAuth2 需要，Step3 展示端点用）
+  // OIDC / OAuth2 端点直接基于当前浏览器访问的域名拼出来。
+  // 浏览器现在能打开本管理后台，证明应用方将来也会用同一个公网入口接入；
+  // 这跟"后端 issuer = platform.site_url"是同一份事实，不用绕 /.well-known。
   useEffect(() => {
     if (!open) return;
     if (family !== 'oidc' && family !== 'oauth2') return;
-    // cache:'no-store' 强制走网络，避免管理员刚改完 site_url 仍看到旧 issuer
-    fetch('/.well-known/openid-configuration', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setDiscovery(d))
-      .catch(() => setDiscovery(null));
+    const origin = window.location.origin;
+    setDiscovery({
+      issuer: origin,
+      authorization_endpoint: origin + '/oauth/authorize',
+      token_endpoint: origin + '/oauth/token',
+      userinfo_endpoint: origin + '/oauth/userinfo',
+      jwks_uri: origin + '/oauth/jwks.json',
+      end_session_endpoint: origin + '/oauth/end_session',
+    });
   }, [open, family]);
 
   useEffect(() => {
