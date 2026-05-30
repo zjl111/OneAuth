@@ -86,5 +86,43 @@ func AutoMigrate(db *gorm.DB) error {
 	for _, col := range []string{"redirect_uris", "grant_types", "response_types"} {
 		db.Exec("ALTER TABLE sso_oauth2_client ALTER COLUMN " + col + " DROP NOT NULL")
 	}
+	backfillHealthCheckURLs(db)
 	return nil
+}
+
+// backfillHealthCheckURLs 修复历史数据：把空的 health_check_url 用 login_url/home_url 兜底，
+// 然后把客户端表的 health_check_url 同步到 sso_app_monitor 表中空的行。
+// 用 ORM 写，避免 PostgreSQL 与 SQLite 的 UPDATE FROM 语法差异。
+func backfillHealthCheckURLs(db *gorm.DB) {
+	var clients []model.OAuth2Client
+	db.Find(&clients)
+	for _, c := range clients {
+		if c.HealthCheckURL != "" {
+			continue
+		}
+		hc := c.LoginURL
+		if hc == "" {
+			hc = c.HomeURL
+		}
+		if hc == "" {
+			continue
+		}
+		db.Model(&model.OAuth2Client{}).Where("client_id = ?", c.ClientID).Update("health_check_url", hc)
+	}
+	// 监控表同步
+	var monitors []model.AppMonitor
+	db.Find(&monitors)
+	for _, m := range monitors {
+		if m.HealthCheckURL != "" {
+			continue
+		}
+		var c model.OAuth2Client
+		if err := db.Where("client_id = ?", m.ClientID).First(&c).Error; err != nil {
+			continue
+		}
+		if c.HealthCheckURL == "" {
+			continue
+		}
+		db.Model(&model.AppMonitor{}).Where("client_id = ?", m.ClientID).Update("health_check_url", c.HealthCheckURL)
+	}
 }

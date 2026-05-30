@@ -303,7 +303,20 @@ export default function AppWizard({
               <Form.Item name="client_name" label="应用名称" rules={[{ required: true, message: '请输入应用名称' }]}>
                 <Input placeholder="例如：JumpServer 演示" />
               </Form.Item>
-              <Form.Item name="login_url" label="应用入口" rules={[{ required: true, message: '请输入应用入口地址' }]}>
+              <Form.Item
+                name="login_url"
+                label="应用入口"
+                rules={[
+                  { required: true, message: '请输入应用入口地址' },
+                  {
+                    validator: (_, v) => {
+                      if (!v) return Promise.resolve();
+                      if (/^https?:\/\/.+/i.test(String(v).trim())) return Promise.resolve();
+                      return Promise.reject(new Error('请填写完整 URL，必须以 http:// 或 https:// 开头'));
+                    },
+                  },
+                ]}
+              >
                 <Input placeholder="https://app.example.com" />
               </Form.Item>
               <Form.Item label="协议版本" required>
