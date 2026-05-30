@@ -352,35 +352,43 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
     tagColor: string;
     icon: React.ReactNode;
   };
+  // 协议官方 Logo（public/protocols/）
+  const logoImg = (src: string, alt: string) => (
+    <img
+      src={src}
+      alt={alt}
+      style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }}
+    />
+  );
   // SSO 协议（2×2）
   const ssoProtos: Item[] = [
     {
       key: 'oidc', title: 'OIDC',
       short: '适用于现代 Web、移动端应用的单点登录',
-      accent: '#1677ff', iconBg: '#e6f0ff', iconColor: '#1677ff',
+      accent: '#1677ff', iconBg: '#fff', iconColor: '#1677ff',
       tag: '推荐', tagBg: '#dbeafe', tagColor: '#1677ff',
-      icon: <SafetyOutlined style={{ fontSize: 24 }} />,
+      icon: logoImg('/protocols/oidc.png', 'OIDC'),
     },
     {
       key: 'oauth2', title: 'OAuth2',
       short: '适用于第三方授权与 API 访问 (OAuth 2.0 / 2.1)',
-      accent: '#10b981', iconBg: '#d1fae5', iconColor: '#059669',
+      accent: '#10b981', iconBg: '#fff', iconColor: '#059669',
       tag: '标准协议', tagBg: '#d1fae5', tagColor: '#047857',
-      icon: <LockOutlined style={{ fontSize: 24 }} />,
+      icon: logoImg('/protocols/oauth2.png', 'OAuth2'),
     },
     {
       key: 'saml', title: 'SAML 2.0',
       short: '适用于企业级身份系统整合和单点登录',
-      accent: '#8b5cf6', iconBg: '#ede9fe', iconColor: '#7c3aed',
+      accent: '#8b5cf6', iconBg: '#fff', iconColor: '#7c3aed',
       tag: '企业常用', tagBg: '#ede9fe', tagColor: '#6d28d9',
-      icon: <ApiOutlined style={{ fontSize: 24 }} />,
+      icon: logoImg('/protocols/saml.png', 'SAML 2.0'),
     },
     {
       key: 'cas', title: 'CAS',
       short: '适用于传统单点登录',
-      accent: '#f59e0b', iconBg: '#fef3c7', iconColor: '#d97706',
-      tag: '企业常用', tagBg: '#fef3c7', tagColor: '#92400e',
-      icon: <KeyOutlined style={{ fontSize: 24 }} />,
+      accent: '#1677ff', iconBg: '#fff', iconColor: '#1677ff',
+      tag: '企业常用', tagBg: '#dbeafe', tagColor: '#1d4ed8',
+      icon: logoImg('/protocols/cas.png', 'CAS'),
     },
   ];
   // 其他接入方式（全宽）
