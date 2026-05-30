@@ -190,7 +190,6 @@ export default function AppListPage() {
                   </span>
                   <div>
                     <div style={{ fontWeight: 600 }}>{v}</div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.description || '—'}</div>
                   </div>
                 </Space>
               );

@@ -12,6 +12,8 @@ type LoginLog struct {
 	Username  string     `gorm:"size:150;not null;index" json:"username"`
 	IPAddress string     `gorm:"size:45;not null" json:"ip_address"`
 	Province  string     `gorm:"size:32;index" json:"province"`
+	City      string     `gorm:"size:32" json:"city"`
+	ISP       string     `gorm:"size:32" json:"isp"`
 	Location  string     `gorm:"size:255" json:"location"`
 	UserAgent string     `gorm:"size:512" json:"user_agent"`
 	Browser   string     `gorm:"size:50" json:"browser"`
@@ -47,6 +49,8 @@ type AccessLog struct {
 	ClientName string     `gorm:"size:255" json:"client_name"`
 	IPAddress  string     `gorm:"size:45" json:"ip_address"`
 	Province   string     `gorm:"size:32;index" json:"province"`
+	City       string     `gorm:"size:32" json:"city"`
+	ISP        string     `gorm:"size:32" json:"isp"`
 	CreatedAt  time.Time  `gorm:"index" json:"created_at"`
 }
 

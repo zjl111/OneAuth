@@ -47,36 +47,65 @@ func trimChinaSuffix(s string) string {
 // LookupProvince 返回省份名（无后缀，例如 "北京" / "广东" / "重庆"）。
 // 私网/本地/无法解析时返回 ""，调用方自行决定如何展示。
 func LookupProvince(ip string) string {
+	p, _, _ := Lookup(ip)
+	return p
+}
+
+// Lookup 同时返回 (省, 市, 运营商)。私网 / 解析失败时各字段为空。
+// 直辖市（北京/上海/天津/重庆）的"市"自动 fallback 为同名，方便前端列展示。
+func Lookup(ip string) (province, city, isp string) {
 	if vIndex == nil || ip == "" {
-		return ""
+		return
 	}
 	parsed := net.ParseIP(ip)
 	if parsed == nil || parsed.IsLoopback() || parsed.IsPrivate() {
-		return ""
+		return
 	}
 	mu.Lock()
 	searcher, err := xdb.NewWithVectorIndex(xdb.IPv4, dbFile, vIndex)
 	mu.Unlock()
 	if err != nil {
-		return ""
+		return
 	}
 	defer searcher.Close()
 	region, err := searcher.Search(ip)
 	if err != nil || region == "" {
-		return ""
+		return
 	}
-	// 格式: 国家|区域|省份|城市|ISP
+	// ip2region 格式: 国家|区域|省份|城市|ISP
 	parts := strings.Split(region, "|")
-	if len(parts) < 3 {
-		return ""
+	if len(parts) < 5 {
+		return
 	}
 	country := parts[0]
-	province := parts[2]
 	if country != "" && country != "中国" && country != "0" {
-		return "" // 暂只统计国内省份
+		return // 暂只统计国内
 	}
-	if province == "" || province == "0" {
+	province = clean(parts[2])
+	city = clean(parts[3])
+	isp = clean(parts[4])
+	// 部分 IP 库会把直辖市的省份位留 0，仅写城市；反过来归位到省份字段
+	if province == "" && city != "" && isMunicipality(city) {
+		province = city
+	}
+	// 直辖市市级名称与省同名时，市级显示同名（北京/北京、上海/上海……）
+	if province != "" && city == "" && isMunicipality(province) {
+		city = province
+	}
+	return trimChinaSuffix(province), trimChinaSuffix(city), isp
+}
+
+func clean(s string) string {
+	if s == "" || s == "0" {
 		return ""
 	}
-	return trimChinaSuffix(province)
+	return s
+}
+
+func isMunicipality(name string) bool {
+	switch trimChinaSuffix(name) {
+	case "北京", "上海", "天津", "重庆":
+		return true
+	}
+	return false
 }

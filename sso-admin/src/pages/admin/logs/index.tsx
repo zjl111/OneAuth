@@ -74,6 +74,18 @@ const loginColumns: TableColumnsType<LoginLog> = [
   { title: '用户名', dataIndex: 'username', width: 140 },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
   {
+    title: '省 / 市',
+    width: 150,
+    render: (_, r) => {
+      const p = (r as any).province || '';
+      const c = (r as any).city || '';
+      if (!p && !c) return '—';
+      if (p && c && p !== c) return `${p} / ${c}`;
+      return p || c;
+    },
+  },
+  { title: '运营商', dataIndex: 'isp', width: 100, render: (v) => v || '—' },
+  {
     title: '状态',
     dataIndex: 'status',
     width: 90,

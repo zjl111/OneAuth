@@ -20,11 +20,14 @@ func (r *LogRepository) RecordLogin(userID *uuid.UUID, username, ip, ua, method,
 	if method == "" {
 		method = "password"
 	}
+	prov, city, isp := geoip.Lookup(ip)
 	log := &model.LoginLog{
 		UserID:    userID,
 		Username:  username,
 		IPAddress: ip,
-		Province:  geoip.LookupProvince(ip),
+		Province:  prov,
+		City:      city,
+		ISP:       isp,
 		UserAgent: ua,
 		Method:    method,
 		Status:    status,
@@ -72,13 +75,16 @@ func (r *LogRepository) RecordOperation(userID *uuid.UUID, username, action, res
 }
 
 func (r *LogRepository) RecordAccess(userID *uuid.UUID, username, clientID, clientName, ip string) {
+	prov, city, isp := geoip.Lookup(ip)
 	log := &model.AccessLog{
 		UserID:     userID,
 		Username:   username,
 		ClientID:   clientID,
 		ClientName: clientName,
 		IPAddress:  ip,
-		Province:   geoip.LookupProvince(ip),
+		Province:   prov,
+		City:       city,
+		ISP:        isp,
 		CreatedAt:  time.Now(),
 	}
 	go r.db.Create(log)

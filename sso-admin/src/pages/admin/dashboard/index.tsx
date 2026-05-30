@@ -140,7 +140,7 @@ export default function DashboardPage() {
                     align: 'center',
                     render: (_, _r, i) => <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>,
                   },
-                  { title: '省份', dataIndex: 'province', align: 'center' },
+                  { title: '省 / 市', dataIndex: 'province', align: 'center' },
                   { title: '浏览量(PV)', dataIndex: 'count', align: 'center' },
                 ]}
               />

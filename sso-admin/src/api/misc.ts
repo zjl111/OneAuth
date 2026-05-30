@@ -34,6 +34,9 @@ export interface LoginLog {
   id: number;
   username: string;
   ip_address: string;
+  province?: string;
+  city?: string;
+  isp?: string;
   user_agent: string;
   status: string;
   message: string;

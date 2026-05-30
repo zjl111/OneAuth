@@ -55,6 +55,8 @@ func main() {
 	if err := geoip.Init("./data/ip2region.xdb"); err != nil {
 		log.Printf("[startup] geoip init skipped: %v", err)
 	}
+	// 回填历史日志的 province/city/isp（依赖 geoip）
+	repository.BackfillLogRegion(db)
 
 	mailService := mailer.New(configRepo)
 
