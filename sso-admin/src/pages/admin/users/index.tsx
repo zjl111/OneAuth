@@ -63,11 +63,6 @@ export default function UserListPage() {
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
 
-  const avatarUrl = Form.useWatch('avatar', form) as string | undefined;
-  const watchedName =
-    (Form.useWatch('nickname', form) as string) ||
-    (Form.useWatch('username', form) as string) ||
-    '新用户';
 
   const flatDept = (list: Department[], depth = 0): Array<{ id: string; label: string }> => {
     const result: Array<{ id: string; label: string }> = [];
@@ -367,7 +362,21 @@ export default function UserListPage() {
                     <Col span={10}>
                       <Form.Item name="avatar" label="头像">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                          <UserAvatar src={avatarUrl} name={watchedName} size={72} />
+                          <Form.Item
+                            noStyle
+                            shouldUpdate={(p, n) =>
+                              p.avatar !== n.avatar || p.nickname !== n.nickname || p.username !== n.username
+                            }
+                          >
+                            {({ getFieldValue }) => {
+                              const av = (getFieldValue('avatar') as string | undefined) || '';
+                              const nm =
+                                (getFieldValue('nickname') as string | undefined) ||
+                                (getFieldValue('username') as string | undefined) ||
+                                '新用户';
+                              return <UserAvatar src={av} name={nm} size={72} />;
+                            }}
+                          </Form.Item>
                           <Upload
                             name="file"
                             action="/api/v1/configs/upload-image"

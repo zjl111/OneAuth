@@ -64,8 +64,8 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 
 	apps := []PortalApp{}
 	for _, cl := range clients {
-		// 管理后台只对管理员可见
-		if cl.ClientID == "sso-admin" && !user.IsStaff {
+		// 管理后台不在应用门户中露出（管理员通过右上角下拉切换进入）
+		if cl.ClientID == "sso-admin" {
 			continue
 		}
 		// 应用授权：如果该应用配置了授权但用户没命中，过滤
