@@ -166,10 +166,17 @@ export default function Step3Handoff({
               <HandoffRow label="IdP Issuer" value={summary.saml_issuer || ''} />
               <HandoffRow label="Binding" value={summary.saml_binding || ''} />
               <HandoffRow label="NameID Format" value={summary.saml_nameid_format || ''} />
-              <HandoffRow label="NameID 转换" value={summary.saml_nameid_convert || ''} />
+              <HandoffRow
+                label="登录账号字段"
+                value={
+                  ({ original: '用户名', email: '邮箱', mobile: '手机号', employee: '工号' } as Record<string, string>)[
+                    summary.saml_nameid_convert
+                  ] || summary.saml_nameid_convert || ''
+                }
+              />
               <HandoffRow label="签名算法" value={summary.saml_signature_algorithm || ''} />
               <HandoffRow label="摘要算法" value={summary.saml_digest_algorithm || ''} />
-              <HandoffRow label="加密 Assertion" value={summary.saml_encrypted ? '是' : '否'} />
+              <HandoffRow label="加密断言" value={summary.saml_encrypted ? '是' : '否'} />
               <HandoffRow label="断言有效期" value={fmtSeconds(summary.saml_validity_seconds)} />
             </>
           )}

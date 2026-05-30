@@ -60,10 +60,13 @@ export function collectHandoff(
       Issuer_IdP: v.saml_issuer,
       Binding: v.saml_binding,
       NameIDFormat: v.saml_nameid_format,
-      NameID转换: v.saml_nameid_convert,
+      登录账号字段:
+        ({ original: '用户名', email: '邮箱', mobile: '手机号', employee: '工号' } as Record<string, string>)[
+          v.saml_nameid_convert
+        ] || v.saml_nameid_convert,
       签名算法: v.saml_signature_algorithm,
       摘要算法: v.saml_digest_algorithm,
-      加密Assertion: v.saml_encrypted ? '是' : '否',
+      加密断言: v.saml_encrypted ? '是' : '否',
       断言有效期: fmtSeconds(v.saml_validity_seconds),
     });
   } else if (family === 'cas') {
