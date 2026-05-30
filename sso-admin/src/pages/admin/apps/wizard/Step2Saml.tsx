@@ -22,7 +22,7 @@ export default function Step2Saml() {
         type="info"
         showIcon
         icon={<InfoCircleOutlined />}
-        message="通常只需要填写 Entity ID 和 ACS URL，其余保持默认即可"
+        message="通常只需要填写业务系统（SP）的 Entity ID 和 ACS URL，其余保持默认即可"
       />
 
       {/* —— 必填配置 —— */}
@@ -33,8 +33,8 @@ export default function Step2Saml() {
           name="saml_entity_id"
           label="Entity ID"
           rules={[{ required: true, message: '请输入 SP Entity ID' }]}
-          tooltip="业务系统的唯一标识，由对方 metadata 给出"
-          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>业务系统的唯一标识</span>}
+          tooltip="业务系统（SP）的唯一标识，由业务系统提供。不是 OneAuth 自己的 Entity ID。"
+          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>业务系统（SP）的唯一标识</span>}
         >
           <Input placeholder="urn:example:sp 或 https://sp.example.com/saml" />
         </Form.Item>
@@ -43,8 +43,8 @@ export default function Step2Saml() {
           name="saml_acs_url"
           label="ACS URL"
           rules={[{ required: true, message: '请输入 Assertion Consumer Service URL' }]}
-          tooltip="OneAuth 登录成功后返回到业务系统的地址"
-          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>登录成功后回调地址</span>}
+          tooltip="业务系统（SP）的回调地址。OneAuth 签发登录断言后会把浏览器 302 到这里。由业务系统提供。"
+          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>业务系统（SP）的回调地址</span>}
         >
           <Input placeholder="https://sp.example.com/saml/acs" />
         </Form.Item>
