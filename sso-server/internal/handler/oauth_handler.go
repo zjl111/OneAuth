@@ -469,9 +469,9 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 	}
 }
 
-// Discovery OIDC 发现端点
+// Discovery OIDC 发现端点 —— 改 site_url 后要快速生效，故只缓存 5 分钟
 func (h *OAuthHandler) Discovery(c *gin.Context) {
-	c.Header("Cache-Control", "max-age=86400")
+	c.Header("Cache-Control", "public, max-age=300")
 	c.Header("Access-Control-Allow-Origin", "*")
 	iss := h.effectiveIssuer()
 	c.JSON(http.StatusOK, gin.H{

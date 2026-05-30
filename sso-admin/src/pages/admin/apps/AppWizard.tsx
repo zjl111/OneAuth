@@ -59,7 +59,8 @@ export default function AppWizard({
   useEffect(() => {
     if (!open) return;
     if (family !== 'oidc' && family !== 'oauth2') return;
-    fetch('/.well-known/openid-configuration')
+    // cache:'no-store' 强制走网络，避免管理员刚改完 site_url 仍看到旧 issuer
+    fetch('/.well-known/openid-configuration', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setDiscovery(d))
       .catch(() => setDiscovery(null));
