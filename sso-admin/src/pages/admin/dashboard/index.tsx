@@ -13,7 +13,7 @@ import {
   CheckCircleOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { DualAxes } from '@ant-design/charts';
+import { Column } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
 import { dashboardApi } from '@/api/misc';
 import { statusApi, type StatusOverview } from '@/api/status';
@@ -165,47 +165,25 @@ export default function DashboardPage() {
             {trend.length === 0 ? (
               <Empty description="暂无数据" />
             ) : (
-              <DualAxes
-                data={[
-                  trend.map((r) => ({ date: r.date, bar: r.count })),
-                  trend.map((r) => ({ date: r.date, line: r.count })),
-                ]}
+              <Column
+                data={trend.map((r) => ({ date: r.date, count: Number(r.count) }))}
                 xField="date"
-                yField={['bar', 'line']}
+                yField="count"
                 height={300}
-                geometryOptions={[
-                  {
-                    geometry: 'column',
-                    color: '#3b82f6',
-                    columnWidthRatio: 0.55,
-                    label: undefined,
-                  },
-                  {
-                    geometry: 'line',
-                    color: '#1677ff',
-                    lineStyle: { lineWidth: 2 },
-                    point: {
-                      size: 3,
-                      shape: 'circle',
-                      style: { fill: '#fff', stroke: '#1677ff', lineWidth: 2 },
-                    },
-                  },
-                ]}
-                legend={{
-                  layout: 'horizontal',
-                  position: 'top-left',
-                  itemName: {
-                    formatter: (text: string) => (text === 'bar' ? '登录次数' : '趋势'),
-                  },
+                columnStyle={{ radiusTopLeft: 4, radiusTopRight: 4 }}
+                color="#3b82f6"
+                axis={{
+                  x: { labelAutoRotate: false },
+                  y: { title: '登录次数' },
                 }}
-                yAxis={{
-                  bar: { grid: { line: { style: { lineDash: [3, 3], stroke: '#eef0f5' } } } },
-                  line: { grid: null as any, label: null as any },
+                tooltip={{
+                  title: (d: any) => d.date,
+                  items: [{ field: 'count', name: '登录次数' }],
                 }}
-                xAxis={{ tickCount: 14, label: { autoRotate: false } }}
-                meta={{
-                  bar: { alias: '登录次数' },
-                  line: { alias: '趋势' },
+                label={{
+                  text: 'count',
+                  position: 'top',
+                  style: { fontSize: 12, fill: '#475569' },
                 }}
               />
             )}
