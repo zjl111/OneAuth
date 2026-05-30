@@ -176,8 +176,6 @@ export default function Step3Handoff({
 
           {family === 'cas' && (
             <>
-              <HandoffRow label="服务地址" value={summary.cas_service || ''} />
-              <HandoffRow label="回调地址" value={summary.cas_callback_url || summary.cas_service || ''} />
               <HandoffRow label="用户标识字段" value={summary.cas_user_attribute || ''} />
               <HandoffRow label="Ticket 有效期" value={fmtSeconds(summary.cas_expires_seconds)} />
               <HandoffRow label="返回用户属性" value={summary.cas_return_attributes === false ? '禁用' : '启用'} />
@@ -191,6 +189,7 @@ export default function Step3Handoff({
             <div style={{ fontWeight: 600, color: '#1d2c5b', marginBottom: 14 }}>
               CAS 端点信息（OneAuth 提供）
             </div>
+            <HandoffRow label="服务地址 (Server URL)" value={`${origin}/cas`} />
             <HandoffRow label="登录入口" value={`${origin}/cas/login`} />
             <HandoffRow label="单点登出" value={`${origin}/cas/logout`} />
             <HandoffRow label="验票端点 (V2)" value={`${origin}/cas/serviceValidate`} />
