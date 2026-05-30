@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Col, Row, Empty, Tag, Space, Table } from 'antd';
 import ChinaMap from '@/components/ChinaMap';
 import {
@@ -13,7 +13,7 @@ import {
   CheckCircleOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { Column } from '@ant-design/charts';
+import { DualAxes } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
 import { dashboardApi } from '@/api/misc';
 import { statusApi, type StatusOverview } from '@/api/status';
@@ -63,6 +63,22 @@ export default function DashboardPage() {
     dashboardApi.regionTop10(30).then((d) => setRegionTop(d || [])).catch((e) => console.error('[dashboard] region-top10 failed', e));
     statusApi.overview().then(setOverview).catch((e) => console.error('[dashboard] status-overview failed', e));
   }, []);
+
+  // 把后端返回的稀疏 trend 填充成最近 30 天，缺失日期 count=0
+  const trend30 = useMemo(() => {
+    const map = new Map<string, number>();
+    trend.forEach((r) => map.set(r.date, Number(r.count)));
+    const out: Array<{ date: string; count: number }> = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      out.push({ date: key, count: map.get(key) ?? 0 });
+    }
+    return out;
+  }, [trend]);
 
   const winMin = stats.active_window_minutes || 120;
   const winLabel = winMin % 60 === 0 ? `${winMin / 60} 小时` : `${winMin} 分钟`;
@@ -162,31 +178,39 @@ export default function DashboardPage() {
             }
             extra={<Tag color="blue">近 30 天</Tag>}
           >
-            {trend.length === 0 ? (
-              <Empty description="暂无数据" />
-            ) : (
-              <Column
-                data={trend.map((r) => ({ date: r.date, count: Number(r.count) }))}
-                xField="date"
-                yField="count"
-                height={300}
-                columnStyle={{ radiusTopLeft: 4, radiusTopRight: 4 }}
-                color="#3b82f6"
-                axis={{
-                  x: { labelAutoRotate: false },
-                  y: { title: '登录次数' },
-                }}
-                tooltip={{
-                  title: (d: any) => d.date,
-                  items: [{ field: 'count', name: '登录次数' }],
-                }}
-                label={{
-                  text: 'count',
-                  position: 'top',
-                  style: { fontSize: 12, fill: '#475569' },
-                }}
-              />
-            )}
+            <DualAxes
+              data={trend30}
+              xField="date"
+              legend={false}
+              height={300}
+              children={[
+                {
+                  type: 'interval',
+                  yField: 'count',
+                  style: { fill: '#3b82f6', radiusTopLeft: 4, radiusTopRight: 4, maxWidth: 18 },
+                  label: {
+                    text: (d: any) => (d.count > 0 ? d.count : ''),
+                    position: 'top',
+                    style: { fontSize: 11, fill: '#475569' },
+                  },
+                },
+                {
+                  type: 'line',
+                  yField: 'count',
+                  style: { stroke: '#1d4ed8', lineWidth: 2 },
+                  axis: { y: false },
+                  scale: { y: { independent: true } },
+                },
+              ]}
+              axis={{
+                x: {
+                  labelAutoRotate: false,
+                  labelFormatter: (v: string) => v.slice(5),
+                  tickCount: 10,
+                },
+                y: { title: '登录次数' },
+              }}
+            />
           </Card>
         </Col>
         <Col xs={24} xl={6}>
