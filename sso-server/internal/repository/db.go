@@ -104,13 +104,19 @@ func backfillLogRegion(db *gorm.DB) {
 		IP    string
 	}
 	rows := []row{}
+	// 包含两种坏数据：城市/运营商位完全没填，或第一轮回填把"移动/电信/CN"写进了 city/isp。
+	badCondition := `ip_address <> '' AND (
+		COALESCE(city,'') = ''
+		OR city IN ('移动','中国移动','联通','中国联通','电信','中国电信','铁通','广电','教育网')
+		OR isp IN ('CN','cn')
+	)`
 	var login []model.LoginLog
-	db.Select("id, ip_address").Where("ip_address <> '' AND COALESCE(city,'') = ''").Find(&login)
+	db.Select("id, ip_address").Where(badCondition).Find(&login)
 	for _, l := range login {
 		rows = append(rows, row{Table: "sso_login_log", ID: l.ID, IP: l.IPAddress})
 	}
 	var access []model.AccessLog
-	db.Select("id, ip_address").Where("ip_address <> '' AND COALESCE(city,'') = ''").Find(&access)
+	db.Select("id, ip_address").Where(badCondition).Find(&access)
 	for _, l := range access {
 		rows = append(rows, row{Table: "sso_access_log", ID: l.ID, IP: l.IPAddress})
 	}
