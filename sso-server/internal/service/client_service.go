@@ -163,8 +163,7 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
 	}
-	// link 协议（外链应用）不参与健康监控
-	if s.monitorRepo != nil && c.Protocol != "link" {
+	if s.monitorRepo != nil {
 		// 监控 URL 跟应用 HealthCheckURL 保持一致（fallback 到 LoginURL，已在上面默认）
 		hcURL := c.HealthCheckURL
 		s.monitorRepo.Upsert(&model.AppMonitor{

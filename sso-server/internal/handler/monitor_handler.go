@@ -32,10 +32,6 @@ func (h *MonitorHandler) Sync(c *gin.Context) {
 		if cl.ClientID == AdminClientID {
 			continue
 		}
-		// link 协议（外链应用）不参与健康监控
-		if cl.Protocol == "link" {
-			continue
-		}
 		if _, err := h.Repo.Get(cl.ClientID); err == nil {
 			continue
 		}
