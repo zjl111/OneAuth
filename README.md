@@ -18,9 +18,9 @@
 | --- | --- |
 | ![首页](docs/screenshots/01-home.png) | ![应用门户](docs/screenshots/02-portal.png) |
 
-| 组织架构 | 公开状态页 |
+| 概览页 | 公开状态页 |
 | --- | --- |
-| ![组织架构](docs/screenshots/03-admin-orgs.png) | ![状态页](docs/screenshots/04-status.png) |
+| ![概览页](docs/screenshots/03-admin-orgs.png) | ![状态页](docs/screenshots/04-status.png) |
 
 ## 🏗️ 技术栈
 
