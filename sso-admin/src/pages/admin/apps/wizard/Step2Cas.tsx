@@ -13,17 +13,39 @@ export default function Step2Cas() {
     >
       <Form.Item
         name="cas_service"
-        label="服务地址"
-        rules={[{ required: true, message: '请输入 CAS service URL' }]}
-        tooltip="`service=` 参数白名单，必须与应用请求时一致"
+        label="应用服务地址 (service)"
+        rules={[
+          { required: true, message: '请输入对端应用的 service URL' },
+          {
+            validator: (_, v) => {
+              if (!v) return Promise.resolve();
+              return /^https?:\/\/.+/i.test(String(v).trim())
+                ? Promise.resolve()
+                : Promise.reject(new Error('请填写完整 URL，必须以 http:// 或 https:// 开头'));
+            },
+          },
+        ]}
+        tooltip="对端应用（被接入的第三方应用）的 URL，登录请求里 ?service=... 必须与此完全一致；不是 OneAuth 自己的地址"
+        extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>对端应用 URL（被接入的第三方），例：https://jumpserver.example.com/</span>}
       >
         <Input placeholder="https://app.example.com/" />
       </Form.Item>
 
       <Form.Item
         name="cas_callback_url"
-        label="回调地址"
-        tooltip="留空则使用服务地址，作为 ticket 验证完成后跳转的页面"
+        label="应用回调地址"
+        rules={[
+          {
+            validator: (_, v) => {
+              if (!v) return Promise.resolve();
+              return /^https?:\/\/.+/i.test(String(v).trim())
+                ? Promise.resolve()
+                : Promise.reject(new Error('请填写完整 URL，必须以 http:// 或 https:// 开头'));
+            },
+          },
+        ]}
+        tooltip="登录成功后 OneAuth 把浏览器重定向回去并附上 ?ticket=ST-xxx 的地址。留空则使用上面的服务地址"
+        extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>对端应用 URL，例：https://jumpserver.example.com/cas/callback；留空则与服务地址相同</span>}
       >
         <Input placeholder="https://app.example.com/cas/callback" />
       </Form.Item>

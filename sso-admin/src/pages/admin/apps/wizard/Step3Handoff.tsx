@@ -174,8 +174,8 @@ export default function Step3Handoff({
 
           {family === 'cas' && (
             <>
-              <HandoffRow label="服务地址 (service)" value={summary.cas_service || ''} />
-              <HandoffRow label="回调地址" value={summary.cas_callback_url || summary.cas_service || ''} />
+              <HandoffRow label="应用服务地址 (service)" value={summary.cas_service || ''} />
+              <HandoffRow label="应用回调地址" value={summary.cas_callback_url || summary.cas_service || ''} />
               <HandoffRow label="用户标识字段" value={summary.cas_user_attribute || ''} />
               <HandoffRow label="Ticket 有效期" value={fmtSeconds(summary.cas_expires_seconds)} />
               <HandoffRow label="返回用户属性" value={summary.cas_return_attributes === false ? '禁用' : '启用'} />
