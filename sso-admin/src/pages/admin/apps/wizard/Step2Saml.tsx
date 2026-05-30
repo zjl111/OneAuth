@@ -129,16 +129,20 @@ export default function Step2Saml() {
 
         <Form.Item
           name="saml_nameid_convert"
-          label="登录账号字段"
-          tooltip="作为 NameID 写入 SAML Assertion 的用户字段"
-          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>对应业务系统中识别用户的字段</span>}
+          label="用户标识字段"
+          tooltip="OneAuth 返回给业务系统作为登录账号的用户字段"
+          extra={
+            <span style={{ color: '#94a3b8', fontSize: 12 }}>
+              OneAuth 返回给业务系统作为登录账号的用户字段
+            </span>
+          }
         >
           <Select
             options={[
               { value: 'original', label: '用户名' },
               { value: 'email',    label: '邮箱' },
               { value: 'mobile',   label: '手机号' },
-              { value: 'employee', label: '工号' },
+              { value: 'user_id',  label: '用户 UUID' },
             ]}
           />
         </Form.Item>
@@ -181,18 +185,49 @@ export default function Step2Saml() {
                       ]}
                     />
                   </Form.Item>
-                  <Form.Item name="saml_nameid_format" label="NameID 格式" rules={[{ required: true }]}>
-                    <Select
-                      options={[
-                        { value: 'unspecified',                label: 'unspecified（推荐）' },
-                        { value: 'persistent',                 label: 'persistent' },
-                        { value: 'transient',                  label: 'transient' },
-                        { value: 'emailAddress',               label: 'emailAddress' },
-                        { value: 'X509SubjectName',            label: 'X509SubjectName' },
-                        { value: 'WindowsDomainQualifiedName', label: 'WindowsDomainQualifiedName' },
-                        { value: 'entity',                     label: 'entity' },
-                      ]}
-                    />
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(p, n) =>
+                      p.saml_nameid_convert !== n.saml_nameid_convert ||
+                      p.saml_nameid_format !== n.saml_nameid_format
+                    }
+                  >
+                    {({ getFieldValue }) => {
+                      const subject = getFieldValue('saml_nameid_convert');
+                      const format = getFieldValue('saml_nameid_format');
+                      let warn = '';
+                      if (subject === 'email' && format !== 'emailAddress') {
+                        warn = '建议「NameID 格式」选择 emailAddress';
+                      } else if (subject !== 'email' && format === 'emailAddress') {
+                        warn = '当前用户标识不是邮箱，「NameID 格式」一般保持 unspecified';
+                      }
+                      return (
+                        <Form.Item
+                          name="saml_nameid_format"
+                          label="NameID 格式"
+                          rules={[{ required: true }]}
+                          extra={
+                            warn ? (
+                              <span style={{ color: '#d97706', fontSize: 12 }}>{warn}</span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: 12 }}>默认 unspecified；选择邮箱时可改为 emailAddress</span>
+                            )
+                          }
+                        >
+                          <Select
+                            options={[
+                              { value: 'unspecified',                label: 'unspecified（推荐）' },
+                              { value: 'persistent',                 label: 'persistent' },
+                              { value: 'transient',                  label: 'transient' },
+                              { value: 'emailAddress',               label: 'emailAddress' },
+                              { value: 'X509SubjectName',            label: 'X509SubjectName' },
+                              { value: 'WindowsDomainQualifiedName', label: 'WindowsDomainQualifiedName' },
+                              { value: 'entity',                     label: 'entity' },
+                            ]}
+                          />
+                        </Form.Item>
+                      );
+                    }}
                   </Form.Item>
 
                   <Form.Item name="saml_signature_algorithm" label="签名算法" rules={[{ required: true }]}>
@@ -240,19 +275,42 @@ export default function Step2Saml() {
                 </div>
 
                 <Form.Item
-                  name="saml_certificate"
-                  label="SP 公钥证书"
-                  tooltip="业务系统（SP）的 X.509 公钥证书。仅在以下两种情况需要：1) 开启了上方「加密断言」；2) SP 会对 AuthnRequest 签名。否则留空即可。"
-                  extra={
-                    <span style={{ color: '#94a3b8', fontSize: 12 }}>
-                      由业务系统（SP）提供，PEM 格式。多数对接不需要填，留空即可。
-                    </span>
-                  }
+                  noStyle
+                  shouldUpdate={(p, n) => p.saml_encrypted !== n.saml_encrypted}
                 >
-                  <Input.TextArea
-                    rows={5}
-                    placeholder={'-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'}
-                  />
+                  {({ getFieldValue }) => {
+                    const enc = !!getFieldValue('saml_encrypted');
+                    if (!enc) {
+                      return (
+                        <Form.Item label="SP 公钥证书">
+                          <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                            仅在开启「加密断言」时需要填写，由业务系统 SP 提供 PEM 格式公钥证书。
+                          </span>
+                          <Form.Item name="saml_certificate" hidden>
+                            <Input.TextArea />
+                          </Form.Item>
+                        </Form.Item>
+                      );
+                    }
+                    return (
+                      <Form.Item
+                        name="saml_certificate"
+                        label="SP 公钥证书"
+                        rules={[{ required: true, message: '开启加密断言时必须提供 SP 公钥证书' }]}
+                        tooltip="业务系统（SP）的 X.509 公钥证书。仅在开启「加密断言」时必填。"
+                        extra={
+                          <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                            由业务系统（SP）提供，PEM 格式
+                          </span>
+                        }
+                      >
+                        <Input.TextArea
+                          rows={5}
+                          placeholder={'-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'}
+                        />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
               </div>
             ),

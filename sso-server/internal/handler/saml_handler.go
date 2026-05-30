@@ -349,8 +349,8 @@ func pickSAMLPrincipal(field string, u *model.User) string {
 		if u.Phone != nil {
 			return *u.Phone
 		}
-	case "employee":
-		return u.EmployeeNo
+	case "user_id":
+		return u.ID.String()
 	}
 	return u.Username
 }

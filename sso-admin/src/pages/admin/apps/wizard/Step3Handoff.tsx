@@ -167,9 +167,9 @@ export default function Step3Handoff({
               <HandoffRow label="Binding" value={summary.saml_binding || ''} />
               <HandoffRow label="NameID Format" value={summary.saml_nameid_format || ''} />
               <HandoffRow
-                label="登录账号字段"
+                label="用户标识字段"
                 value={
-                  ({ original: '用户名', email: '邮箱', mobile: '手机号', employee: '工号' } as Record<string, string>)[
+                  ({ original: '用户名', email: '邮箱', mobile: '手机号', user_id: '用户 UUID' } as Record<string, string>)[
                     summary.saml_nameid_convert
                   ] || summary.saml_nameid_convert || ''
                 }

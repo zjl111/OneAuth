@@ -60,8 +60,8 @@ export function collectHandoff(
       Issuer_IdP: v.saml_issuer,
       Binding: v.saml_binding,
       NameIDFormat: v.saml_nameid_format,
-      登录账号字段:
-        ({ original: '用户名', email: '邮箱', mobile: '手机号', employee: '工号' } as Record<string, string>)[
+      用户标识字段:
+        ({ original: '用户名', email: '邮箱', mobile: '手机号', user_id: '用户 UUID' } as Record<string, string>)[
           v.saml_nameid_convert
         ] || v.saml_nameid_convert,
       签名算法: v.saml_signature_algorithm,
