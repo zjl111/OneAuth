@@ -1,5 +1,5 @@
 // 协议家族（== backend.protocol 字段值）
-export type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas';
+export type Proto = 'oidc' | 'oauth2' | 'saml' | 'cas' | 'link';
 export type ProtoFamily = Proto;
 
 export const FAMILY_LABEL: Record<ProtoFamily, string> = {
@@ -7,6 +7,7 @@ export const FAMILY_LABEL: Record<ProtoFamily, string> = {
   oauth2: 'OAuth 2.0',
   saml:   'SAML 2.0',
   cas:    'CAS',
+  link:   '登录页跳转',
 };
 
 // 每个协议家族下可选的版本
@@ -26,6 +27,9 @@ export const PROTOCOL_VERSIONS: Record<ProtoFamily, { value: string; label: stri
     { value: 'CAS_v2.0',      label: 'CAS 2.0' },
     { value: 'CAS_v1.0',      label: 'CAS 1.0' },
     { value: 'CAS_SAML_v1.1', label: 'CAS SAML 1.1' },
+  ],
+  link: [
+    { value: '登录页跳转', label: '登录页跳转' },
   ],
 };
 
@@ -50,6 +54,7 @@ export const STEP2_FIELDS: Record<ProtoFamily, string[]> = {
     'saml_signature_algorithm', 'saml_digest_algorithm', 'saml_validity_seconds',
   ],
   cas: ['cas_service', 'cas_user_attribute', 'cas_expires_seconds'],
+  link: [], // 登录页跳转应用不需要协议配置，Step1 即完成全部表单
 };
 
 export type WizardValues = {

@@ -205,12 +205,13 @@ export default function AppListPage() {
             dataIndex: 'protocol',
             width: 150,
             render: (p: string, r) => {
-              const family = (p || 'oidc') as 'oidc' | 'oauth2' | 'saml' | 'cas';
+              const family = (p || 'oidc') as 'oidc' | 'oauth2' | 'saml' | 'cas' | 'link';
               const colorMap: Record<string, string> = {
                 oidc:   'purple',
                 oauth2: 'green',
                 saml:   'volcano',
                 cas:    'gold',
+                link:   'default',
               };
               const versionLabel: Record<string, string> = {
                 'OpenID_Connect_v1.0': 'OpenID Connect 1.0',
@@ -221,12 +222,14 @@ export default function AppListPage() {
                 'CAS_v2.0':            'CAS 2.0',
                 'CAS_v1.0':            'CAS 1.0',
                 'CAS_SAML_v1.1':       'CAS SAML 1.1',
+                '登录页跳转':           '登录页跳转',
               };
               const fallback: Record<string, string> = {
                 oidc:   'OpenID Connect',
                 oauth2: 'OAuth 2.0',
                 saml:   'SAML 2.0',
                 cas:    'CAS',
+                link:   '登录页跳转',
               };
               return (
                 <Tag color={colorMap[family]}>
@@ -242,6 +245,7 @@ export default function AppListPage() {
             render: (uris: string[], r) => {
               if (r.protocol === 'saml') return r.saml_acs_url || '-';
               if (r.protocol === 'cas')  return r.cas_service  || '-';
+              if (r.protocol === 'link') return r.login_url    || '-';
               return uris?.[0] || '-';
             },
           },
@@ -364,6 +368,12 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
       short: '适用于传统单点登录（CAS 1.0/2.0/3.0/SAML 1.1）',
       accent: '#f59e0b', tag: '企业常用',
       tagBg: '#fef3c7', tagColor: '#92400e',
+    },
+    {
+      key: 'link',   title: '登录页跳转',
+      short: '门户图标点击直接跳应用入口，不做 SSO（适用于已有独立登录的应用）',
+      accent: '#64748b', tag: '简单跳转',
+      tagBg: '#f1f5f9', tagColor: '#475569',
     },
   ];
   return (

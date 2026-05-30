@@ -106,10 +106,21 @@ export default function Step3Handoff({
                 <li>CAS Ticket 默认 5 分钟过期，可在管理端调整</li>
               </>
             )}
-            <li>可通过下方按钮复制全部配置或下载 JSON 提供给实施人员</li>
+            {family === 'link' && (
+              <>
+                <li>用户在门户点击该应用图标会直接跳转到上方"应用入口"地址</li>
+                <li>无单点登录，应用方自行处理登录鉴权</li>
+              </>
+            )}
+            {family !== 'link' && (
+              <li>可通过下方按钮复制全部配置或下载 JSON 提供给实施人员</li>
+            )}
           </ul>
         </div>
       </div>
+
+      {/* link 应用没有客户端 / 端点配置，到此为止 */}
+      {family === 'link' ? null : (
 
       <div style={{ display: 'grid', gridTemplateColumns: isOAuth ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)', gap: 16 }}>
         {/* 客户端接入配置（提供给应用侧） */}
@@ -204,6 +215,7 @@ export default function Step3Handoff({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

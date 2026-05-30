@@ -232,6 +232,21 @@ export default function AppWizard({
     try {
       if (step === 0) {
         await form.validateFields(['client_name', 'login_url']);
+        // 登录页跳转应用没有 Step2，直接提交 → Step3
+        if (family === 'link') {
+          const v = form.getFieldsValue(true);
+          setSaving(true);
+          try {
+            const real = await onSubmit(buildPayload(v));
+            setSubmitted(real);
+            setStep(2);
+          } catch (e: any) {
+            message.error(e?.response?.data?.message || '提交失败');
+          } finally {
+            setSaving(false);
+          }
+          return;
+        }
         setStep(1);
         return;
       }
@@ -261,9 +276,13 @@ export default function AppWizard({
     <div className="app-wizard">
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
         <Steps
-          current={step}
-          items={[{ title: '应用信息' }, { title: '客户端配置' }, { title: '信息确认' }]}
-          style={{ width: 640 }}
+          current={family === 'link' && step === 2 ? 1 : step}
+          items={
+            family === 'link'
+              ? [{ title: '应用信息' }, { title: '信息确认' }]
+              : [{ title: '应用信息' }, { title: '客户端配置' }, { title: '信息确认' }]
+          }
+          style={{ width: family === 'link' ? 460 : 640 }}
         />
       </div>
 
@@ -370,25 +389,34 @@ export default function AppWizard({
         )}
         {step < 2 && (
           <Button size="large" type="primary" style={{ minWidth: 120 }} loading={saving} onClick={handleNext}>
-            {step === 1 ? (editing ? '保存并继续' : '创建并继续') : '下一步'}
+            {/* link 应用 Step0 直接创建并完成 */}
+            {step === 1
+              ? (editing ? '保存并继续' : '创建并继续')
+              : family === 'link'
+                ? (editing ? '保存' : '创建')
+                : '下一步'}
           </Button>
         )}
         {step === 2 && (
           <>
-            <Button
-              size="large"
-              icon={<CopyOutlined />}
-              onClick={() => copyHandoffText(family, isOIDC, submitted, form.getFieldsValue(true), discovery, message)}
-            >
-              复制全部配置
-            </Button>
-            <Button
-              size="large"
-              icon={<DownloadOutlined />}
-              onClick={() => downloadHandoffJSON(family, submitted, form.getFieldsValue(true), discovery)}
-            >
-              下载 JSON
-            </Button>
+            {family !== 'link' && (
+              <>
+                <Button
+                  size="large"
+                  icon={<CopyOutlined />}
+                  onClick={() => copyHandoffText(family, isOIDC, submitted, form.getFieldsValue(true), discovery, message)}
+                >
+                  复制全部配置
+                </Button>
+                <Button
+                  size="large"
+                  icon={<DownloadOutlined />}
+                  onClick={() => downloadHandoffJSON(family, submitted, form.getFieldsValue(true), discovery)}
+                >
+                  下载 JSON
+                </Button>
+              </>
+            )}
             <Button size="large" type="primary" style={{ minWidth: 120 }} onClick={handleFinish}>
               完成
             </Button>

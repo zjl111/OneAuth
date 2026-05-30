@@ -83,7 +83,7 @@ type ClientWithSecret struct {
 func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) {
 	protocol := defaultStr(in.Protocol, "oidc")
 
-	// 不同协议必填校验：OAuth2/OIDC 必须有 redirect_uris；SAML 必须有 EntityID + ACS；CAS 必须有 service
+	// 不同协议必填校验：OAuth2/OIDC 必须有 redirect_uris；SAML 必须有 EntityID + ACS；CAS 必须有 service；link 必须有 LoginURL
 	switch protocol {
 	case "oauth2", "oidc":
 		if len(in.RedirectURIs) == 0 {
@@ -96,6 +96,10 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 	case "cas":
 		if in.CASService == "" {
 			return nil, errors.New("CAS 应用必须填写服务地址 (service)")
+		}
+	case "link":
+		if in.LoginURL == "" {
+			return nil, errors.New("跳转应用必须填写应用入口地址")
 		}
 	}
 	secret := utils.RandomString(48)
@@ -432,6 +436,8 @@ func defaultProtocolVersion(protocol string) string {
 		return "SAML_v2.0"
 	case "cas":
 		return "CAS_v3.0"
+	case "link":
+		return "登录页跳转"
 	default:
 		return ""
 	}
