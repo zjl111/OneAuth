@@ -53,6 +53,8 @@ export default function Step3Handoff({
   discovery: Record<string, any> | null;
 }) {
   const isOAuth = family === 'oidc' || family === 'oauth2';
+  const showRightPanel = isOAuth || family === 'cas';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Alert
@@ -122,7 +124,7 @@ export default function Step3Handoff({
       {/* link 应用没有客户端 / 端点配置，到此为止 */}
       {family === 'link' ? null : (
 
-      <div style={{ display: 'grid', gridTemplateColumns: isOAuth ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: showRightPanel ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)', gap: 16 }}>
         {/* 客户端接入配置（提供给应用侧） */}
         <div style={{ border: '1px solid #eef0f5', borderRadius: 12, padding: '20px 24px', background: '#fff' }}>
           <div style={{ fontWeight: 600, color: '#1d2c5b', marginBottom: 14 }}>
@@ -182,6 +184,23 @@ export default function Step3Handoff({
             </>
           )}
         </div>
+
+        {/* CAS 端点信息（OneAuth 自身提供的 CAS 端点，给对端应用填进它们的客户端配置） */}
+        {family === 'cas' && (
+          <div style={{ border: '1px solid #eef0f5', borderRadius: 12, padding: '20px 24px', background: '#fff' }}>
+            <div style={{ fontWeight: 600, color: '#1d2c5b', marginBottom: 14 }}>
+              CAS 端点信息（OneAuth 提供）
+            </div>
+            <HandoffRow label="登录入口" value={`${origin}/cas/login`} />
+            <HandoffRow label="单点登出" value={`${origin}/cas/logout`} />
+            <HandoffRow label="验票端点 (V2)" value={`${origin}/cas/serviceValidate`} />
+            <HandoffRow label="验票端点 (V3)" value={`${origin}/cas/p3/serviceValidate`} />
+            <HandoffRow label="代理验票 (V2)" value={`${origin}/cas/proxyValidate`} />
+            <HandoffRow label="协议版本" value={
+              ({ 'CAS_v3.0': 'CAS 3.0', 'CAS_v2.0': 'CAS 2.0', 'CAS_v1.0': 'CAS 1.0', 'CAS_SAML_v1.1': 'CAS SAML 1.1' } as Record<string, string>)[summary.protocol_version] || 'CAS 3.0'
+            } />
+          </div>
+        )}
 
         {/* OIDC 端点信息（仅 OIDC/OAuth2） */}
         {isOAuth && (
