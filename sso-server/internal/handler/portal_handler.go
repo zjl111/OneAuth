@@ -22,6 +22,7 @@ type PortalApp struct {
 	ClientID    string `json:"client_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Protocol    string `json:"protocol"` // 用于前端识别非 SSO 应用（link）
 	LogoURL     string `json:"logo_url"`
 	HomeURL     string `json:"home_url"`
 	IsBuiltin   bool   `json:"is_builtin"`
@@ -82,6 +83,7 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 			ClientID:    cl.ClientID,
 			Name:        cl.ClientName,
 			Description: cl.Description,
+			Protocol:    cl.Protocol,
 			LogoURL:     cl.LogoURL,
 			HomeURL:     cl.HomeURL,
 			IsBuiltin:   cl.IsBuiltin,

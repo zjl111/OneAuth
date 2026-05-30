@@ -27,9 +27,10 @@ type OAuth2Client struct {
 	HealthCheckURL string `gorm:"size:512" json:"health_check_url"`
 
 	// === OAuth 2.0 / OIDC 协议配置 ===
-	RedirectURIs    StringSlice `gorm:"type:text;not null" json:"redirect_uris"`
-	GrantTypes      StringSlice `gorm:"type:text;not null" json:"grant_types"`
-	ResponseTypes   StringSlice `gorm:"type:text;not null" json:"response_types"`
+	// link 协议不需要这些字段，故放宽为可空（旧库 not null 约束需配合 ALTER 处理）
+	RedirectURIs    StringSlice `gorm:"type:text" json:"redirect_uris"`
+	GrantTypes      StringSlice `gorm:"type:text" json:"grant_types"`
+	ResponseTypes   StringSlice `gorm:"type:text" json:"response_types"`
 	Scope           string      `gorm:"size:512;default:'openid profile email'" json:"scope"`
 	SubjectType     string      `gorm:"size:30;default:'username'" json:"subject_type"` // username / user_id / email / mobile
 	RequirePKCE     bool        `gorm:"default:false" json:"require_pkce"`

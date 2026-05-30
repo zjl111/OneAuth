@@ -1,24 +1,8 @@
-import { useState } from 'react';
-import { Form, Input, Switch, Button, App as AntdApp } from 'antd';
-import { LockOutlined, GlobalOutlined, UserOutlined, ApiOutlined } from '@ant-design/icons';
-import request from '@/api/request';
+import { Form, Input, Switch } from 'antd';
+import { LockOutlined, GlobalOutlined, UserOutlined } from '@ant-design/icons';
 import { SectionHead, cardStyle } from './_shared';
 
 export default function LdapPanel() {
-  const { message } = AntdApp.useApp();
-  const [testing, setTesting] = useState(false);
-
-  const handleTest = async () => {
-    setTesting(true);
-    try {
-      await request.post('/configs/test-ldap');
-      message.success('LDAP 连接成功');
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || 'LDAP 连接失败');
-    } finally {
-      setTesting(false);
-    }
-  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={cardStyle}>
@@ -72,25 +56,6 @@ export default function LdapPanel() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 12,
-          background: '#fff',
-          border: '1px solid #eef0f5',
-          borderRadius: 12,
-          padding: '14px 20px',
-        }}
-      >
-        <span style={{ color: '#94a3b8', fontSize: 13, marginRight: 'auto' }}>
-          先保存配置后再点击测试连接
-        </span>
-        <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest}>
-          测试连接
-        </Button>
-      </div>
     </div>
   );
 }

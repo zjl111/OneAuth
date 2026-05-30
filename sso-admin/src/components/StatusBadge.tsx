@@ -97,7 +97,7 @@ export default function StatusBadge() {
         }}
       />
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500 }}>
-        <span>整体可用性</span>
+        <span>综合可用性</span>
         <b style={{ fontWeight: 600, fontSize: 13 }}>{data.availability_24h_percent.toFixed(1)}%</b>
         {data.avg_response_ms > 0 && (
           <>

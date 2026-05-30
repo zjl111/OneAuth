@@ -28,6 +28,14 @@ func (h *MonitorHandler) Sync(c *gin.Context) {
 	}
 	created := 0
 	for _, cl := range clients {
+		// 管理后台本身不需要纳入监控
+		if cl.ClientID == AdminClientID {
+			continue
+		}
+		// link 协议（外链应用）不参与健康监控
+		if cl.Protocol == "link" {
+			continue
+		}
 		if _, err := h.Repo.Get(cl.ClientID); err == nil {
 			continue
 		}
@@ -65,6 +73,10 @@ func (h *MonitorHandler) List(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(items))
 	for _, m := range items {
+		// 管理后台不在监控列表里露出
+		if m.ClientID == AdminClientID {
+			continue
+		}
 		row := gin.H{
 			"id":               m.ID,
 			"client_id":        m.ClientID,

@@ -18,6 +18,11 @@ import {
   KeyOutlined,
   CopyOutlined,
   AppstoreOutlined,
+  SafetyOutlined,
+  LockOutlined,
+  ApiOutlined,
+  LoginOutlined,
+  SelectOutlined,
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
 import PageToolbar from '@/components/PageToolbar';
@@ -323,7 +328,7 @@ export default function AppListPage() {
         onCancel={() => setProtocolOpen(false)}
         onOk={handleProtocolNext}
         okText="下一步"
-        width={680}
+        width={720}
         centered
       >
         <ProtocolPicker value={pickedFamily} onChange={setPickedFamily} />
@@ -340,115 +345,148 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
     title: string;
     short: string;
     accent: string;
+    iconBg: string;
+    iconColor: string;
     tag: string;
     tagBg: string;
     tagColor: string;
+    icon: React.ReactNode;
   };
-  const protos: Item[] = [
+  // SSO 协议（2×2）
+  const ssoProtos: Item[] = [
     {
-      key: 'oidc',   title: 'OIDC',
-      short: '适用于现代 Web、移动端应用单点登录',
-      accent: '#1677ff', tag: '推荐',
-      tagBg: '#e6f0ff', tagColor: '#1677ff',
+      key: 'oidc', title: 'OIDC',
+      short: '适用于现代 Web、移动端应用的单点登录',
+      accent: '#1677ff', iconBg: '#e6f0ff', iconColor: '#1677ff',
+      tag: '推荐', tagBg: '#dbeafe', tagColor: '#1677ff',
+      icon: <SafetyOutlined style={{ fontSize: 24 }} />,
     },
     {
       key: 'oauth2', title: 'OAuth2',
-      short: '适用于第三方授权与 API 访问（OAuth 2.0 / 2.1）',
-      accent: '#10b981', tag: '标准协议',
-      tagBg: '#d1fae5', tagColor: '#047857',
+      short: '适用于第三方授权与 API 访问 (OAuth 2.0 / 2.1)',
+      accent: '#10b981', iconBg: '#d1fae5', iconColor: '#059669',
+      tag: '标准协议', tagBg: '#d1fae5', tagColor: '#047857',
+      icon: <LockOutlined style={{ fontSize: 24 }} />,
     },
     {
-      key: 'saml',   title: 'SAML 2.0',
-      short: '适用于企业系统与标准身份联合场景',
-      accent: '#8b5cf6', tag: '企业常用',
-      tagBg: '#ede9fe', tagColor: '#6d28d9',
+      key: 'saml', title: 'SAML 2.0',
+      short: '适用于企业级身份系统整合和单点登录',
+      accent: '#8b5cf6', iconBg: '#ede9fe', iconColor: '#7c3aed',
+      tag: '企业常用', tagBg: '#ede9fe', tagColor: '#6d28d9',
+      icon: <ApiOutlined style={{ fontSize: 24 }} />,
     },
     {
-      key: 'cas',    title: 'CAS',
-      short: '适用于传统单点登录（CAS 1.0/2.0/3.0/SAML 1.1）',
-      accent: '#f59e0b', tag: '企业常用',
-      tagBg: '#fef3c7', tagColor: '#92400e',
-    },
-    {
-      key: 'link',   title: '登录页跳转',
-      short: '门户图标点击直接跳应用入口，不做 SSO（适用于已有独立登录的应用）',
-      accent: '#64748b', tag: '简单跳转',
-      tagBg: '#f1f5f9', tagColor: '#475569',
+      key: 'cas', title: 'CAS',
+      short: '适用于传统单点登录 (CAS 1.0/2.0/3.0/SAML 1.1)',
+      accent: '#f59e0b', iconBg: '#fef3c7', iconColor: '#d97706',
+      tag: '企业常用', tagBg: '#fef3c7', tagColor: '#92400e',
+      icon: <KeyOutlined style={{ fontSize: 24 }} />,
     },
   ];
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '8px 0' }}>
-      {protos.map((p) => {
-        const active = value === p.key;
-        return (
-          <div
-            key={p.key}
-            onClick={() => onChange(p.key)}
+  // 其他接入方式（全宽）
+  const otherProtos: Item[] = [
+    {
+      key: 'link', title: '登录页跳转',
+      short: '不做单点登录，点击应用后直接跳转到目标登录页，用户自行输入账号密码。',
+      accent: '#f97316', iconBg: '#ffedd5', iconColor: '#ea580c',
+      tag: '非 SSO', tagBg: '#fee2e2', tagColor: '#dc2626',
+      icon: <LoginOutlined style={{ fontSize: 24 }} />,
+    },
+  ];
+
+  const renderCard = (p: Item, fullWidth = false) => {
+    const active = value === p.key;
+    return (
+      <div
+        key={p.key}
+        onClick={() => onChange(p.key)}
+        style={{
+          cursor: 'pointer',
+          padding: fullWidth ? '18px 24px' : '20px 22px',
+          borderRadius: 12,
+          border: active ? `1.5px solid ${p.accent}` : '1px solid #eef0f5',
+          background: active ? `${p.accent}0d` : '#fff',
+          position: 'relative',
+          transition: 'all 0.15s',
+          boxShadow: active ? `0 6px 18px ${p.accent}1f` : 'none',
+          display: 'flex',
+          alignItems: fullWidth ? 'center' : 'flex-start',
+          gap: 14,
+        }}
+      >
+        {/* 选中对勾 */}
+        {active && !fullWidth && (
+          <span
             style={{
-              cursor: 'pointer',
-              padding: '22px 22px 20px 28px',
-              borderRadius: 12,
-              border: active ? `1.5px solid ${p.accent}` : '1px solid #eef0f5',
-              background: active ? `${p.accent}0d` : '#fff',
-              position: 'relative',
-              transition: 'all 0.15s',
-              boxShadow: active ? `0 6px 18px ${p.accent}1f` : 'none',
-              overflow: 'hidden',
+              position: 'absolute',
+              top: 12, right: 12,
+              width: 18, height: 18,
+              borderRadius: '50%',
+              background: p.accent,
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
             }}
           >
-            {/* 左侧彩色竖条 */}
+            ✓
+          </span>
+        )}
+        {/* 图标圆形 */}
+        <div
+          style={{
+            width: 44, height: 44,
+            borderRadius: 12,
+            background: p.iconBg,
+            color: p.iconColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {p.icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>{p.title}</span>
             <span
               style={{
-                position: 'absolute',
-                left: 0, top: 0, bottom: 0,
-                width: 4,
-                background: p.accent,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: p.tagBg,
+                color: p.tagColor,
+                fontSize: 11,
+                fontWeight: 500,
               }}
-            />
-            {/* 选中态：右上角对勾 */}
-            {active && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 14, right: 14,
-                  width: 18, height: 18,
-                  borderRadius: '50%',
-                  background: p.accent,
-                  color: '#fff',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 11,
-                }}
-              >
-                ✓
-              </span>
-            )}
-
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1d2c5b', lineHeight: 1.2 }}>
-              {p.title}
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  padding: '2px 10px',
-                  borderRadius: 6,
-                  background: p.tagBg,
-                  color: p.tagColor,
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
-              >
-                {p.tag}
-              </span>
-            </div>
-            <div style={{ marginTop: 16, fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
-              {p.short}
-            </div>
+            >
+              {p.tag}
+            </span>
           </div>
-        );
-      })}
+          <div style={{ marginTop: 6, fontSize: 12.5, color: '#6b7280', lineHeight: 1.55 }}>
+            {p.short}
+          </div>
+        </div>
+        {/* link 卡片右侧的箭头 icon */}
+        {fullWidth && (
+          <SelectOutlined style={{ color: '#94a3b8', fontSize: 16, flexShrink: 0 }} />
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding: '4px 0' }}>
+      <div style={{ color: '#1d2c5b', fontWeight: 600, fontSize: 14, marginBottom: 10 }}>单点登录协议</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        {ssoProtos.map((p) => renderCard(p))}
+      </div>
+      <div style={{ borderTop: '1px solid #eef0f5', margin: '20px 0 14px' }} />
+      <div style={{ color: '#1d2c5b', fontWeight: 600, fontSize: 14, marginBottom: 10 }}>其他接入方式</div>
+      <div>
+        {otherProtos.map((p) => renderCard(p, true))}
+      </div>
     </div>
   );
 }

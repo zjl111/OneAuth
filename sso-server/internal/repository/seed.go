@@ -35,6 +35,8 @@ func Seed(db *gorm.DB) error {
 	if err := seedSystemConfigs(db); err != nil {
 		return err
 	}
+	// 清掉历史可能写入的 sso-admin 监控记录（管理后台不参与健康监控）
+	db.Where("client_id = ?", "sso-admin").Delete(&model.AppMonitor{})
 	return nil
 }
 

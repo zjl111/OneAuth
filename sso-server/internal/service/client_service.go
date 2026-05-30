@@ -124,7 +124,7 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
 		IsActive:         true,
 
-		RedirectURIs:    in.RedirectURIs,
+		RedirectURIs:    nonNilSlice(in.RedirectURIs),
 		GrantTypes:      defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
 		ResponseTypes:   []string{"code"},
 		Scope:           defaultStr(in.Scope, "openid profile email"),
@@ -163,7 +163,8 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
 	}
-	if s.monitorRepo != nil {
+	// link 协议（外链应用）不参与健康监控
+	if s.monitorRepo != nil && c.Protocol != "link" {
 		// 监控 URL 跟应用 HealthCheckURL 保持一致（fallback 到 LoginURL，已在上面默认）
 		hcURL := c.HealthCheckURL
 		s.monitorRepo.Upsert(&model.AppMonitor{
@@ -415,6 +416,14 @@ func (s *ClientService) ListAll() ([]model.OAuth2Client, error) {
 func defaultStr(v, fallback string) string {
 	if v == "" {
 		return fallback
+	}
+	return v
+}
+
+// nonNilSlice 返回非 nil 的切片，避免 GORM 把 nil slice 转成 NULL 触发列 NOT NULL 约束
+func nonNilSlice(v []string) []string {
+	if v == nil {
+		return []string{}
 	}
 	return v
 }

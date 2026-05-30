@@ -133,7 +133,7 @@ func (h *StatusHandler) computeOverview() gin.H {
 		overall = model.StatusDegraded
 	}
 
-	// 整体可用性 & 平均响应（24h 窗口）
+	// 综合可用性 & 平均响应（24h 窗口）
 	var availSum, availCount float64
 	var respSum, respCount int
 	for _, a := range apps {

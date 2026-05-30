@@ -5,17 +5,18 @@ import {
   UserOutlined,
   AppstoreOutlined,
   LoginOutlined,
-  WarningOutlined,
-  RiseOutlined,
   ClockCircleOutlined,
   ArrowRightOutlined,
   MailOutlined,
   TeamOutlined,
   EnvironmentOutlined,
+  CheckCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { DualAxes } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
 import { dashboardApi } from '@/api/misc';
+import { statusApi, type StatusOverview } from '@/api/status';
 import './dashboard.css';
 
 type StatCard = {
@@ -53,12 +54,14 @@ export default function DashboardPage() {
   const [trend, setTrend] = useState<Array<{ date: string; count: number }>>([]);
   const [dist, setDist] = useState<Array<{ client_id: string; client_name: string; count: number }>>([]);
   const [regionTop, setRegionTop] = useState<Array<{ province: string; count: number }>>([]);
+  const [overview, setOverview] = useState<StatusOverview | null>(null);
 
   useEffect(() => {
-    dashboardApi.stats().then(setStats);
-    dashboardApi.loginTrends(30).then((d) => setTrend(d || []));
-    dashboardApi.appDistribution(30).then((d) => setDist(d || []));
-    dashboardApi.regionTop10(30).then((d) => setRegionTop(d || []));
+    dashboardApi.stats().then(setStats).catch((e) => console.error('[dashboard] stats failed', e));
+    dashboardApi.loginTrends(30).then((d) => setTrend(d || [])).catch((e) => console.error('[dashboard] login-trends failed', e));
+    dashboardApi.appDistribution(30).then((d) => setDist(d || [])).catch((e) => console.error('[dashboard] app-distribution failed', e));
+    dashboardApi.regionTop10(30).then((d) => setRegionTop(d || [])).catch((e) => console.error('[dashboard] region-top10 failed', e));
+    statusApi.overview().then(setOverview).catch((e) => console.error('[dashboard] status-overview failed', e));
   }, []);
 
   const winMin = stats.active_window_minutes || 120;
@@ -68,13 +71,21 @@ export default function DashboardPage() {
     { key: 's', title: '活跃用户', value: stats.active_users, icon: <TeamOutlined />, tone: 'green', footnote: `近 ${winLabel}` },
     { key: 'l', title: '今日登录次数', value: stats.login_today, icon: <LoginOutlined />, tone: 'green' },
     { key: 'a', title: '已接入应用', value: stats.app_count, icon: <AppstoreOutlined />, tone: 'purple' },
-    { key: 'e', title: '异常告警', value: stats.abnormal_count, icon: <WarningOutlined />, tone: 'red' },
     {
-      key: 'p',
-      title: '在线率',
-      value: `${stats.uptime_percent.toFixed(1)}%`,
-      icon: <RiseOutlined />,
+      key: 'avail',
+      title: '综合可用性',
+      value: overview ? `${overview.availability_24h_percent.toFixed(1)}%` : '—',
+      icon: <CheckCircleOutlined />,
+      tone: 'green',
+      footnote: '近 24 小时',
+    },
+    {
+      key: 'lat',
+      title: '平均延迟',
+      value: overview && overview.avg_response_ms > 0 ? `${overview.avg_response_ms}ms` : '—',
+      icon: <ThunderboltOutlined />,
       tone: 'orange',
+      footnote: '全部应用',
     },
   ];
 

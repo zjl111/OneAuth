@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton } from 'antd';
+import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton, Space } from 'antd';
 import { configApi, type SystemConfig } from '@/api/misc';
 import { invalidateSiteCache } from '@/hooks/useSite';
 import { useAuthStore } from '@/store/authStore';
@@ -139,6 +139,7 @@ export default function SettingsPage() {
   };
 
   const [activeTab, setActiveTab] = useState<string>('platform');
+  const [testingLdap, setTestingLdap] = useState(false);
 
   if (loading && data.length === 0) {
     return (
@@ -189,9 +190,29 @@ export default function SettingsPage() {
           }))}
         />
         {activeTab !== 'smtp' && (
-          <Button type="primary" onClick={handleSave}>
-            保存
-          </Button>
+          <Space>
+            {activeTab === 'ldap' && (
+              <Button
+                loading={testingLdap}
+                onClick={async () => {
+                  setTestingLdap(true);
+                  try {
+                    await request.post('/configs/test-ldap');
+                    message.success('LDAP 连接成功');
+                  } catch (e: any) {
+                    message.error(e?.response?.data?.message || 'LDAP 连接失败');
+                  } finally {
+                    setTestingLdap(false);
+                  }
+                }}
+              >
+                测试连接
+              </Button>
+            )}
+            <Button type="primary" onClick={handleSave}>
+              保存
+            </Button>
+          </Space>
         )}
       </Form>
     </Card>

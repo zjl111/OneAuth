@@ -9,6 +9,7 @@ import {
   LogoutOutlined,
   SwapOutlined,
   ArrowRightOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { portalApi } from '@/api/misc';
@@ -30,6 +31,7 @@ interface PortalApp {
   client_id: string;
   name: string;
   description: string;
+  protocol?: string;
   logo_url: string;
   home_url: string;
   is_builtin: boolean;
@@ -195,7 +197,31 @@ export default function PortalPage() {
                 onClick={() => handleEnter(app)}
                 title={app.description || app.name}
               >
-                <div className="app-tile-logo">{renderLogo(app)}</div>
+                <div className="app-tile-logo" style={{ position: 'relative' }}>
+                  {renderLogo(app)}
+                  {app.protocol === 'link' && (
+                    <span
+                      title="非 SSO，点击直接跳转应用登录页"
+                      style={{
+                        position: 'absolute',
+                        right: -2,
+                        bottom: -2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: '#f97316',
+                        color: '#fff',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        boxShadow: '0 0 0 2px #fff',
+                      }}
+                    >
+                      <LockOutlined />
+                    </span>
+                  )}
+                </div>
                 <div className="app-tile-name">{app.name}</div>
               </div>
             ))}
@@ -204,7 +230,7 @@ export default function PortalPage() {
           <div className="portal-list">
             {filtered.map((app) => (
               <div key={app.id} className="app-list-item" onClick={() => handleEnter(app)}>
-                <div className="list-logo">
+                <div className="list-logo" style={{ position: 'relative' }}>
                   {app.logo_url && app.logo_url.length <= 4 ? (
                     app.logo_url
                   ) : app.logo_url ? (
@@ -212,9 +238,35 @@ export default function PortalPage() {
                   ) : (
                     <SafetyCertificateOutlined />
                   )}
+                  {app.protocol === 'link' && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: -2,
+                        bottom: -2,
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        background: '#f97316',
+                        color: '#fff',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        boxShadow: '0 0 0 2px #fff',
+                      }}
+                    >
+                      <LockOutlined />
+                    </span>
+                  )}
                 </div>
                 <div className="list-text">
-                  <div className="list-name">{app.name}</div>
+                  <div className="list-name">
+                    {app.name}
+                    {app.protocol === 'link' && (
+                      <span style={{ marginLeft: 8, color: '#dc2626', fontSize: 11, padding: '1px 6px', background: '#fee2e2', borderRadius: 4 }}>非 SSO</span>
+                    )}
+                  </div>
                   <div className="list-desc">{app.description || '一站式应用入口'}</div>
                 </div>
                 <div className="list-action">

@@ -57,7 +57,7 @@ func NewDB(cfg *config.Config) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&model.Department{},
 		&model.User{},
 		&model.Role{},
@@ -78,5 +78,13 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.StatusProbe{},
 		&model.StatusDaily{},
 		&model.Incident{},
-	)
+	); err != nil {
+		return err
+	}
+	// 旧表的 NOT NULL 约束需要手动 drop（GORM AutoMigrate 不会主动放宽约束）
+	// link 协议不需要 redirect_uris/grant_types/response_types
+	for _, col := range []string{"redirect_uris", "grant_types", "response_types"} {
+		db.Exec("ALTER TABLE sso_oauth2_client ALTER COLUMN " + col + " DROP NOT NULL")
+	}
+	return nil
 }
