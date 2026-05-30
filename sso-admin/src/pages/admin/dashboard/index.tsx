@@ -72,20 +72,20 @@ export default function DashboardPage() {
     { key: 'l', title: '今日登录次数', value: stats.login_today, icon: <LoginOutlined />, tone: 'green' },
     { key: 'a', title: '已接入应用', value: stats.app_count, icon: <AppstoreOutlined />, tone: 'purple' },
     {
-      key: 'avail',
-      title: '综合可用性',
-      value: overview ? `${overview.availability_24h_percent.toFixed(1)}%` : '—',
-      icon: <CheckCircleOutlined />,
-      tone: 'green',
-      footnote: '近 24 小时',
-    },
-    {
       key: 'lat',
       title: '平均延迟',
       value: overview && overview.avg_response_ms > 0 ? `${overview.avg_response_ms}ms` : '—',
       icon: <ThunderboltOutlined />,
       tone: 'orange',
       footnote: '全部应用',
+    },
+    {
+      key: 'avail',
+      title: '综合可用性',
+      value: overview ? `${overview.availability_24h_percent.toFixed(1)}%` : '—',
+      icon: <CheckCircleOutlined />,
+      tone: 'green',
+      footnote: '近 24 小时',
     },
   ];
 

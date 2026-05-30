@@ -97,15 +97,15 @@ export default function StatusBadge() {
         }}
       />
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500 }}>
-        <span>综合可用性</span>
-        <b style={{ fontWeight: 600, fontSize: 13 }}>{data.availability_24h_percent.toFixed(1)}%</b>
         {data.avg_response_ms > 0 && (
           <>
-            <span style={{ opacity: 0.4, margin: '0 2px', fontSize: 13 }}>·</span>
             <span>平均延迟</span>
             <b style={{ fontWeight: 600, fontSize: 13 }}>{data.avg_response_ms}ms</b>
+            <span style={{ opacity: 0.4, margin: '0 2px', fontSize: 13 }}>·</span>
           </>
         )}
+        <span>综合可用性</span>
+        <b style={{ fontWeight: 600, fontSize: 13 }}>{data.availability_24h_percent.toFixed(1)}%</b>
       </span>
       <span
         style={{
