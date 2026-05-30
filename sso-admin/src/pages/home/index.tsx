@@ -26,8 +26,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!returnTo) return;
     if (isAuthenticated) {
-      // /oauth/authorize 与 /cas/login 都是后端路由，必须 full reload 以便后端读到 cookie
-      if (returnTo.startsWith('/oauth/authorize') || returnTo.startsWith('/cas/')) {
+      // /oauth/authorize、/cas/、/saml/ 都是后端路由，必须 full reload 以便后端读到 cookie
+      if (returnTo.startsWith('/oauth/authorize') || returnTo.startsWith('/cas/') || returnTo.startsWith('/saml/')) {
         window.location.replace(returnTo);
       } else {
         navigate(returnTo, { replace: true });

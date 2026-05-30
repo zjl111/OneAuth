@@ -35,6 +35,7 @@ type Handlers struct {
 	AppPerm    *handler.AppPermHandler
 	WeCom      *handler.WeComHandler
 	CAS        *handler.CASHandler
+	SAML       *handler.SAMLHandler
 }
 
 func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserService, h *Handlers) *gin.Engine {
@@ -84,6 +85,18 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 			casGroup.GET("/proxyValidate", h.CAS.ServiceValidate) // V2 别名
 			casGroup.GET("/p3/serviceValidate", h.CAS.P3ServiceValidate)
 			casGroup.GET("/p3/proxyValidate", h.CAS.P3ServiceValidate) // V3 别名
+		}
+	}
+
+	// SAML 2.0 IdP 协议端点
+	if h.SAML != nil {
+		samlGroup := r.Group("/saml")
+		{
+			samlGroup.GET("/metadata", h.SAML.Metadata)
+			samlGroup.GET("/sso", h.SAML.SSO)
+			samlGroup.POST("/sso", h.SAML.SSO)
+			samlGroup.GET("/slo", h.SAML.SLO)
+			samlGroup.POST("/slo", h.SAML.SLO)
 		}
 	}
 
@@ -195,6 +208,10 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.DELETE("/apps/:id", h.App.Delete)
 		admin.POST("/apps/:id/rotate-secret", h.App.RotateSecret)
 		admin.POST("/apps/:id/toggle-status", h.App.ToggleStatus)
+		// SAML：粘贴/上传 SP metadata URL 或 XML，返回前端要回填的字段
+		if h.SAML != nil {
+			admin.POST("/apps/saml/parse-metadata", h.SAML.ParseMetadata)
+		}
 
 		// 仪表盘
 		admin.GET("/dashboard/stats", h.Dashboard.Stats)

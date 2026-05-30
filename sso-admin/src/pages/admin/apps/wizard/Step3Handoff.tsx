@@ -53,7 +53,7 @@ export default function Step3Handoff({
   discovery: Record<string, any> | null;
 }) {
   const isOAuth = family === 'oidc' || family === 'oauth2';
-  const showRightPanel = isOAuth || family === 'cas';
+  const showRightPanel = isOAuth || family === 'cas' || family === 'saml';
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -189,6 +189,21 @@ export default function Step3Handoff({
             </>
           )}
         </div>
+
+        {/* SAML 端点信息（OneAuth 作为 IdP 暴露给 SP 的端点） */}
+        {family === 'saml' && (
+          <div style={{ border: '1px solid #eef0f5', borderRadius: 12, padding: '20px 24px', background: '#fff' }}>
+            <div style={{ fontWeight: 600, color: '#1d2c5b', marginBottom: 14 }}>
+              SAML 端点信息（OneAuth 提供）
+            </div>
+            <HandoffRow label="IdP Metadata URL" value={`${origin}/saml/metadata`} />
+            <HandoffRow label="IdP Entity ID" value={origin} />
+            <HandoffRow label="SSO URL (HTTP-Redirect)" value={`${origin}/saml/sso`} />
+            <HandoffRow label="SSO URL (HTTP-POST)" value={`${origin}/saml/sso`} />
+            <HandoffRow label="SLO URL" value={`${origin}/saml/slo`} />
+            <HandoffRow label="协议版本" value="SAML 2.0" />
+          </div>
+        )}
 
         {/* CAS 端点信息（OneAuth 自身提供的 CAS 端点，给对端应用填进它们的客户端配置） */}
         {family === 'cas' && (

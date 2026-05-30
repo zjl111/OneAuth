@@ -1,5 +1,7 @@
-import { Form, Input, Select, Radio, InputNumber, Alert, Collapse } from 'antd';
-import { InfoCircleOutlined } from '@ant-design/icons';
+import { useState } from 'react';
+import { Form, Input, Select, Radio, InputNumber, Alert, Collapse, Button, Space, App as AntdApp } from 'antd';
+import { InfoCircleOutlined, ImportOutlined } from '@ant-design/icons';
+import request from '@/api/request';
 
 const sectionStyle: React.CSSProperties = {
   border: '1px solid #eef0f5',
@@ -16,6 +18,45 @@ const titleStyle: React.CSSProperties = {
 };
 
 export default function Step2Saml() {
+  const form = Form.useFormInstance();
+  const { message } = AntdApp.useApp();
+  const [metaInput, setMetaInput] = useState('');
+  const [metaMode, setMetaMode] = useState<'url' | 'xml'>('url');
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
+    const v = metaInput.trim();
+    if (!v) {
+      message.warning('请粘贴 SP metadata URL 或 XML 文本');
+      return;
+    }
+    setImporting(true);
+    try {
+      const payload: any = {};
+      if (metaMode === 'url') payload.url = v;
+      else payload.xml = v;
+      const resp: any = await request.post('/apps/saml/parse-metadata', payload);
+      const d = resp || {};
+      const patch: any = {};
+      if (d.entity_id) patch.saml_entity_id = d.entity_id;
+      if (d.acs_url) patch.saml_acs_url = d.acs_url;
+      if (d.binding) patch.saml_binding = d.binding;
+      if (d.nameid_format) patch.saml_nameid_format = d.nameid_format;
+      if (d.certificate) patch.saml_certificate = d.certificate;
+      form.setFieldsValue(patch);
+      const filled = Object.keys(patch).length;
+      if (filled === 0) {
+        message.warning('解析成功但未抽取到任何字段，请检查 metadata 内容');
+      } else {
+        message.success(`已自动填入 ${filled} 项配置`);
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '解析失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Alert
@@ -24,6 +65,43 @@ export default function Step2Saml() {
         icon={<InfoCircleOutlined />}
         message="通常只需要填写业务系统（SP）的 Entity ID 和 ACS URL，其余保持默认即可"
       />
+
+      {/* —— 一键导入 SP Metadata —— */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>从 SP Metadata 一键导入（可选）</div>
+        <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+          <Select
+            value={metaMode}
+            onChange={setMetaMode}
+            style={{ width: 110 }}
+            options={[
+              { value: 'url', label: 'URL' },
+              { value: 'xml', label: 'XML 文本' },
+            ]}
+          />
+          {metaMode === 'url' ? (
+            <Input
+              placeholder="https://sp.example.com/saml/metadata"
+              value={metaInput}
+              onChange={(e) => setMetaInput(e.target.value)}
+              onPressEnter={handleImport}
+            />
+          ) : (
+            <Input.TextArea
+              rows={4}
+              placeholder="粘贴 SP metadata XML（以 <EntityDescriptor 开头）"
+              value={metaInput}
+              onChange={(e) => setMetaInput(e.target.value)}
+            />
+          )}
+          <Button type="primary" icon={<ImportOutlined />} loading={importing} onClick={handleImport}>
+            导入
+          </Button>
+        </Space.Compact>
+        <span style={{ color: '#94a3b8', fontSize: 12 }}>
+          解析 SP 的 Entity ID / ACS URL / Binding / NameID Format / 公钥证书并自动填入下方字段
+        </span>
+      </div>
 
       {/* —— 必填配置 —— */}
       <div style={sectionStyle}>

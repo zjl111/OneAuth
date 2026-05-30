@@ -233,6 +233,18 @@ func main() {
 			LogRepo:       logRepo,
 			FrontendBase:  frontendBase,
 		},
+		SAML: &handler.SAMLHandler{
+			KeyManager:    keyManager,
+			Store:         store,
+			SessionMgr:    sessionMgr,
+			ClientService: clientService,
+			UserService:   userService,
+			AppGrantRepo:  appGrantRepo,
+			LogRepo:       logRepo,
+			ConfigRepo:    configRepo,
+			FrontendBase:  frontendBase,
+			Issuer:        cfg.OAuth.Issuer,
+		},
 	}
 
 	r := router.Setup(cfg, tokenService, userService, handlers)
