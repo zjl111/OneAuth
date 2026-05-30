@@ -377,7 +377,7 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
     },
     {
       key: 'cas', title: 'CAS',
-      short: '适用于传统单点登录 (CAS 1.0/2.0/3.0/SAML 1.1)',
+      short: '适用于传统单点登录',
       accent: '#f59e0b', iconBg: '#fef3c7', iconColor: '#d97706',
       tag: '企业常用', tagBg: '#fef3c7', tagColor: '#92400e',
       icon: <KeyOutlined style={{ fontSize: 24 }} />,
