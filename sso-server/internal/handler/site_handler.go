@@ -26,7 +26,7 @@ type SiteInfo struct {
 }
 
 func (h *SiteHandler) Info(c *gin.Context) {
-	c.Header("Cache-Control", "public, max-age=60")
+	c.Header("Cache-Control", "no-cache")
 	info := SiteInfo{
 		Name:            "OneAuth",
 		ThemeColor:      "#1677ff",
