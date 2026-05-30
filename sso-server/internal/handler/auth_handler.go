@@ -29,6 +29,7 @@ const AdminDefaultScope = "openid profile email roles"
 
 type AuthHandler struct {
 	UserService   *service.UserService
+	LDAPService   *service.LDAPService
 	TokenService  *oauth.TokenService
 	SessionMgr    *session.Manager
 	Store         oauth.Store
@@ -120,10 +121,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	user, err := h.UserService.Authenticate(req.Username, req.Password)
+	loginMethod := "password"
 	if err != nil {
-		h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
-		response.Unauthorized(c, err.Error())
-		return
+		// 本地认证失败，且 LDAP 启用 → 尝试 LDAP
+		if h.LDAPService != nil && h.LDAPService.Enabled() {
+			ldapUser, ldapErr := h.LDAPService.Authenticate(req.Username, req.Password)
+			if ldapErr == nil && ldapUser != nil {
+				user = ldapUser
+				err = nil
+				loginMethod = "ldap"
+			} else if ldapErr != nil {
+				// LDAP 报错的具体信息保留到日志，不抛给前端，避免泄漏目录结构
+				h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "ldap", "failure", ldapErr.Error())
+			}
+		}
+		if err != nil {
+			h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
+			response.Unauthorized(c, err.Error())
+			return
+		}
 	}
 
 	// 登录控制规则：IP/时段/用户范围匹配 deny → 拒绝登录
@@ -150,7 +166,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "success", "")
+	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
 
 	response.OK(c, LoginResponse{
 		AccessToken:  access,

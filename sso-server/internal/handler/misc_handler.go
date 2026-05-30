@@ -12,6 +12,7 @@ import (
 
 	"sso-server/internal/model"
 	"sso-server/internal/repository"
+	"sso-server/internal/service"
 	"sso-server/pkg/mailer"
 	"sso-server/pkg/response"
 )
@@ -269,6 +270,7 @@ type ConfigHandler struct {
 	Repo     *repository.ConfigRepository
 	DictRepo *repository.DictionaryRepository
 	Mailer   *mailer.Mailer
+	LDAP     *service.LDAPService
 }
 
 func (h *ConfigHandler) List(c *gin.Context) {
@@ -319,6 +321,19 @@ func (h *ConfigHandler) TestSMTP(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"sent_to": req.To})
+}
+
+// TestLDAP 用当前 SystemConfig.ldap.* 与 LDAP 服务器做一次连接 + Bind + Search 测试
+func (h *ConfigHandler) TestLDAP(c *gin.Context) {
+	if h.LDAP == nil {
+		response.ServerError(c, "LDAP 服务未初始化")
+		return
+	}
+	if err := h.LDAP.TestConnection(); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
 }
 
 // UploadImage 通用图片上传（应用图标等），只落盘并返回 URL，不写任何业务表

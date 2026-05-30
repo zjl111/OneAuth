@@ -110,6 +110,8 @@ func main() {
 	// services
 	userService := service.NewUserService(userRepo)
 	clientService := service.NewClientService(clientRepo, monitorRepo)
+	ldapService := service.NewLDAPService(configRepo, userRepo)
+	wecomService := service.NewWeComService(configRepo, userRepo)
 
 	// 启动时把所有应用同步到监控表，避免内置/历史应用缺监控
 	if allClients, err := clientRepo.ListAll(); err == nil {
@@ -173,6 +175,7 @@ func main() {
 		},
 		Auth: &handler.AuthHandler{
 			UserService:   userService,
+			LDAPService:   ldapService,
 			TokenService:  tokenService,
 			SessionMgr:    sessionMgr,
 			Store:         store,
@@ -182,6 +185,16 @@ func main() {
 			Mailer:        mailService,
 			Issuer:        cfg.OAuth.Issuer,
 			FrontendBase:  frontendBase,
+		},
+		WeCom: &handler.WeComHandler{
+			WeCom:        wecomService,
+			UserService:  userService,
+			TokenService: tokenService,
+			SessionMgr:   sessionMgr,
+			ConfigRepo:   configRepo,
+			LogRepo:      logRepo,
+			Issuer:       cfg.OAuth.Issuer,
+			FrontendBase: frontendBase,
 		},
 		User: &handler.UserHandler{Service: userService},
 		App:  &handler.AppHandler{Service: clientService},
@@ -199,7 +212,7 @@ func main() {
 		Department: &handler.DepartmentHandler{Repo: deptRepo},
 		Role:       &handler.RoleHandler{Repo: roleRepo, PermRepo: permRepo},
 		Log:        &handler.LogHandler{Repo: logRepo},
-		Config:     &handler.ConfigHandler{Repo: configRepo, DictRepo: dictRepo, Mailer: mailService},
+		Config:     &handler.ConfigHandler{Repo: configRepo, DictRepo: dictRepo, Mailer: mailService, LDAP: ldapService},
 		Access:     &handler.AccessHandler{Repo: ipRepo},
 		Monitor:    &handler.MonitorHandler{Repo: monitorRepo, ClientRepo: clientRepo, ProbeFunc: probeFunc},
 		Status:     &handler.StatusHandler{MonitorRepo: monitorRepo, ClientService: clientService},

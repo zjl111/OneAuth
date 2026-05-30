@@ -33,6 +33,7 @@ type Handlers struct {
 	UserGroup  *handler.UserGroupHandler
 	LoginRule  *handler.LoginRuleHandler
 	AppPerm    *handler.AppPermHandler
+	WeCom      *handler.WeComHandler
 }
 
 func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserService, h *Handlers) *gin.Engine {
@@ -83,12 +84,21 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		oauthGroup.POST("/revoke", h.OAuth.Revoke)
 		oauthGroup.GET("/end_session", h.OAuth.EndSession)
 		oauthGroup.POST("/end_session", h.OAuth.EndSession)
+		// 企业微信扫码登录入口（前端按钮点击 → 跳企微 → 回调）
+		if h.WeCom != nil {
+			oauthGroup.GET("/wecom/login", h.WeCom.Login)
+			oauthGroup.GET("/wecom/callback", h.WeCom.Callback)
+		}
 	}
 
 	api := r.Group("/api/v1")
 
 	// 公开端点（登录、刷新、站点品牌）
 	api.GET("/site", h.Site.Info)
+	if h.WeCom != nil {
+		api.GET("/auth/wecom/status", h.WeCom.Status)
+		api.GET("/auth/wecom/qr-config", h.WeCom.QRConfig)
+	}
 	api.POST("/auth/login", h.Auth.Login)
 	api.POST("/auth/logout", h.Auth.Logout)
 	api.POST("/auth/refresh", h.Auth.Refresh)
@@ -191,6 +201,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/configs/upload-logo", h.Config.UploadLogo)
 		admin.POST("/configs/upload-image", h.Config.UploadImage)
 		admin.POST("/configs/test-smtp", h.Config.TestSMTP)
+		admin.POST("/configs/test-ldap", h.Config.TestLDAP)
 		admin.GET("/configs/:category", h.Config.ByCategory)
 		admin.GET("/dictionaries", h.Config.ListDict)
 		admin.POST("/dictionaries", h.Config.CreateDict)

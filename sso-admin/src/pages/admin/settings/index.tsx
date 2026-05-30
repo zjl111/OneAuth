@@ -9,6 +9,8 @@ import PlatformPanel from './panels/Platform';
 import MonitorPanel from './panels/Monitor';
 import SecurityPanel from './panels/Security';
 import SmtpPanel from './panels/Smtp';
+import LdapPanel from './panels/Ldap';
+import WecomPanel from './panels/Wecom';
 
 const NUMERIC_SECURITY_KEYS = new Set([
   'session_timeout',
@@ -19,12 +21,16 @@ const NUMERIC_SECURITY_KEYS = new Set([
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
 const NUMERIC_SMTP_KEYS = new Set(['port']);
 const PASSWORD_SMTP_KEYS = new Set(['password']);
+const PASSWORD_LDAP_KEYS = new Set(['bind_password']);
+const PASSWORD_WECOM_KEYS = new Set(['secret']);
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',
   security: '安全策略',
   monitor: '监控设置',
   smtp: '邮件 (SMTP)',
+  ldap: 'LDAP / AD',
+  wecom: '企业微信',
 };
 
 function isNumeric(category: string, key: string) {
@@ -48,10 +54,15 @@ export default function SettingsPage() {
     setLoading(false);
     const obj: Record<string, string | number | boolean> = {};
     d.forEach((c) => {
-      const isPasswordField = c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key);
+      const isPasswordField =
+        (c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key)) ||
+        (c.category === 'ldap' && PASSWORD_LDAP_KEYS.has(c.key)) ||
+        (c.category === 'wecom' && PASSWORD_WECOM_KEYS.has(c.key));
       const isBoolSwitch =
         (c.category === 'monitor' && c.key === 'public_status_page') ||
-        (c.category === 'smtp' && c.key === 'enabled');
+        (c.category === 'smtp' && c.key === 'enabled') ||
+        (c.category === 'ldap' && (c.key === 'enabled' || c.key === 'start_tls')) ||
+        (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user'));
       if (isPasswordField) {
         obj[`${c.category}.${c.key}`] = '';
       } else if (isBoolSwitch) {
@@ -70,7 +81,7 @@ export default function SettingsPage() {
 
   const grouped = useMemo(() => {
     // 强制 tab 顺序：平台信息 > 监控设置 > 安全策略 > SMTP
-    const order = ['platform', 'monitor', 'security', 'smtp'];
+    const order = ['platform', 'monitor', 'security', 'smtp', 'ldap', 'wecom'];
     const g: Record<string, SystemConfig[]> = {};
     order.forEach((k) => (g[k] = []));
     data.forEach((c) => {
@@ -91,6 +102,8 @@ export default function SettingsPage() {
       const [category, ...rest] = k.split('.');
       const key = rest.join('.');
       if (category === 'smtp' && PASSWORD_SMTP_KEYS.has(key) && v === '') continue;
+      if (category === 'ldap' && PASSWORD_LDAP_KEYS.has(key) && v === '') continue;
+      if (category === 'wecom' && PASSWORD_WECOM_KEYS.has(key) && v === '') continue;
       const strVal = typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v);
       items.push({ category, key, value: strVal });
     }
@@ -161,8 +174,10 @@ export default function SettingsPage() {
                 )}
                 {cat === 'security' && <SecurityPanel />}
                 {cat === 'monitor' && <MonitorPanel />}
+                {cat === 'ldap' && <LdapPanel />}
+                {cat === 'wecom' && <WecomPanel />}
                 {/* 其余分组（如未来新增）走兜底渲染 */}
-                {!['platform', 'smtp', 'security', 'monitor'].includes(cat) && items.map((c) => (
+                {!['platform', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => (
                   <Form.Item key={c.id} label={c.description || c.key} name={`${c.category}.${c.key}`}>
                     {isNumeric(c.category, c.key)
                       ? <InputNumber min={0} style={{ width: '100%' }} />

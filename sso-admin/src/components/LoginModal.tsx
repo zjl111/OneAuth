@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { Modal, Form, Input, Button, App as AntdApp } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { useEffect, useState } from 'react';
+import { Modal, Form, Input, Button, App as AntdApp, Divider } from 'antd';
+import { UserOutlined, LockOutlined, WechatOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useSite } from '@/hooks/useSite';
+import { get } from '@/api/request';
+import WecomQRLogin from './WecomQRLogin';
 import './LoginModal.css';
 
 interface Props {
@@ -21,6 +23,15 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
   const site = useSite();
   const login = useAuthStore((s) => s.login);
   const [submitting, setSubmitting] = useState(false);
+  const [wecomEnabled, setWecomEnabled] = useState(false);
+  const [showWecomQR, setShowWecomQR] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    get<{ enabled: boolean }>('/auth/wecom/status')
+      .then((d) => setWecomEnabled(!!d?.enabled))
+      .catch(() => setWecomEnabled(false));
+  }, [open]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setSubmitting(true);
@@ -72,6 +83,30 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
           </Button>
         </Form.Item>
       </Form>
+      {wecomEnabled && (
+        <>
+          <Divider plain style={{ color: '#94a3b8', fontSize: 12, margin: '8px 0 16px' }}>第三方登录</Divider>
+          {!showWecomQR ? (
+            <Button
+              block
+              size="large"
+              icon={<WechatOutlined style={{ color: '#07c160' }} />}
+              onClick={() => setShowWecomQR(true)}
+            >
+              使用企业微信登录
+            </Button>
+          ) : (
+            <>
+              <WecomQRLogin returnTo={returnTo} />
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                <a onClick={() => setShowWecomQR(false)} style={{ color: '#94a3b8', fontSize: 12 }}>
+                  ← 返回账号密码登录
+                </a>
+              </div>
+            </>
+          )}
+        </>
+      )}
       <div className="login-modal-foot">
         <a
           onClick={() => {
