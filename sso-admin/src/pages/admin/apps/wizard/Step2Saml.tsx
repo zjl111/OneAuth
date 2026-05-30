@@ -164,8 +164,12 @@ export default function Step2Saml() {
                 <Form.Item
                   name="saml_certificate"
                   label="SP 公钥证书"
-                  tooltip="粘贴 PEM 格式的 X.509 证书；开启加密断言时必填"
-                  extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>开启加密时填写</span>}
+                  tooltip="业务系统（SP）的 X.509 公钥证书。仅在以下两种情况需要：1) 开启了上方「加密断言」；2) SP 会对 AuthnRequest 签名。否则留空即可。"
+                  extra={
+                    <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                      由业务系统（SP）提供，PEM 格式。多数对接不需要填，留空即可。
+                    </span>
+                  }
                 >
                   <Input.TextArea
                     rows={5}
