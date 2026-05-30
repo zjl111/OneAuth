@@ -13,9 +13,6 @@ const titleStyle: React.CSSProperties = {
   fontWeight: 600,
   color: '#1d2c5b',
   marginBottom: 16,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
 };
 
 export default function Step2Saml() {
@@ -25,7 +22,7 @@ export default function Step2Saml() {
         type="info"
         showIcon
         icon={<InfoCircleOutlined />}
-        message="通常只需要填写「应用标识 Entity ID」和「登录回调地址 ACS URL」，其余保持默认即可"
+        message="通常只需要填写 Entity ID 和 ACS URL，其余保持默认即可"
       />
 
       {/* —— 必填配置 —— */}
@@ -34,7 +31,7 @@ export default function Step2Saml() {
 
         <Form.Item
           name="saml_entity_id"
-          label="应用标识 Entity ID"
+          label="Entity ID"
           rules={[{ required: true, message: '请输入 SP Entity ID' }]}
           tooltip="业务系统的唯一标识，由对方 metadata 给出"
           extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>业务系统的唯一标识</span>}
@@ -44,10 +41,10 @@ export default function Step2Saml() {
 
         <Form.Item
           name="saml_acs_url"
-          label="登录回调地址 ACS URL"
+          label="ACS URL"
           rules={[{ required: true, message: '请输入 Assertion Consumer Service URL' }]}
           tooltip="OneAuth 登录成功后返回到业务系统的地址"
-          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>OneAuth 登录成功后返回的地址</span>}
+          extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>登录成功后回调地址</span>}
         >
           <Input placeholder="https://sp.example.com/saml/acs" />
         </Form.Item>
@@ -60,10 +57,10 @@ export default function Step2Saml() {
         >
           <Select
             options={[
-              { value: 'original',  label: '用户名' },
-              { value: 'email',     label: '邮箱' },
-              { value: 'mobile',    label: '手机号' },
-              { value: 'employee',  label: '工号' },
+              { value: 'original', label: '用户名' },
+              { value: 'email',    label: '邮箱' },
+              { value: 'mobile',   label: '手机号' },
+              { value: 'employee', label: '工号' },
             ]}
           />
         </Form.Item>
@@ -77,36 +74,36 @@ export default function Step2Saml() {
             key: 'advanced',
             label: <span style={{ color: '#1d2c5b', fontWeight: 600 }}>高级配置（一般保持默认）</span>,
             children: (
-              <div style={{ ...sectionStyle, padding: '20px 28px 6px' }}>
+              <div style={sectionStyle}>
                 <Form.Item
                   name="saml_audience"
-                  label="Audience 受众"
-                  tooltip="留空则使用 Entity ID"
+                  label="Audience"
+                  tooltip="受众；留空则使用 Entity ID"
                 >
                   <Input placeholder="留空则使用 Entity ID" />
                 </Form.Item>
 
                 <Form.Item
                   name="saml_issuer"
-                  label="OneAuth 签发方 Issuer"
-                  tooltip="留空使用 OneAuth 默认 issuer（站点 URL）"
+                  label="Issuer"
+                  tooltip="OneAuth 签发方；留空使用 OneAuth 默认 issuer（站点 URL）"
                 >
                   <Input placeholder="留空使用 OneAuth 默认 issuer" />
                 </Form.Item>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '0 32px' }}>
-                  <Form.Item name="saml_binding" label="登录消息传输方式" rules={[{ required: true }]}>
+                  <Form.Item name="saml_binding" label="传输方式" rules={[{ required: true }]}>
                     <Select
                       options={[
-                        { value: 'Redirect-Post',            label: 'Redirect → POST（推荐）' },
-                        { value: 'Post-Post',                label: 'POST → POST' },
-                        { value: 'IdpInit-Post',             label: 'IdP-Init → POST' },
-                        { value: 'Redirect-PostSimpleSign',  label: 'Redirect → PostSimpleSign' },
-                        { value: 'Post-PostSimpleSign',      label: 'POST → PostSimpleSign' },
+                        { value: 'Redirect-Post',           label: 'Redirect → POST（推荐）' },
+                        { value: 'Post-Post',               label: 'POST → POST' },
+                        { value: 'IdpInit-Post',            label: 'IdP-Init → POST' },
+                        { value: 'Redirect-PostSimpleSign', label: 'Redirect → PostSimpleSign' },
+                        { value: 'Post-PostSimpleSign',     label: 'POST → PostSimpleSign' },
                       ]}
                     />
                   </Form.Item>
-                  <Form.Item name="saml_nameid_format" label="用户标识格式" rules={[{ required: true }]}>
+                  <Form.Item name="saml_nameid_format" label="NameID 格式" rules={[{ required: true }]}>
                     <Select
                       options={[
                         { value: 'unspecified',                label: 'unspecified（推荐）' },
@@ -143,7 +140,8 @@ export default function Step2Saml() {
 
                   <Form.Item
                     name="saml_encrypted"
-                    label="是否加密登录声明"
+                    label="加密断言"
+                    tooltip="是否加密 SAML Assertion"
                     getValueProps={(v) => ({ value: v ? 'yes' : 'no' })}
                     getValueFromEvent={(e) => e.target.value === 'yes'}
                   >
@@ -155,9 +153,9 @@ export default function Step2Saml() {
 
                   <Form.Item
                     name="saml_validity_seconds"
-                    label="登录声明有效期"
+                    label="断言有效期"
                     rules={[{ required: true }]}
-                    extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>建议值：60 ~ 600 秒</span>}
+                    extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>建议 60 ~ 600 秒</span>}
                   >
                     <InputNumber min={30} max={3600} addonAfter="秒" style={{ width: '100%' }} />
                   </Form.Item>
@@ -165,8 +163,8 @@ export default function Step2Saml() {
 
                 <Form.Item
                   name="saml_certificate"
-                  label="应用加密证书（SP 公钥）"
-                  tooltip="粘贴 PEM 格式的 X.509 证书；开启加密 Assertion 时必填"
+                  label="SP 公钥证书"
+                  tooltip="粘贴 PEM 格式的 X.509 证书；开启加密断言时必填"
                   extra={<span style={{ color: '#94a3b8', fontSize: 12 }}>开启加密时填写</span>}
                 >
                   <Input.TextArea
