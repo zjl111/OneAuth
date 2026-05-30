@@ -221,6 +221,16 @@ func main() {
 		UserGroup:  &handler.UserGroupHandler{Repo: userGroupRepo},
 		LoginRule:  &handler.LoginRuleHandler{Repo: loginRuleRepo},
 		AppPerm:    &handler.AppPermHandler{GrantRepo: appGrantRepo, ClientRepo: clientRepo},
+		CAS: &handler.CASHandler{
+			Store:         store,
+			SessionMgr:    sessionMgr,
+			ClientService: clientService,
+			UserService:   userService,
+			GrantRepo:     grantRepo,
+			AppGrantRepo:  appGrantRepo,
+			LogRepo:       logRepo,
+			FrontendBase:  frontendBase,
+		},
 	}
 
 	r := router.Setup(cfg, tokenService, userService, handlers)

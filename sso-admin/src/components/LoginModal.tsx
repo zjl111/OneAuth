@@ -40,8 +40,8 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       message.success(`欢迎回来，${u.nickname || u.username}`);
       onClose();
       const target = returnTo || redirectTo;
-      if (target.startsWith('/oauth/authorize')) {
-        // OAuth 协议页面必须 full reload，让后端读到刚 set 的 sso_session cookie
+      if (target.startsWith('/oauth/authorize') || target.startsWith('/cas/')) {
+        // OAuth / CAS 协议页面必须 full reload，让后端读到刚 set 的 sso_session cookie
         window.location.replace(target);
         return;
       }

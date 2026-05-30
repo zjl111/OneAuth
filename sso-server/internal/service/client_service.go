@@ -406,6 +406,10 @@ func (s *ClientService) GetByClientID(clientID string) (*model.OAuth2Client, err
 	return s.repo.GetByClientID(clientID)
 }
 
+func (s *ClientService) FindByCASService(service string) (*model.OAuth2Client, error) {
+	return s.repo.FindByCASService(service)
+}
+
 func (s *ClientService) GetByID(id uuid.UUID) (*model.OAuth2Client, error) {
 	return s.repo.GetByID(id)
 }

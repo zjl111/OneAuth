@@ -34,6 +34,7 @@ type Handlers struct {
 	LoginRule  *handler.LoginRuleHandler
 	AppPerm    *handler.AppPermHandler
 	WeCom      *handler.WeComHandler
+	CAS        *handler.CASHandler
 }
 
 func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserService, h *Handlers) *gin.Engine {
@@ -72,6 +73,19 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	// OIDC 公共端点
 	r.GET("/.well-known/openid-configuration", h.OAuth.Discovery)
 	r.GET("/oauth/jwks.json", h.OAuth.JWKS)
+
+	// CAS 2.0/3.0 协议端点
+	if h.CAS != nil {
+		casGroup := r.Group("/cas")
+		{
+			casGroup.GET("/login", h.CAS.Login)
+			casGroup.GET("/logout", h.CAS.Logout)
+			casGroup.GET("/serviceValidate", h.CAS.ServiceValidate)
+			casGroup.GET("/proxyValidate", h.CAS.ServiceValidate) // V2 别名
+			casGroup.GET("/p3/serviceValidate", h.CAS.P3ServiceValidate)
+			casGroup.GET("/p3/proxyValidate", h.CAS.P3ServiceValidate) // V3 别名
+		}
+	}
 
 	// OAuth2 端点
 	oauthGroup := r.Group("/oauth")

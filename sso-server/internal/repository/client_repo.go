@@ -35,6 +35,15 @@ func (r *ClientRepository) GetByClientID(clientID string) (*model.OAuth2Client, 
 	return &c, nil
 }
 
+// FindByCASService 按 cas_service 精确匹配（取第一个），用于 CAS /login?service= 路由
+func (r *ClientRepository) FindByCASService(service string) (*model.OAuth2Client, error) {
+	var c model.OAuth2Client
+	if err := r.db.First(&c, "protocol = ? AND is_active = ? AND cas_service = ?", "cas", true, service).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 type ClientQuery struct {
 	Name     string
 	Page     int
