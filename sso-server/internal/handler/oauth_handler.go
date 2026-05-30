@@ -254,7 +254,8 @@ func (h *OAuthHandler) handleAuthCodeGrant(c *gin.Context, client *model.OAuth2C
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
-	h.LogRepo.RecordLogin(&uid, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "oauth_code", "success", "client="+client.ClientID)
+	// 应用通过 OAuth code 换 token —— 属于"应用访问"，记 access_log
+	h.LogRepo.RecordAccess(&uid, user.Username, client.ClientID, client.ClientName, c.ClientIP())
 
 	expiresIn := client.AccessTokenTTL
 	if expiresIn <= 0 {
@@ -319,7 +320,8 @@ func (h *OAuthHandler) handleRefreshTokenGrant(c *gin.Context, client *model.OAu
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 		return
 	}
-	h.LogRepo.RecordLogin(&uid, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "refresh_token", "success", "client="+client.ClientID)
+	// 应用方 refresh_token —— 同样属于"应用访问"
+	h.LogRepo.RecordAccess(&uid, user.Username, client.ClientID, client.ClientName, c.ClientIP())
 
 	expiresIn := client.AccessTokenTTL
 	if expiresIn <= 0 {

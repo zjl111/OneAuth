@@ -115,6 +115,8 @@ LIMIT 10`
 type LogQuery struct {
 	Username  string
 	Status    string
+	ClientID  string // access_log 用：按应用 client_id 过滤
+	Resource  string // operation_log 用：按 resource_type 过滤
 	StartTime *time.Time
 	EndTime   *time.Time
 	Page      int
@@ -151,6 +153,9 @@ func (r *LogRepository) ListOperationLogs(q LogQuery) ([]model.OperationLog, int
 			tx = tx.Where("status = ?", code)
 		}
 	}
+	if q.Resource != "" {
+		tx = tx.Where("resource_type LIKE ?", "%"+q.Resource+"%")
+	}
 	var total int64
 	tx.Count(&total)
 	page, size := paginate(q.Page, q.PageSize)
@@ -161,6 +166,9 @@ func (r *LogRepository) ListOperationLogs(q LogQuery) ([]model.OperationLog, int
 
 func (r *LogRepository) ListAccessLogs(q LogQuery) ([]model.AccessLog, int64, error) {
 	tx := applyLogFilter(r.db.Model(&model.AccessLog{}), q)
+	if q.ClientID != "" {
+		tx = tx.Where("client_id LIKE ?", "%"+q.ClientID+"%")
+	}
 	var total int64
 	tx.Count(&total)
 	page, size := paginate(q.Page, q.PageSize)

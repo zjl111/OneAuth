@@ -231,6 +231,8 @@ func parseLogQuery(c *gin.Context) repository.LogQuery {
 	q := repository.LogQuery{
 		Username: c.Query("username"),
 		Status:   c.Query("status"),
+		ClientID: c.Query("client_id"),
+		Resource: c.Query("resource"),
 		Page:     parseInt(c.Query("page"), 1),
 		PageSize: parseInt(c.Query("page_size"), 20),
 	}

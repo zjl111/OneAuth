@@ -195,12 +195,30 @@ export default function LogsPage() {
           {
             key: 'op',
             label: '操作日志',
-            children: <LogTable<OperationLog> fetcher={logApi.operation} columns={operationColumns} />,
+            children: (
+              <LogTable<OperationLog>
+                fetcher={logApi.operation}
+                columns={operationColumns}
+                filters={[
+                  { key: 'username', placeholder: '用户' },
+                  { key: 'resource', placeholder: '资源类型' },
+                ]}
+              />
+            ),
           },
           {
             key: 'access',
-            label: '历史访问',
-            children: <LogTable<AccessLog> fetcher={logApi.access} columns={accessColumns} />,
+            label: '应用访问日志',
+            children: (
+              <LogTable<AccessLog>
+                fetcher={logApi.access}
+                columns={accessColumns}
+                filters={[
+                  { key: 'username', placeholder: '用户' },
+                  { key: 'client_id', placeholder: 'Client ID' },
+                ]}
+              />
+            ),
           },
         ]}
       />

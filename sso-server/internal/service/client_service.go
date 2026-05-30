@@ -116,7 +116,8 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		LogoURL:          in.LogoURL,
 		HomeURL:          in.HomeURL,
 		LoginURL:         in.LoginURL,
-		HealthCheckURL:   in.HealthCheckURL,
+		// 监控地址默认与"应用入口"相同；状态监控页可单独覆盖
+		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
 		IsActive:         true,
 
 		RedirectURIs:    in.RedirectURIs,
@@ -159,10 +160,12 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		return nil, err
 	}
 	if s.monitorRepo != nil {
+		// 监控 URL 跟应用 HealthCheckURL 保持一致（fallback 到 LoginURL，已在上面默认）
+		hcURL := c.HealthCheckURL
 		s.monitorRepo.Upsert(&model.AppMonitor{
 			ClientID:       clientID,
-			Enabled:        in.HealthCheckURL != "",
-			HealthCheckURL: in.HealthCheckURL,
+			Enabled:        hcURL != "",
+			HealthCheckURL: hcURL,
 			TimeoutMs:      10000,
 			DegradedMs:     2000,
 			CurrentStatus:  model.StatusNoData,
