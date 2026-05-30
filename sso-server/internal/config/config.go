@@ -120,6 +120,10 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("SSO_REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
+	// FrontendURL：env 存在即覆盖（包括显式空字符串），生产同源部署用空串
+	if _, ok := os.LookupEnv("SSO_OAUTH_FRONTEND_URL"); ok {
+		cfg.OAuth.FrontendURL = os.Getenv("SSO_OAUTH_FRONTEND_URL")
+	}
 
 	return &cfg, nil
 }
