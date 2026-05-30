@@ -37,6 +37,8 @@ services:
       SSO_REDIS_ADDR: redis:6379
       SSO_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
       SSO_OAUTH_ISSUER: ${SSO_ISSUER:-http://localhost}
+      # 生产同源，前端登录跳转用相对路径
+      SSO_OAUTH_FRONTEND_URL: ""
     volumes:
       - rsa_keys:/app/keys
       - uploads:/app/data/uploads
