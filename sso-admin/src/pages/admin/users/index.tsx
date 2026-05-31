@@ -16,6 +16,7 @@ import {
   Row,
   Col,
   Upload,
+  Checkbox,
   App as AntdApp,
 } from 'antd';
 import {
@@ -101,27 +102,33 @@ export default function UserListPage() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ is_active: true });
+    form.setFieldsValue({ is_active: true, is_admin: false });
     setModalOpen(true);
   };
 
   const openEdit = (u: User) => {
     setEditing(u);
+    const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
     form.setFieldsValue({
       ...u,
-      role_ids: u.roles.map((r) => r.id),
+      is_admin: !!superAdminRoleID && u.roles.some((r) => r.id === superAdminRoleID),
     });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
     const values = await form.validateFields();
+    // is_admin checkbox → role_ids
+    const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
+    const payload: any = { ...values };
+    delete payload.is_admin;
+    payload.role_ids = values.is_admin && superAdminRoleID ? [superAdminRoleID] : [];
     try {
       if (editing) {
-        await usersApi.update(editing.id, values);
+        await usersApi.update(editing.id, payload);
         message.success('已更新');
       } else {
-        await usersApi.create(values);
+        await usersApi.create(payload);
         message.success('已创建');
       }
       setModalOpen(false);
@@ -455,20 +462,12 @@ export default function UserListPage() {
                       />
                     </Form.Item>
                     <Form.Item
-                      name="role_ids"
-                      label="角色"
-                      extra="勾选「超级管理员」即可访问管理后台；不勾则仅为普通用户。其他角色（应用管理员 / 审计员）目前还未在后端生效，暂不暴露。"
+                      name="is_admin"
+                      label="管理员权限"
+                      valuePropName="checked"
+                      extra="勾选后该用户可登录 OneAuth 管理后台；不勾默认为普通用户，仅能访问已授权应用。"
                     >
-                      <Select
-                        mode="multiple"
-                        placeholder="选择角色"
-                        // 暂时只暴露 super_admin —— 其他角色 (app_admin / auditor / user)
-                        // 后端 middleware 仅看 is_staff bool，没有按 permission 真正放行，
-                        // 选了也白搭。在权限引擎完整接入之前先隐藏，避免误导。
-                        options={roles
-                          .filter((r) => r.code === 'super_admin')
-                          .map((r) => ({ value: r.id, label: r.name }))}
-                      />
+                      <Checkbox>授予管理员权限</Checkbox>
                     </Form.Item>
                   </>
                 ),
