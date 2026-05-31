@@ -26,6 +26,9 @@ type OAuth2Client struct {
 	IsBuiltin      bool   `gorm:"default:false" json:"is_builtin"`
 	HealthCheckURL string `gorm:"size:512" json:"health_check_url"`
 
+	// 应用访问授权模式：public（全部用户可用）/ user / group / org
+	GrantMode string `gorm:"size:16;default:'public'" json:"grant_mode"`
+
 	// === OAuth 2.0 / OIDC 协议配置 ===
 	// link 协议不需要这些字段，故放宽为可空（旧库 not null 约束需配合 ALTER 处理）
 	RedirectURIs    StringSlice `gorm:"type:text" json:"redirect_uris"`

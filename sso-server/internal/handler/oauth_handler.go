@@ -124,8 +124,8 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 
 	userID := uuid.MustParse(sd.UserID)
 
-	// 应用授权检查（白名单门）
-	if h.AppGrantRepo != nil && !client.IsBuiltin {
+	// 应用访问授权门：grant_mode=public 直接放行；其他模式查 sso_app_grant 表
+	if h.AppGrantRepo != nil && !client.IsBuiltin && client.GrantMode != "" && client.GrantMode != "public" {
 		allowed, _ := h.AppGrantRepo.UserAllowed(clientID, userID)
 		if !allowed {
 			errorRedirect(c, redirectURI, "access_denied", "您没有权限访问该应用", state)

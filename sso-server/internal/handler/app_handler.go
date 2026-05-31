@@ -51,7 +51,11 @@ func (h *AppHandler) Detail(c *gin.Context) {
 		response.NotFound(c, "应用不存在")
 		return
 	}
-	response.OK(c, cl)
+	grants, _ := h.Service.GrantsByClient(cl.ClientID)
+	response.OK(c, gin.H{
+		"client": cl,
+		"grants": grants,
+	})
 }
 
 func (h *AppHandler) Update(c *gin.Context) {

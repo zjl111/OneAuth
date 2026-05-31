@@ -59,6 +59,9 @@ export interface OAuth2Client {
   cas_expires_seconds?: number;
   cas_return_attributes?: boolean;
 
+  grant_mode?: 'public' | 'user' | 'group' | 'org';
+  grants?: Array<{ principal_type: string; principal_id: string; principal_name?: string }>;
+
   created_at: string;
   updated_at: string;
 }
@@ -66,7 +69,11 @@ export interface OAuth2Client {
 export const appsApi = {
   list: (params: Record<string, unknown>) => get<PageData<OAuth2Client>>('/apps', params),
   create: (data: Partial<OAuth2Client>) => post<OAuth2Client>('/apps', data),
-  detail: (id: string) => get<OAuth2Client>(`/apps/${id}`),
+  detail: (id: string) =>
+    get<{
+      client: OAuth2Client;
+      grants: Array<{ principal_type: string; principal_id: string; principal_name?: string }>;
+    }>(`/apps/${id}`),
   update: (id: string, data: Partial<OAuth2Client>) => put<OAuth2Client>(`/apps/${id}`, data),
   delete: (id: string) => del(`/apps/${id}`),
   batchDelete: (ids: string[]) => post<{ deleted: number; failed: string[] }>('/apps/batch-delete', { ids }),

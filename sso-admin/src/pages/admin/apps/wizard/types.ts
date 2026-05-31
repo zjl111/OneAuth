@@ -101,6 +101,10 @@ export type WizardValues = {
   cas_user_attribute?: string;
   cas_expires_seconds?: number;
   cas_return_attributes?: boolean;
+
+  // 应用授权
+  grant_mode?: 'public' | 'user' | 'group' | 'org';
+  grants?: Array<{ principal_type: string; principal_id: string; principal_name?: string }>;
 };
 
 export const USERINFO_LABEL: Record<string, string> = {

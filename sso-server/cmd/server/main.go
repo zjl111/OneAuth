@@ -111,7 +111,7 @@ func main() {
 
 	// services
 	userService := service.NewUserService(userRepo)
-	clientService := service.NewClientService(clientRepo, monitorRepo)
+	clientService := service.NewClientService(clientRepo, monitorRepo, appGrantRepo)
 	ldapService := service.NewLDAPService(configRepo, userRepo)
 	wecomService := service.NewWeComService(configRepo, userRepo)
 
@@ -222,7 +222,6 @@ func main() {
 		Session:    &handler.SessionHandler{SessionMgr: sessionMgr},
 		UserGroup:  &handler.UserGroupHandler{Repo: userGroupRepo},
 		LoginRule:  &handler.LoginRuleHandler{Repo: loginRuleRepo},
-		AppPerm:    &handler.AppPermHandler{GrantRepo: appGrantRepo, ClientRepo: clientRepo},
 		CAS: &handler.CASHandler{
 			Store:         store,
 			SessionMgr:    sessionMgr,

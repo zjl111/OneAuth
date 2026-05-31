@@ -55,12 +55,10 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		grantedSet[g.ClientID] = true
 	}
 
-	// 应用授权过滤：有 grant 配置的应用只对授权 principal 可见
+	// 应用授权过滤：grant_mode=public 全部用户可见；其他模式按 sso_app_grant 表过滤
 	var allowedSet map[string]bool
-	var restrictedSet map[string]bool
 	if h.AppGrantRepo != nil {
 		allowedSet, _ = h.AppGrantRepo.AllowedClientIDs(uid)
-		restrictedSet, _ = h.AppGrantRepo.ClientsWithGrant()
 	}
 
 	apps := []PortalApp{}
@@ -69,13 +67,10 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		if cl.ClientID == "sso-admin" {
 			continue
 		}
-		// 应用授权：如果该应用配置了授权但用户没命中，过滤
-		if restrictedSet != nil && restrictedSet[cl.ClientID] {
-			if allowedSet == nil || !allowedSet[cl.ClientID] {
-				// 但 super_admin 永远能看（避免锁死管理员）
-				if !user.IsStaff {
-					continue
-				}
+		// 受限应用：grant_mode != public 时必须在 allowedSet 里（super_admin 兜底可见）
+		if cl.GrantMode != "" && cl.GrantMode != "public" {
+			if (allowedSet == nil || !allowedSet[cl.ClientID]) && !user.IsStaff {
+				continue
 			}
 		}
 		apps = append(apps, PortalApp{

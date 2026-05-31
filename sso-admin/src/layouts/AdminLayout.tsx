@@ -44,7 +44,6 @@ const menuItems: any[] = [
     label: '权限管理',
     children: [
       { key: '/admin/roles', icon: <SafetyOutlined />, label: '角色权限' },
-      { key: '/admin/app-perms', icon: <AppstoreOutlined />, label: '应用权限' },
     ],
   },
   { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用中心' },
@@ -68,7 +67,6 @@ const labelMap: Record<string, string> = {
   '/admin/orgs': '组织',
   '/admin/user-groups': '用户组',
   '/admin/roles': '角色权限',
-  '/admin/app-perms': '应用权限',
   '/admin/apps': '应用中心',
   '/admin/access/login-rules': '登录控制',
   '/admin/access/sessions': '在线会话',
@@ -83,7 +81,6 @@ const breadcrumbExtra: Record<string, string> = {
   '/admin/orgs': '身份目录',
   '/admin/user-groups': '身份目录',
   '/admin/roles': '权限管理',
-  '/admin/app-perms': '权限管理',
   '/admin/access/login-rules': '访问控制',
   '/admin/access/sessions': '访问控制',
 };
@@ -122,7 +119,7 @@ export default function AdminLayout() {
     if (['/admin/users', '/admin/orgs', '/admin/user-groups'].includes(location.pathname)) {
       keys.push('identity');
     }
-    if (['/admin/roles', '/admin/app-perms'].includes(location.pathname)) {
+    if (location.pathname === '/admin/roles') {
       keys.push('perms');
     }
     if (location.pathname.startsWith('/admin/access')) {

@@ -107,9 +107,18 @@ export default function AppListPage() {
     setDrawerOpen(true);
   };
 
-  const openEdit = (c: OAuth2Client) => {
-    setEditing(c);
+  const openEdit = async (c: OAuth2Client) => {
     setPickedFamily(((c.protocol as Proto) || 'oidc') as ProtoFamily);
+    // 拉详情拿到 grants 列表（列表接口不带 grants）
+    try {
+      const detail: any = await appsApi.detail(c.id);
+      // 后端返回 { client, grants }
+      const merged: any = { ...(detail?.client || c), grants: detail?.grants || [] };
+      merged.grant_mode = (detail?.client || c).grant_mode || 'public';
+      setEditing(merged);
+    } catch {
+      setEditing(c);
+    }
     setDrawerOpen(true);
   };
 

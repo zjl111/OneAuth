@@ -451,8 +451,8 @@ func (h *SAMLHandler) SSO(c *gin.Context) {
 		return
 	}
 
-	// 应用授权门
-	if h.AppGrantRepo != nil && !client.IsBuiltin {
+	// 应用访问授权门：grant_mode=public 直接放行；其他模式查 sso_app_grant 表
+	if h.AppGrantRepo != nil && !client.IsBuiltin && client.GrantMode != "" && client.GrantMode != "public" {
 		allowed, _ := h.AppGrantRepo.UserAllowed(client.ClientID, uid)
 		if !allowed {
 			c.String(http.StatusForbidden, "您没有权限访问该应用")

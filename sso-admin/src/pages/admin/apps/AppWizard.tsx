@@ -25,6 +25,7 @@ import {
 import Step2OAuth2OIDC from './wizard/Step2OAuth2OIDC';
 import Step2Saml from './wizard/Step2Saml';
 import Step2Cas from './wizard/Step2Cas';
+import Step3AppPerm from './wizard/Step3AppPerm';
 import Step3Handoff from './wizard/Step3Handoff';
 import { copyHandoffText, downloadHandoffJSON } from './wizard/handoff-utils';
 
@@ -130,6 +131,9 @@ export default function AppWizard({
         cas_user_attribute: editing.cas_user_attribute || 'username',
         cas_expires_seconds: editing.cas_expires_seconds || 300,
         cas_return_attributes: editing.cas_return_attributes !== false,
+
+        grant_mode: (editing as any).grant_mode || 'public',
+        grants: (editing as any).grants || [],
       });
     } else {
       const initVersion = defaultProtocolVersion(family);
@@ -163,6 +167,9 @@ export default function AppWizard({
         cas_user_attribute: 'username',
         cas_expires_seconds: 300,
         cas_return_attributes: true,
+
+        grant_mode: 'public',
+        grants: [],
       });
     }
   }, [open, editing, family]);
@@ -228,44 +235,56 @@ export default function AppWizard({
         cas_return_attributes: !!v.cas_return_attributes,
       });
     }
+    // 应用授权
+    base.grant_mode = v.grant_mode || 'public';
+    if (base.grant_mode === 'public') {
+      base.grants = [];
+    } else {
+      base.grants = (v.grants || []).map((g: any) => ({
+        principal_type: g.principal_type,
+        principal_id: g.principal_id,
+      }));
+    }
     return base;
+  };
+
+  const submitAndAdvance = async () => {
+    const v = form.getFieldsValue(true);
+    setSaving(true);
+    try {
+      const real = await onSubmit(buildPayload(v));
+      setSubmitted(real);
+      setStep(3);
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '提交失败');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleNext = async () => {
     try {
       if (step === 0) {
         await form.validateFields(['client_name', 'login_url']);
-        // 登录页跳转应用没有 Step2，直接提交 → Step3
-        if (family === 'link') {
-          const v = form.getFieldsValue(true);
-          setSaving(true);
-          try {
-            const real = await onSubmit(buildPayload(v));
-            setSubmitted(real);
-            setStep(2);
-          } catch (e: any) {
-            message.error(e?.response?.data?.message || '提交失败');
-          } finally {
-            setSaving(false);
-          }
-          return;
-        }
-        setStep(1);
+        // link 协议没有客户端配置步骤，直接进入应用授权
+        setStep(family === 'link' ? 2 : 1);
         return;
       }
       if (step === 1) {
         await form.validateFields(STEP2_FIELDS[family]);
+        setStep(2);
+        return;
+      }
+      if (step === 2) {
+        // 应用授权步骤：非 public 时校验已选 principal 至少 1 个
         const v = form.getFieldsValue(true);
-        setSaving(true);
-        try {
-          const real = await onSubmit(buildPayload(v));
-          setSubmitted(real);
-          setStep(2);
-        } catch (e: any) {
-          message.error(e?.response?.data?.message || '提交失败');
-        } finally {
-          setSaving(false);
+        const mode = v.grant_mode || 'public';
+        if (mode !== 'public' && (!v.grants || v.grants.length === 0)) {
+          const label = mode === 'user' ? '用户' : mode === 'group' ? '用户组' : '组织';
+          message.warning(`请至少选择一个${label}，或将授权范围改为「全部」`);
+          return;
         }
+        await submitAndAdvance();
       }
     } catch {
       /* validateFields handles ui */
@@ -279,13 +298,13 @@ export default function AppWizard({
     <div className="app-wizard">
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
         <Steps
-          current={family === 'link' && step === 2 ? 1 : step}
+          current={family === 'link' && step >= 2 ? step - 1 : step}
           items={
             family === 'link'
-              ? [{ title: '应用信息' }, { title: '信息确认' }]
-              : [{ title: '应用信息' }, { title: '客户端配置' }, { title: '信息确认' }]
+              ? [{ title: '应用信息' }, { title: '应用授权' }, { title: '信息确认' }]
+              : [{ title: '应用信息' }, { title: '客户端配置' }, { title: '应用授权' }, { title: '信息确认' }]
           }
-          style={{ width: family === 'link' ? 460 : 640 }}
+          style={{ width: family === 'link' ? 600 : 760 }}
         />
       </div>
 
@@ -376,15 +395,20 @@ export default function AppWizard({
           </div>
         </div>
 
-        {/* ============== Step 2 ============== */}
+        {/* ============== Step 2 客户端配置 ============== */}
         <div style={{ display: step === 1 ? 'block' : 'none' }}>
           {(family === 'oidc' || family === 'oauth2') && <Step2OAuth2OIDC isOIDC={isOIDC} />}
           {family === 'saml' && <Step2Saml />}
           {family === 'cas' && <Step2Cas />}
         </div>
 
-        {/* ============== Step 3 ============== */}
+        {/* ============== Step 3 应用授权 ============== */}
         <div style={{ display: step === 2 ? 'block' : 'none' }}>
+          <Step3AppPerm />
+        </div>
+
+        {/* ============== Step 4 信息确认 ============== */}
+        <div style={{ display: step === 3 ? 'block' : 'none' }}>
           <Step3Handoff
             family={family}
             isOIDC={isOIDC}
@@ -398,22 +422,28 @@ export default function AppWizard({
 
       <div className="app-wizard-footer">
         <Button size="large" style={{ minWidth: 96 }} onClick={onClose}>关闭</Button>
-        {step > 0 && step < 2 && (
-          <Button size="large" style={{ minWidth: 96 }} onClick={() => setStep((s) => s - 1)}>
+        {step > 0 && step < 3 && (
+          <Button
+            size="large"
+            style={{ minWidth: 96 }}
+            onClick={() => {
+              // link 协议从 step2 退回 step0（跳过 step1）
+              if (family === 'link' && step === 2) {
+                setStep(0);
+              } else {
+                setStep((s) => s - 1);
+              }
+            }}
+          >
             上一步
           </Button>
         )}
-        {step < 2 && (
+        {step < 3 && (
           <Button size="large" type="primary" style={{ minWidth: 120 }} loading={saving} onClick={handleNext}>
-            {/* link 应用 Step0 直接创建并完成 */}
-            {step === 1
-              ? (editing ? '保存并继续' : '创建并继续')
-              : family === 'link'
-                ? (editing ? '保存' : '创建')
-                : '下一步'}
+            {step === 2 ? (editing ? '保存并继续' : '创建并继续') : '下一步'}
           </Button>
         )}
-        {step === 2 && (
+        {step === 3 && (
           <>
             {family !== 'link' && (
               <>

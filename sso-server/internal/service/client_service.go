@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -14,10 +15,17 @@ import (
 type ClientService struct {
 	repo        *repository.ClientRepository
 	monitorRepo *repository.MonitorRepository
+	grantRepo   *repository.AppGrantRepository
 }
 
-func NewClientService(r *repository.ClientRepository, m *repository.MonitorRepository) *ClientService {
-	return &ClientService{repo: r, monitorRepo: m}
+func NewClientService(r *repository.ClientRepository, m *repository.MonitorRepository, g *repository.AppGrantRepository) *ClientService {
+	return &ClientService{repo: r, monitorRepo: m, grantRepo: g}
+}
+
+// GrantInput 应用授权 principal（user/group/org）
+type GrantInput struct {
+	PrincipalType string `json:"principal_type" binding:"required"` // user | group | org
+	PrincipalID   string `json:"principal_id" binding:"required"`
 }
 
 type CreateClientInput struct {
@@ -32,6 +40,10 @@ type CreateClientInput struct {
 	HomeURL        string `json:"home_url"`
 	LoginURL       string `json:"login_url"`
 	HealthCheckURL string `json:"health_check_url"`
+
+	// 应用访问授权（public/user/group/org），对应需要落地的 principal id 列表
+	GrantMode string         `json:"grant_mode"`
+	Grants    []GrantInput   `json:"grants"`
 
 	// OAuth2 / OIDC
 	RedirectURIs    []string `json:"redirect_uris"`
@@ -124,6 +136,7 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		// 监控地址默认与"应用入口"相同；状态监控页可单独覆盖
 		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
 		IsActive:         true,
+		GrantMode:        defaultStr(in.GrantMode, "public"),
 
 		RedirectURIs:    nonNilSlice(in.RedirectURIs),
 		GrantTypes:      defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
@@ -165,6 +178,16 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
 	}
+	// 写入应用授权（grant_mode != public 才写）
+	if s.grantRepo != nil && c.GrantMode != "" && c.GrantMode != "public" && len(in.Grants) > 0 {
+		grants, err := buildGrants(c.ClientID, c.GrantMode, in.Grants)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.grantRepo.SetGrants(c.ClientID, grants); err != nil {
+			return nil, err
+		}
+	}
 	if s.monitorRepo != nil {
 		// 监控 URL 跟应用 HealthCheckURL 保持一致（fallback 到 LoginURL，已在上面默认）
 		hcURL := c.HealthCheckURL
@@ -191,6 +214,9 @@ type UpdateClientInput struct {
 	LoginURL       *string `json:"login_url"`
 	HealthCheckURL *string `json:"health_check_url"`
 	IsActive       *bool   `json:"is_active"`
+
+	GrantMode *string       `json:"grant_mode"`
+	Grants    *[]GrantInput `json:"grants"`
 
 	RedirectURIs    *[]string `json:"redirect_uris"`
 	GrantTypes      *[]string `json:"grant_types"`
@@ -360,6 +386,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.CASReturnAttributes != nil {
 		c.CASReturnAttributes = *in.CASReturnAttributes
 	}
+	if in.GrantMode != nil {
+		c.GrantMode = *in.GrantMode
+	}
 
 	if err := s.repo.Update(c); err != nil {
 		return nil, err
@@ -367,6 +396,23 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	// 同步更新 monitor URL
 	if s.monitorRepo != nil && in.HealthCheckURL != nil {
 		s.monitorRepo.UpdateHealthURL(c.ClientID, *in.HealthCheckURL)
+	}
+	// 同步授权列表：
+	//   public 模式 → 清空 sso_app_grant
+	//   user/group/org 模式 + Grants 已显式提供 → 全量替换
+	//   未提供 Grants（nil）→ 保持现状不动
+	if s.grantRepo != nil {
+		if c.GrantMode == "" || c.GrantMode == "public" {
+			_ = s.grantRepo.DeleteByClient(c.ClientID)
+		} else if in.Grants != nil {
+			grants, err := buildGrants(c.ClientID, c.GrantMode, *in.Grants)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.grantRepo.SetGrants(c.ClientID, grants); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return c, nil
 }
@@ -381,6 +427,9 @@ func (s *ClientService) Delete(id uuid.UUID) error {
 	}
 	if s.monitorRepo != nil {
 		_ = s.monitorRepo.DeleteByClientID(c.ClientID)
+	}
+	if s.grantRepo != nil {
+		_ = s.grantRepo.DeleteByClient(c.ClientID)
 	}
 	return s.repo.Delete(id)
 }
@@ -473,4 +522,102 @@ func defaultInt(v, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// buildGrants 从前端入参转成 model.AppGrant 切片，按 grant_mode 校验 principal_type 一致性
+func buildGrants(clientID, mode string, in []GrantInput) ([]model.AppGrant, error) {
+	out := make([]model.AppGrant, 0, len(in))
+	for _, g := range in {
+		if g.PrincipalType != mode {
+			return nil, fmt.Errorf("授权类型 %s 与授权模式 %s 不一致", g.PrincipalType, mode)
+		}
+		if g.PrincipalType != "user" && g.PrincipalType != "group" && g.PrincipalType != "org" {
+			return nil, fmt.Errorf("不支持的授权类型：%s", g.PrincipalType)
+		}
+		pid, err := uuid.Parse(g.PrincipalID)
+		if err != nil {
+			return nil, fmt.Errorf("无效的 principal_id：%s", g.PrincipalID)
+		}
+		out = append(out, model.AppGrant{
+			ClientID:      clientID,
+			PrincipalType: g.PrincipalType,
+			PrincipalID:   pid,
+		})
+	}
+	return out, nil
+}
+
+// GrantInfo 返回给前端用的授权条目（带 principal 名称便于展示）
+type GrantInfo struct {
+	PrincipalType string `json:"principal_type"`
+	PrincipalID   string `json:"principal_id"`
+	PrincipalName string `json:"principal_name"`
+}
+
+// GrantsByClient 返回某应用的授权列表（带名字回填，便于编辑回显）
+func (s *ClientService) GrantsByClient(clientID string) ([]GrantInfo, error) {
+	if s.grantRepo == nil {
+		return nil, nil
+	}
+	rows, err := s.grantRepo.ListByClient(clientID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []GrantInfo{}, nil
+	}
+	collect := func(typ string) map[uuid.UUID]string {
+		ids := []uuid.UUID{}
+		for _, g := range rows {
+			if g.PrincipalType == typ {
+				ids = append(ids, g.PrincipalID)
+			}
+		}
+		out := make(map[uuid.UUID]string, len(ids))
+		if len(ids) == 0 {
+			return out
+		}
+		var entries []struct {
+			ID   uuid.UUID
+			Name string
+		}
+		switch typ {
+		case "user":
+			s.grantRepo.DB().Table("sso_user").
+				Select("id, COALESCE(NULLIF(nickname,''), username) AS name").
+				Where("id IN ?", ids).Scan(&entries)
+		case "group":
+			s.grantRepo.DB().Table("sso_user_group").
+				Select("id, name").Where("id IN ?", ids).Scan(&entries)
+		case "org":
+			s.grantRepo.DB().Table("sso_department").
+				Select("id, name").Where("id IN ?", ids).Scan(&entries)
+		}
+		for _, e := range entries {
+			out[e.ID] = e.Name
+		}
+		return out
+	}
+	userMap := collect("user")
+	groupMap := collect("group")
+	orgMap := collect("org")
+
+	out := make([]GrantInfo, 0, len(rows))
+	for _, g := range rows {
+		var name string
+		switch g.PrincipalType {
+		case "user":
+			name = userMap[g.PrincipalID]
+		case "group":
+			name = groupMap[g.PrincipalID]
+		case "org":
+			name = orgMap[g.PrincipalID]
+		}
+		out = append(out, GrantInfo{
+			PrincipalType: g.PrincipalType,
+			PrincipalID:   g.PrincipalID.String(),
+			PrincipalName: name,
+		})
+	}
+	return out, nil
 }

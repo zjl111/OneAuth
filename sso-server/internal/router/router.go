@@ -32,7 +32,6 @@ type Handlers struct {
 	Session    *handler.SessionHandler
 	UserGroup  *handler.UserGroupHandler
 	LoginRule  *handler.LoginRuleHandler
-	AppPerm    *handler.AppPermHandler
 	WeCom      *handler.WeComHandler
 	CAS        *handler.CASHandler
 	SAML       *handler.SAMLHandler
@@ -194,11 +193,6 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.DELETE("/roles/:id", h.Role.Delete)
 		admin.PUT("/roles/:id/permissions", h.Role.SetPermissions)
 		admin.GET("/permissions/tree", h.Role.PermissionTree)
-
-		// 应用授权
-		admin.GET("/app-perms/apps", h.AppPerm.ListApps)
-		admin.GET("/app-perms/apps/:client_id/grants", h.AppPerm.ListGrants)
-		admin.PUT("/app-perms/apps/:client_id/grants", h.AppPerm.SetGrants)
 
 		// 应用管理
 		admin.GET("/apps", h.App.List)

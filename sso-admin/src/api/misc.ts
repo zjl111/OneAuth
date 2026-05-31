@@ -87,36 +87,6 @@ export interface UserGroup {
   member_count?: number;
 }
 
-export interface AppPermApp {
-  id: string;
-  client_id: string;
-  client_name: string;
-  logo_url: string;
-  is_builtin: boolean;
-  is_active: boolean;
-  granted: boolean;
-  grant_total: number;
-  grant_users: number;
-  grant_roles: number;
-  grant_groups: number;
-}
-
-export interface AppGrant {
-  id: string;
-  client_id: string;
-  principal_type: 'user' | 'role' | 'group';
-  principal_id: string;
-  principal_name: string;
-  created_at: string;
-}
-
-export const appPermApi = {
-  listApps: () => get<AppPermApp[]>('/app-perms/apps'),
-  listGrants: (clientId: string) => get<AppGrant[]>(`/app-perms/apps/${clientId}/grants`),
-  setGrants: (clientId: string, grants: Array<{ principal_type: string; principal_id: string }>) =>
-    put(`/app-perms/apps/${clientId}/grants`, { grants }),
-};
-
 export const userGroupApi = {
   list: () => get<UserGroup[]>('/user-groups'),
   create: (data: { name: string; description?: string }) => post<UserGroup>('/user-groups', data),
