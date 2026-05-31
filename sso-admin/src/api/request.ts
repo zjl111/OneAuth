@@ -30,15 +30,19 @@ request.interceptors.response.use(
       const rt = useAuthStore.getState().refreshToken;
       const bounce = () => {
         useAuthStore.getState().clear();
-        // 已经在首页/未登录公共页 → 不再重定向，避免循环
+        // 已经在公共页 → 不重定向，避免循环
         const onPublicPage =
           location.pathname === '/' ||
           location.pathname.startsWith('/oauth/login') ||
           location.pathname.startsWith('/oauth/forgot-password') ||
           location.pathname.startsWith('/oauth/reset-password');
-        if (!onPublicPage) {
-          redirectToLogin(location.pathname + location.search);
-        }
+        if (onPublicPage) return;
+        // 防止并发 401 反复触发跳转（一次性闸门，每个 SPA 实例只允许跳一次）
+        if ((window as any).__authBouncing) return;
+        (window as any).__authBouncing = true;
+        // CAS / OAuth logout 之后回跳门户但 session 已失效会导致死循环，
+        // 这里只回首页（带 return_to），首页 useEffect 判定 isAuthenticated=false 后会弹登录框
+        redirectToLogin(location.pathname + location.search);
       };
       if (!rt) {
         bounce();
