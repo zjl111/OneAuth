@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Input, Button, Space, type TableColumnsType } from 'antd';
+import { Card, Tabs, Table, Tag, Input, Button, Space, Select, type TableColumnsType } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { logApi, type LoginLog, type OperationLog, type AccessLog } from '@/api/misc';
@@ -7,10 +7,16 @@ import type { PageData } from '@/api/request';
 
 type Fetcher<T> = (params: Record<string, unknown>) => Promise<PageData<T>>;
 
+interface LogFilter {
+  key: string;
+  placeholder: string;
+  type?: 'input' | 'select';
+  options?: Array<{ value: string; label: string }>;
+}
 interface LogTableProps<T> {
   fetcher: Fetcher<T>;
   columns: TableColumnsType<T>;
-  filters?: Array<{ key: string; placeholder: string }>;
+  filters?: LogFilter[];
 }
 
 function fmtTime(v: string) {
@@ -43,17 +49,33 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
     <>
       {filters.length > 0 && (
         <Space style={{ marginBottom: 12 }}>
-          {filters.map((f) => (
-            <Input
-              key={f.key}
-              placeholder={f.placeholder}
-              value={filterVals[f.key] || ''}
-              onChange={(e) => setFilterVals({ ...filterVals, [f.key]: e.target.value })}
-              onPressEnter={load}
-              style={{ width: 200 }}
-              allowClear
-            />
-          ))}
+          {filters.map((f) =>
+            f.type === 'select' ? (
+              <Select
+                key={f.key}
+                placeholder={f.placeholder}
+                value={filterVals[f.key] || undefined}
+                onChange={(v) => {
+                  setFilterVals({ ...filterVals, [f.key]: v || '' });
+                  // 下拉切换自动查询，无需再点查询
+                  setTimeout(load, 0);
+                }}
+                allowClear
+                style={{ width: 200 }}
+                options={f.options || []}
+              />
+            ) : (
+              <Input
+                key={f.key}
+                placeholder={f.placeholder}
+                value={filterVals[f.key] || ''}
+                onChange={(e) => setFilterVals({ ...filterVals, [f.key]: e.target.value })}
+                onPressEnter={load}
+                style={{ width: 200 }}
+                allowClear
+              />
+            ),
+          )}
           <Button onClick={load} icon={<ReloadOutlined />}>
             查询
           </Button>
@@ -213,7 +235,12 @@ export default function LogsPage() {
                 columns={operationColumns}
                 filters={[
                   { key: 'username', placeholder: '用户' },
-                  { key: 'resource', placeholder: '资源类型' },
+                  {
+                    key: 'resource',
+                    placeholder: '资源类型',
+                    type: 'select',
+                    options: Object.entries(RESOURCE_LABEL).map(([value, label]) => ({ value, label })),
+                  },
                 ]}
               />
             ),
