@@ -251,10 +251,11 @@ export default function AppListPage() {
             title: '客户端 ID',
             dataIndex: 'client_id',
             width: 180,
+            // 仅 OAuth2/OIDC 客户端需要 client_id；SAML/CAS/link 协议没有这个概念，显示 —
             render: (v: string, r) =>
-              (r.protocol === 'saml' || r.protocol === 'cas')
-                ? <span style={{ color: '#cbd5e1' }}>—</span>
-                : v,
+              (r.protocol === 'oidc' || r.protocol === 'oauth2')
+                ? v
+                : <span style={{ color: '#cbd5e1' }}>—</span>,
           },
           {
             title: '协议',
