@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Form, Input, Select, Radio, InputNumber, Alert, Collapse, Button, Space, App as AntdApp } from 'antd';
 import { InfoCircleOutlined, ImportOutlined } from '@ant-design/icons';
-import request from '@/api/request';
+import { post } from '@/api/request';
 
 const sectionStyle: React.CSSProperties = {
   border: '1px solid #eef0f5',
@@ -35,14 +35,13 @@ export default function Step2Saml() {
       const payload: any = {};
       if (metaMode === 'url') payload.url = v;
       else payload.xml = v;
-      const resp: any = await request.post('/apps/saml/parse-metadata', payload);
-      const d = resp || {};
+      const d: any = await post('/apps/saml/parse-metadata', payload);
       const patch: any = {};
-      if (d.entity_id) patch.saml_entity_id = d.entity_id;
-      if (d.acs_url) patch.saml_acs_url = d.acs_url;
-      if (d.binding) patch.saml_binding = d.binding;
-      if (d.nameid_format) patch.saml_nameid_format = d.nameid_format;
-      if (d.certificate) patch.saml_certificate = d.certificate;
+      if (d?.entity_id) patch.saml_entity_id = d.entity_id;
+      if (d?.acs_url) patch.saml_acs_url = d.acs_url;
+      if (d?.binding) patch.saml_binding = d.binding;
+      if (d?.nameid_format) patch.saml_nameid_format = d.nameid_format;
+      if (d?.certificate) patch.saml_certificate = d.certificate;
       form.setFieldsValue(patch);
       const filled = Object.keys(patch).length;
       if (filled === 0) {
