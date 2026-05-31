@@ -28,6 +28,7 @@ const { Header, Sider, Content } = Layout;
 
 const menuItems: any[] = [
   { key: '/admin/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
+  { type: 'divider' as const },
   {
     key: 'identity',
     icon: <TeamOutlined />,
@@ -39,6 +40,8 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用中心' },
+  { key: '/admin/monitor', icon: <MonitorOutlined />, label: '应用健康' },
+  { type: 'divider' as const },
   {
     key: 'access',
     icon: <LockOutlined />,
@@ -49,7 +52,6 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
-  { key: '/admin/monitor', icon: <MonitorOutlined />, label: '应用健康' },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
 ];
 

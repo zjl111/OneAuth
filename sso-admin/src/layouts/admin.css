@@ -38,6 +38,12 @@
   font-size: 15px;
 }
 
+/* 侧边栏分组分隔线（菜单 type=divider） */
+.admin-sider .ant-menu-item-divider {
+  margin: 12px 16px !important;
+  border-top: 1px solid #eef0f5 !important;
+}
+
 .admin-header {
   background: #fff !important;
   padding: 0 28px !important;
