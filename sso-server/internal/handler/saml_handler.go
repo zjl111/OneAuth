@@ -135,7 +135,9 @@ func (h *SAMLHandler) idpInstance(ctx context.Context, c *model.OAuth2Client) (*
 	if c.SAMLIssuer != "" {
 		issuer = c.SAMLIssuer
 	}
-	metaURL, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/metadata")
+	// 关键：MetadataURL 即 Response.Issuer.Value，必须等于 metadata 里 EntityDescriptor.entityID
+	// 即站点 URL，不要拼成 /saml/metadata，否则 SP 校验 Issuer 会拒收。
+	metaURL, _ := url.Parse(strings.TrimRight(issuer, "/"))
 	ssoURL, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/sso")
 	sloURL, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/slo")
 
@@ -188,8 +190,10 @@ func (p *spProvider) GetServiceProvider(r *http.Request, serviceProviderID strin
 			}},
 		}},
 	}
-	if c.SAMLCertificate != "" {
-		// 解析 SP 公钥证书（可选）
+	// 仅当应用显式开启「加密断言」时才声明 encryption key——否则 crewjam 会自动加密
+	// Assertion，导致 SP 用 signing 私钥解不开。绝大多数对接 (JumpServer/Confluence/Jira)
+	// 提供的证书是 signing 证书，不能拿来加密。
+	if c.SAMLEncrypted && c.SAMLCertificate != "" {
 		block, _ := pem.Decode([]byte(c.SAMLCertificate))
 		if block != nil {
 			if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
@@ -228,7 +232,14 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 	if nameIDValue == "" {
 		nameIDValue = user.Username
 	}
+	// NameID Format：优先采用 AuthnRequest 里 SP 要求的 NameIDPolicy.Format（除非 SP 没指定）
 	nameIDFormat := c.SAMLNameIDFormat
+	if req.Request.NameIDPolicy != nil && req.Request.NameIDPolicy.Format != nil {
+		if reqFmt := *req.Request.NameIDPolicy.Format; reqFmt != "" &&
+			reqFmt != "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" {
+			nameIDFormat = reqFmt
+		}
+	}
 	if nameIDFormat == "" {
 		nameIDFormat = "unspecified"
 	}
@@ -262,10 +273,14 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 		Value:           nameIDValue,
 	}
 
-	// 替换 AttributeStatement 为我们想发的字段
+	// 发出广覆盖的 AttributeStatement：同时使用多个常见 Name，兼容
+	//   - 默认命名（username / nickname / mobile / email / employee_no / department）
+	//   - JumpServer 等期望的 uid / name / phone
 	attrs := []saml.Attribute{
 		simpleAttr("username", user.Username),
+		simpleAttr("uid", user.Username), // JumpServer
 		simpleAttr("nickname", firstNonEmpty(user.Nickname, user.Username)),
+		simpleAttr("name", firstNonEmpty(user.Nickname, user.Username)), // JumpServer
 		simpleAttr("user_id", user.ID.String()),
 	}
 	if user.Email != nil && *user.Email != "" {
@@ -273,6 +288,7 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 	}
 	if user.Phone != nil && *user.Phone != "" {
 		attrs = append(attrs, simpleAttr("mobile", *user.Phone))
+		attrs = append(attrs, simpleAttr("phone", *user.Phone)) // JumpServer
 	}
 	if user.EmployeeNo != "" {
 		attrs = append(attrs, simpleAttr("employee_no", user.EmployeeNo))
@@ -290,7 +306,7 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 	}
 	now := time.Now().UTC()
 	a.Conditions = &saml.Conditions{
-		NotBefore:    now.Add(-30 * time.Second),
+		NotBefore:    now.Add(-5 * time.Minute),
 		NotOnOrAfter: now.Add(ttl),
 		AudienceRestrictions: []saml.AudienceRestriction{{
 		Audience: saml.Audience{Value: nonEmptyStr(c.SAMLAudience, c.SAMLEntityID)},
@@ -302,7 +318,17 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 	}
 	for i := range a.Subject.SubjectConfirmations {
 		if a.Subject.SubjectConfirmations[i].SubjectConfirmationData != nil {
+			// SAML 规范: SubjectConfirmationData 不应有 NotBefore (除非显式声明)；
+			// crewjam 不会自动写，但保留 NotOnOrAfter 充足
 			a.Subject.SubjectConfirmations[i].SubjectConfirmationData.NotOnOrAfter = now.Add(ttl)
+			// 如果 SP 在 AuthnRequest 里给了 ID，回显到 InResponseTo
+			if req.Request.ID != "" {
+				a.Subject.SubjectConfirmations[i].SubjectConfirmationData.InResponseTo = req.Request.ID
+			}
+			// Recipient 必须等于 ACS URL
+			if c.SAMLACSURL != "" {
+				a.Subject.SubjectConfirmations[i].SubjectConfirmationData.Recipient = c.SAMLACSURL
+			}
 		}
 	}
 	return nil
@@ -376,7 +402,7 @@ func (h *SAMLHandler) Metadata(c *gin.Context) {
 		return
 	}
 	issuer := h.effectiveIssuer()
-	metaP, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/metadata")
+	metaP, _ := url.Parse(strings.TrimRight(issuer, "/"))
 	ssoP, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/sso")
 	sloP, _ := url.Parse(strings.TrimRight(issuer, "/") + "/saml/slo")
 	idp := saml.IdentityProvider{
@@ -527,7 +553,6 @@ func (h *SAMLHandler) SSO(c *gin.Context) {
 		return
 	}
 
-	// crewjam 提供了一个写自动提交表单的方法
 	if err := idpReq.WriteResponse(c.Writer); err != nil {
 		// fallback：自定义 HTML 表单
 		c.String(http.StatusInternalServerError, "回写 Response 失败：%v", err)
