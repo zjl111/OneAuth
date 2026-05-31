@@ -41,9 +41,12 @@ type CreateClientInput struct {
 	LoginURL       string `json:"login_url"`
 	HealthCheckURL string `json:"health_check_url"`
 
-	// 应用访问授权（public/user/group/org），对应需要落地的 principal id 列表
-	GrantMode string         `json:"grant_mode"`
-	Grants    []GrantInput   `json:"grants"`
+	// 访问授权：access_policy=all|assigned|none，assigned 时通过 Grants 提供 principals
+	AccessPolicy      string       `json:"access_policy"`
+	Grants            []GrantInput `json:"grants"`
+	VisibleInPortal   *bool        `json:"visible_in_portal"`
+	AllowIdpInitiated *bool        `json:"allow_idp_initiated"`
+	AllowSpInitiated  *bool        `json:"allow_sp_initiated"`
 
 	// OAuth2 / OIDC
 	RedirectURIs    []string `json:"redirect_uris"`
@@ -136,7 +139,10 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		// 监控地址默认与"应用入口"相同；状态监控页可单独覆盖
 		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
 		IsActive:         true,
-		GrantMode:        defaultStr(in.GrantMode, "public"),
+		AccessPolicy:     defaultStr(in.AccessPolicy, "all"),
+		VisibleInPortal:   in.VisibleInPortal == nil || *in.VisibleInPortal,
+		AllowIdpInitiated: in.AllowIdpInitiated == nil || *in.AllowIdpInitiated,
+		AllowSpInitiated:  in.AllowSpInitiated == nil || *in.AllowSpInitiated,
 
 		RedirectURIs:    nonNilSlice(in.RedirectURIs),
 		GrantTypes:      defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
@@ -178,14 +184,18 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 	if err := s.repo.Create(c); err != nil {
 		return nil, err
 	}
-	// 写入应用授权（grant_mode != public 才写）
-	if s.grantRepo != nil && c.GrantMode != "" && c.GrantMode != "public" && len(in.Grants) > 0 {
-		grants, err := buildGrants(c.ClientID, c.GrantMode, in.Grants)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.grantRepo.SetGrants(c.ClientID, grants); err != nil {
-			return nil, err
+	// 写入应用授权：access_policy=assigned 才需要 grants 表数据；其他模式清空
+	if s.grantRepo != nil {
+		if c.AccessPolicy == "assigned" && len(in.Grants) > 0 {
+			grants, err := buildAssignedGrants(c.ClientID, in.Grants)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.grantRepo.SetGrants(c.ClientID, grants); err != nil {
+				return nil, err
+			}
+		} else {
+			_ = s.grantRepo.DeleteByClient(c.ClientID)
 		}
 	}
 	if s.monitorRepo != nil {
@@ -215,8 +225,12 @@ type UpdateClientInput struct {
 	HealthCheckURL *string `json:"health_check_url"`
 	IsActive       *bool   `json:"is_active"`
 
-	GrantMode *string       `json:"grant_mode"`
-	Grants    *[]GrantInput `json:"grants"`
+	GrantMode         *string       `json:"grant_mode"` // 旧字段兼容（前端现在传 access_policy）
+	AccessPolicy      *string       `json:"access_policy"`
+	Grants            *[]GrantInput `json:"grants"`
+	VisibleInPortal   *bool         `json:"visible_in_portal"`
+	AllowIdpInitiated *bool         `json:"allow_idp_initiated"`
+	AllowSpInitiated  *bool         `json:"allow_sp_initiated"`
 
 	RedirectURIs    *[]string `json:"redirect_uris"`
 	GrantTypes      *[]string `json:"grant_types"`
@@ -386,8 +400,17 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.CASReturnAttributes != nil {
 		c.CASReturnAttributes = *in.CASReturnAttributes
 	}
-	if in.GrantMode != nil {
-		c.GrantMode = *in.GrantMode
+	if in.AccessPolicy != nil {
+		c.AccessPolicy = *in.AccessPolicy
+	}
+	if in.VisibleInPortal != nil {
+		c.VisibleInPortal = *in.VisibleInPortal
+	}
+	if in.AllowIdpInitiated != nil {
+		c.AllowIdpInitiated = *in.AllowIdpInitiated
+	}
+	if in.AllowSpInitiated != nil {
+		c.AllowSpInitiated = *in.AllowSpInitiated
 	}
 
 	if err := s.repo.Update(c); err != nil {
@@ -398,14 +421,14 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 		s.monitorRepo.UpdateHealthURL(c.ClientID, *in.HealthCheckURL)
 	}
 	// 同步授权列表：
-	//   public 模式 → 清空 sso_app_grant
-	//   user/group/org 模式 + Grants 已显式提供 → 全量替换
+	//   access_policy=all/none → 清空 sso_app_grant
+	//   access_policy=assigned + Grants 已显式提供 → 全量替换
 	//   未提供 Grants（nil）→ 保持现状不动
 	if s.grantRepo != nil {
-		if c.GrantMode == "" || c.GrantMode == "public" {
+		if c.AccessPolicy != "assigned" {
 			_ = s.grantRepo.DeleteByClient(c.ClientID)
 		} else if in.Grants != nil {
-			grants, err := buildGrants(c.ClientID, c.GrantMode, *in.Grants)
+			grants, err := buildAssignedGrants(c.ClientID, *in.Grants)
 			if err != nil {
 				return nil, err
 			}
@@ -524,13 +547,10 @@ func defaultInt(v, fallback int) int {
 	return v
 }
 
-// buildGrants 从前端入参转成 model.AppGrant 切片，按 grant_mode 校验 principal_type 一致性
-func buildGrants(clientID, mode string, in []GrantInput) ([]model.AppGrant, error) {
+// buildAssignedGrants 从前端入参转成 model.AppGrant 切片。assigned 模式下 user/group/org 可任意混合。
+func buildAssignedGrants(clientID string, in []GrantInput) ([]model.AppGrant, error) {
 	out := make([]model.AppGrant, 0, len(in))
 	for _, g := range in {
-		if g.PrincipalType != mode {
-			return nil, fmt.Errorf("授权类型 %s 与授权模式 %s 不一致", g.PrincipalType, mode)
-		}
 		if g.PrincipalType != "user" && g.PrincipalType != "group" && g.PrincipalType != "org" {
 			return nil, fmt.Errorf("不支持的授权类型：%s", g.PrincipalType)
 		}

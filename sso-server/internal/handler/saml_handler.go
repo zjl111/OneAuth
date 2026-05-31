@@ -451,12 +451,24 @@ func (h *SAMLHandler) SSO(c *gin.Context) {
 		return
 	}
 
-	// 应用访问授权门：grant_mode=public 直接放行；其他模式查 sso_app_grant 表
-	if h.AppGrantRepo != nil && !client.IsBuiltin && client.GrantMode != "" && client.GrantMode != "public" {
-		allowed, _ := h.AppGrantRepo.UserAllowed(client.ClientID, uid)
-		if !allowed {
-			c.String(http.StatusForbidden, "您没有权限访问该应用")
+	// 访问授权门 + SP-initiated 开关
+	if !client.IsBuiltin {
+		if !client.AllowSpInitiated {
+			c.String(http.StatusForbidden, "该应用未启用 SP-initiated 登录，请联系管理员")
 			return
+		}
+		switch client.AccessPolicy {
+		case "none":
+			c.String(http.StatusForbidden, "该应用尚未授权给任何用户访问")
+			return
+		case "assigned":
+			if h.AppGrantRepo != nil {
+				allowed, _ := h.AppGrantRepo.UserAllowed(client.ClientID, uid)
+				if !allowed {
+					c.String(http.StatusForbidden, "您没有权限访问该应用")
+					return
+				}
+			}
 		}
 	}
 

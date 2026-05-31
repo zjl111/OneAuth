@@ -59,7 +59,10 @@ export interface OAuth2Client {
   cas_expires_seconds?: number;
   cas_return_attributes?: boolean;
 
-  grant_mode?: 'public' | 'user' | 'group' | 'org';
+  access_policy?: 'all' | 'assigned' | 'none';
+  visible_in_portal?: boolean;
+  allow_idp_initiated?: boolean;
+  allow_sp_initiated?: boolean;
   grants?: Array<{ principal_type: string; principal_id: string; principal_name?: string }>;
 
   created_at: string;

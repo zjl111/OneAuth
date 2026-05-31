@@ -114,7 +114,10 @@ export default function AppListPage() {
       const detail: any = await appsApi.detail(c.id);
       // 后端返回 { client, grants }
       const merged: any = { ...(detail?.client || c), grants: detail?.grants || [] };
-      merged.grant_mode = (detail?.client || c).grant_mode || 'public';
+      merged.access_policy = (detail?.client || c).access_policy || 'all';
+      merged.visible_in_portal = (detail?.client || c).visible_in_portal !== false;
+      merged.allow_idp_initiated = (detail?.client || c).allow_idp_initiated !== false;
+      merged.allow_sp_initiated = (detail?.client || c).allow_sp_initiated !== false;
       setEditing(merged);
     } catch {
       setEditing(c);

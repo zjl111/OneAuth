@@ -1,193 +1,334 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Form, Radio, Select, Alert, Tag, Input } from 'antd';
-import { UserOutlined, TeamOutlined, ApartmentOutlined, GlobalOutlined } from '@ant-design/icons';
-import request from '@/api/request';
+import { Form, Radio, Input, Tabs, Tag, Switch, Alert, Empty, Checkbox } from 'antd';
+import { SearchOutlined, UserOutlined, ApartmentOutlined, UsergroupAddOutlined } from '@ant-design/icons';
+import { get } from '@/api/request';
 
-type Mode = 'public' | 'user' | 'group' | 'org';
+type Policy = 'all' | 'assigned' | 'none';
+type SubjectType = 'user' | 'org' | 'group';
 
-type Option = { id: string; name: string; sub?: string };
+interface Subject {
+  type: SubjectType;
+  id: string;
+  name: string;
+  sub?: string; // 副标题（用户名 / 部门路径）
+}
 
-/**
- * 应用授权步骤。
- *
- * 表单字段：
- *   grant_mode: 'public' | 'user' | 'group' | 'org'
- *   grants:    Array<{ principal_type, principal_id, principal_name }>
- *
- * 选 public 时清空 grants；其他模式下把多选转成 grants 数组。
- */
+const sectionStyle: React.CSSProperties = {
+  border: '1px solid #eef0f5',
+  borderRadius: 12,
+  padding: '20px 28px',
+  background: '#fff',
+};
+const titleStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: '#1d2c5b',
+  marginBottom: 12,
+};
+
 export default function Step3AppPerm() {
   const form = Form.useFormInstance();
-  const [users, setUsers] = useState<Option[]>([]);
-  const [groups, setGroups] = useState<Option[]>([]);
-  const [orgs, setOrgs] = useState<Option[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const mode: Mode = (Form.useWatch('grant_mode', form) as Mode) || 'public';
+  const policy: Policy = (Form.useWatch('access_policy', form) as Policy) || 'assigned';
   const grants: Array<{ principal_type: string; principal_id: string; principal_name?: string }> =
     Form.useWatch('grants', form) || [];
 
-  // 当前模式下被选中的 id 列表（受控）
-  const selectedIds = useMemo(
-    () => grants.filter((g) => g.principal_type === mode).map((g) => g.principal_id),
-    [grants, mode],
+  const [tab, setTab] = useState<SubjectType>('user');
+  const [keyword, setKeyword] = useState('');
+  const [users, setUsers] = useState<Subject[]>([]);
+  const [orgs, setOrgs] = useState<Subject[]>([]);
+  const [groups, setGroups] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // 选中已选集合（用于 checkbox 受控）
+  const selectedKey = (s: Subject) => `${s.type}:${s.id}`;
+  const selectedSet = useMemo(
+    () => new Set(grants.map((g) => `${g.principal_type}:${g.principal_id}`)),
+    [grants],
   );
 
-  // 加载选项（懒加载，按需）
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (users.length > 0) return;
+    if (policy !== 'assigned') return;
+    const load = async () => {
       setLoading(true);
       try {
-        const r: any = await request.get('/users', { params: { page: 1, page_size: 1000 } });
-        const list = (r?.items || []).map((u: any) => ({
-          id: u.id,
-          name: u.nickname || u.username,
-          sub: u.username,
-        }));
-        setUsers(list);
+        if (tab === 'user' && users.length === 0) {
+          const r: any = await get<any>('/users', { page: 1, page_size: 1000 });
+          const list: Subject[] = (r?.items || []).map((u: any) => ({
+            type: 'user' as const,
+            id: u.id,
+            name: u.nickname || u.username,
+            sub: u.username,
+          }));
+          setUsers(list);
+        }
+        if (tab === 'org' && orgs.length === 0) {
+          const r: any = await get<any>('/departments');
+          const flatten = (nodes: any[], parents: string[] = []): Subject[] => {
+            const out: Subject[] = [];
+            for (const n of nodes || []) {
+              out.push({
+                type: 'org' as const,
+                id: n.id,
+                name: n.name,
+                sub: parents.length ? parents.join(' / ') : '根部门',
+              });
+              if (n.children?.length) out.push(...flatten(n.children, [...parents, n.name]));
+            }
+            return out;
+          };
+          setOrgs(flatten(Array.isArray(r) ? r : []));
+        }
+        if (tab === 'group' && groups.length === 0) {
+          const r: any = await get<any>('/user-groups');
+          setGroups(
+            (r || []).map((g: any) => ({
+              type: 'group' as const,
+              id: g.id,
+              name: g.name,
+              sub: g.description,
+            })),
+          );
+        }
       } finally {
         setLoading(false);
       }
     };
-    const fetchGroups = async () => {
-      if (groups.length > 0) return;
-      setLoading(true);
-      try {
-        const r: any = await request.get('/user-groups');
-        setGroups((r || []).map((g: any) => ({ id: g.id, name: g.name, sub: g.description })));
-      } finally {
-        setLoading(false);
-      }
-    };
-    const fetchOrgs = async () => {
-      if (orgs.length > 0) return;
-      setLoading(true);
-      try {
-        const r: any = await request.get('/departments');
-        // 部门接口返回的是树或数组，铺平
-        const flatten = (nodes: any[], parents: string[] = []): Option[] => {
-          const out: Option[] = [];
-          for (const n of nodes || []) {
-            const path = [...parents, n.name];
-            out.push({ id: n.id, name: n.name, sub: parents.length ? parents.join(' / ') : '根部门' });
-            if (n.children?.length) out.push(...flatten(n.children, path));
-          }
-          return out;
-        };
-        setOrgs(flatten(Array.isArray(r) ? r : []));
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (mode === 'user') fetchUsers();
-    if (mode === 'group') fetchGroups();
-    if (mode === 'org') fetchOrgs();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [tab, policy]);
 
-  const handleChange = (ids: string[]) => {
-    let pool: Option[] = [];
-    if (mode === 'user') pool = users;
-    if (mode === 'group') pool = groups;
-    if (mode === 'org') pool = orgs;
-    const nameById = new Map(pool.map((o) => [o.id, o.name]));
-    const next = ids.map((id) => ({
-      principal_type: mode,
-      principal_id: id,
-      principal_name: nameById.get(id) || id,
-    }));
+  const setGrants = (next: Array<{ principal_type: string; principal_id: string; principal_name?: string }>) =>
     form.setFieldValue('grants', next);
+
+  const toggle = (s: Subject, on: boolean) => {
+    if (on) {
+      if (selectedSet.has(selectedKey(s))) return;
+      setGrants([
+        ...grants,
+        { principal_type: s.type, principal_id: s.id, principal_name: s.name },
+      ]);
+    } else {
+      setGrants(grants.filter((g) => !(g.principal_type === s.type && g.principal_id === s.id)));
+    }
   };
 
-  const cardStyle: React.CSSProperties = {
-    border: '1px solid #eef0f5',
-    borderRadius: 12,
-    padding: '24px 32px',
-    background: '#fff',
-  };
+  const removeOne = (g: { principal_type: string; principal_id: string }) =>
+    setGrants(grants.filter((x) => !(x.principal_type === g.principal_type && x.principal_id === g.principal_id)));
 
-  const optionList = mode === 'user' ? users : mode === 'group' ? groups : mode === 'org' ? orgs : [];
+  const list = tab === 'user' ? users : tab === 'org' ? orgs : groups;
+  const filtered = useMemo(() => {
+    if (!keyword.trim()) return list;
+    const k = keyword.trim().toLowerCase();
+    return list.filter((s) => s.name.toLowerCase().includes(k) || (s.sub || '').toLowerCase().includes(k));
+  }, [list, keyword]);
+
+  const tagColor = (t: string) => (t === 'user' ? 'blue' : t === 'org' ? 'orange' : 'purple');
+  const tagLabel = (t: string) => (t === 'user' ? '用户' : t === 'org' ? '组织' : '用户组');
 
   return (
-    <div style={cardStyle}>
-      {/* 隐藏字段：grant_mode + grants 由本组件主动 setFieldValue 写入 */}
-      <Form.Item name="grant_mode" hidden initialValue="public">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 隐藏字段（form store） */}
+      <Form.Item name="access_policy" hidden initialValue="assigned">
         <Input type="hidden" />
       </Form.Item>
       <Form.Item name="grants" hidden>
         <Input type="hidden" />
       </Form.Item>
+      <Form.Item name="visible_in_portal" hidden initialValue={true} valuePropName="checked">
+        <Input type="hidden" />
+      </Form.Item>
+      <Form.Item name="allow_idp_initiated" hidden initialValue={true} valuePropName="checked">
+        <Input type="hidden" />
+      </Form.Item>
+      <Form.Item name="allow_sp_initiated" hidden initialValue={true} valuePropName="checked">
+        <Input type="hidden" />
+      </Form.Item>
 
-      <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 600, marginBottom: 12 }}>
-        授权范围
-      </div>
-      <Radio.Group
-        value={mode}
-        onChange={(e) => {
-          const next = e.target.value as Mode;
-          form.setFieldValue('grant_mode', next);
-          // 切换模式时清空已选（不同模式 principal_id 含义不同）
-          form.setFieldValue('grants', []);
-        }}
-        style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}
-      >
-        <Radio value="public">
-          <Tag icon={<GlobalOutlined />} color="green" style={{ marginRight: 8 }}>全部</Tag>
-          所有登录用户均可访问该应用（公开应用）
-        </Radio>
-        <Radio value="user">
-          <Tag icon={<UserOutlined />} color="blue" style={{ marginRight: 8 }}>按用户授权</Tag>
-          指定具体用户访问
-        </Radio>
-        <Radio value="group">
-          <Tag icon={<TeamOutlined />} color="purple" style={{ marginRight: 8 }}>按用户组授权</Tag>
-          指定用户组，组内成员均可访问
-        </Radio>
-        <Radio value="org">
-          <Tag icon={<ApartmentOutlined />} color="orange" style={{ marginRight: 8 }}>按组织授权</Tag>
-          指定组织 / 部门，部门下用户均可访问
-        </Radio>
-      </Radio.Group>
+      <Alert
+        type="info"
+        showIcon
+        message="配置哪些用户、组织或用户组可以访问该应用。未授权用户将在应用门户中不可见或无法访问。"
+      />
 
-      {mode !== 'public' && (
-        <>
-          <div style={{ fontSize: 13, color: '#475569', fontWeight: 500, marginBottom: 8 }}>
-            {mode === 'user' && '选择用户'}
-            {mode === 'group' && '选择用户组'}
-            {mode === 'org' && '选择组织'}
-          </div>
-          <Select
-            mode="multiple"
-            allowClear
-            showSearch
-            value={selectedIds}
-            onChange={handleChange}
-            loading={loading}
-            placeholder={
-              mode === 'user' ? '搜索用户名 / 昵称' : mode === 'group' ? '搜索用户组名称' : '搜索组织名称'
+      {/* 一、授权范围 */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>授权范围</div>
+        <Radio.Group
+          value={policy}
+          onChange={(e) => {
+            const v = e.target.value as Policy;
+            form.setFieldValue('access_policy', v);
+            if (v !== 'assigned') {
+              form.setFieldValue('grants', []);
             }
-            style={{ width: '100%' }}
-            optionFilterProp="label"
-            options={optionList.map((o) => ({
-              value: o.id,
-              label: o.sub ? `${o.name}（${o.sub}）` : o.name,
-            }))}
-          />
-          <div style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
-            已选 {selectedIds.length} 项
+          }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+        >
+          <Radio value="all">
+            <div style={{ display: 'inline-block' }}>
+              <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>所有人可访问</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>企业内所有用户均可访问该应用</div>
+            </div>
+          </Radio>
+          <Radio value="assigned">
+            <div style={{ display: 'inline-block' }}>
+              <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>指定用户 / 组织 / 用户组可访问</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>仅指定的用户、组织或用户组可以访问该应用</div>
+            </div>
+          </Radio>
+          <Radio value="none">
+            <div style={{ display: 'inline-block' }}>
+              <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>暂不授权</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>暂不分配访问权限，后续可在应用设置中配置</div>
+            </div>
+          </Radio>
+        </Radio.Group>
+      </div>
+
+      {/* 二、授权对象（仅 assigned） */}
+      {policy === 'assigned' && (
+        <div style={sectionStyle}>
+          <div style={titleStyle}>授权对象</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            {/* 左：搜索 + Tab + 列表 */}
+            <div style={{ border: '1px solid #eef0f5', borderRadius: 8, padding: 12, minHeight: 320 }}>
+              <Input
+                allowClear
+                placeholder="搜索用户、组织、用户组"
+                prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                style={{ marginBottom: 10 }}
+              />
+              <Tabs
+                size="small"
+                activeKey={tab}
+                onChange={(k) => setTab(k as SubjectType)}
+                items={[
+                  { key: 'user', label: <span><UserOutlined /> 用户</span> },
+                  { key: 'org', label: <span><ApartmentOutlined /> 组织</span> },
+                  { key: 'group', label: <span><UsergroupAddOutlined /> 用户组</span> },
+                ]}
+              />
+              <div style={{ maxHeight: 280, overflowY: 'auto', marginTop: 4 }}>
+                {loading ? (
+                  <div style={{ color: '#94a3b8', fontSize: 12, padding: 20, textAlign: 'center' }}>加载中…</div>
+                ) : filtered.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={<span style={{ color: '#94a3b8', fontSize: 12 }}>请搜索并选择用户、组织或用户组</span>}
+                    style={{ marginTop: 24 }}
+                  />
+                ) : (
+                  filtered.map((s) => {
+                    const checked = selectedSet.has(selectedKey(s));
+                    return (
+                      <label
+                        key={selectedKey(s)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '8px 6px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          background: checked ? '#eff6ff' : 'transparent',
+                        }}
+                      >
+                        <Checkbox checked={checked} onChange={(e) => toggle(s, e.target.checked)} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: '#1d2c5b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {s.name}
+                          </div>
+                          {s.sub && (
+                            <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.sub}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 右：已选择 */}
+            <div style={{ border: '1px solid #eef0f5', borderRadius: 8, padding: 12, minHeight: 320 }}>
+              <div style={{ fontSize: 13, color: '#1d2c5b', fontWeight: 600, marginBottom: 10 }}>
+                已选择 <span style={{ color: '#94a3b8', fontWeight: 400 }}>（{grants.length}）</span>
+              </div>
+              {grants.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 30, textAlign: 'center' }}>
+                  尚未选择任何对象
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {grants.map((g) => (
+                    <Tag
+                      key={`${g.principal_type}:${g.principal_id}`}
+                      color={tagColor(g.principal_type)}
+                      closable
+                      onClose={() => removeOne(g)}
+                      style={{ padding: '4px 8px', fontSize: 12 }}
+                    >
+                      <span style={{ opacity: 0.7, marginRight: 4 }}>{tagLabel(g.principal_type)}</span>
+                      {g.principal_name || g.principal_id}
+                    </Tag>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </>
+        </div>
       )}
 
-      {mode === 'public' && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginTop: 8 }}
-          message="公开应用：所有登录到 OneAuth 的用户都能在门户看到并访问该应用"
-        />
-      )}
+      {/* 三、访问控制 */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>访问控制</div>
+        <Form.Item shouldUpdate noStyle>
+          {() => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Switch
+                  checked={!!form.getFieldValue('visible_in_portal')}
+                  onChange={(v) => form.setFieldValue('visible_in_portal', v)}
+                />
+                <div>
+                  <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>在应用门户中显示</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    在 OneAuth 应用门户中展示该应用，方便用户发现和访问
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Switch
+                  checked={!!form.getFieldValue('allow_idp_initiated')}
+                  onChange={(v) => form.setFieldValue('allow_idp_initiated', v)}
+                />
+                <div>
+                  <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>允许从 OneAuth 发起访问</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    用户可以从 OneAuth 应用门户或我的应用中点击进入该应用
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Switch
+                  checked={!!form.getFieldValue('allow_sp_initiated')}
+                  onChange={(v) => form.setFieldValue('allow_sp_initiated', v)}
+                />
+                <div>
+                  <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>允许应用侧发起 SSO 登录</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    允许用户从业务系统跳转到 OneAuth 完成 SSO 登录，如 OIDC、SAML、CAS 的 SP-Initiated 登录
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Form.Item>
+      </div>
     </div>
   );
 }

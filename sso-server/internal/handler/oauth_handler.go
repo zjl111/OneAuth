@@ -124,12 +124,24 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 
 	userID := uuid.MustParse(sd.UserID)
 
-	// 应用访问授权门：grant_mode=public 直接放行；其他模式查 sso_app_grant 表
-	if h.AppGrantRepo != nil && !client.IsBuiltin && client.GrantMode != "" && client.GrantMode != "public" {
-		allowed, _ := h.AppGrantRepo.UserAllowed(clientID, userID)
-		if !allowed {
-			errorRedirect(c, redirectURI, "access_denied", "您没有权限访问该应用", state)
+	// 访问授权门 + SP-initiated 开关
+	if !client.IsBuiltin {
+		if !client.AllowSpInitiated {
+			errorRedirect(c, redirectURI, "access_denied", "该应用未启用 SP-initiated 登录，请联系管理员", state)
 			return
+		}
+		switch client.AccessPolicy {
+		case "none":
+			errorRedirect(c, redirectURI, "access_denied", "该应用尚未授权给任何用户访问", state)
+			return
+		case "assigned":
+			if h.AppGrantRepo != nil {
+				allowed, _ := h.AppGrantRepo.UserAllowed(clientID, userID)
+				if !allowed {
+					errorRedirect(c, redirectURI, "access_denied", "您没有权限访问该应用", state)
+					return
+				}
+			}
 		}
 	}
 

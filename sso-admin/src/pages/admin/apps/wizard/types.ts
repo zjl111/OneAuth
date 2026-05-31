@@ -102,9 +102,12 @@ export type WizardValues = {
   cas_expires_seconds?: number;
   cas_return_attributes?: boolean;
 
-  // 应用授权
-  grant_mode?: 'public' | 'user' | 'group' | 'org';
+  // 访问授权
+  access_policy?: 'all' | 'assigned' | 'none';
   grants?: Array<{ principal_type: string; principal_id: string; principal_name?: string }>;
+  visible_in_portal?: boolean;
+  allow_idp_initiated?: boolean;
+  allow_sp_initiated?: boolean;
 };
 
 export const USERINFO_LABEL: Record<string, string> = {

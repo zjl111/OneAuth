@@ -55,7 +55,12 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		grantedSet[g.ClientID] = true
 	}
 
-	// 应用授权过滤：grant_mode=public 全部用户可见；其他模式按 sso_app_grant 表过滤
+	// 应用门户过滤：
+	//   - 内置应用与 super_admin 始终可见
+	//   - visible_in_portal=false → 隐藏（除 super_admin）
+	//   - access_policy=none → 隐藏（除 super_admin）
+	//   - access_policy=assigned → 必须命中 grant 表
+	//   - access_policy=all → 全部可见
 	var allowedSet map[string]bool
 	if h.AppGrantRepo != nil {
 		allowedSet, _ = h.AppGrantRepo.AllowedClientIDs(uid)
@@ -63,14 +68,25 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 
 	apps := []PortalApp{}
 	for _, cl := range clients {
-		// 管理后台不在应用门户中露出（管理员通过右上角下拉切换进入）
+		// 管理后台不在应用门户中露出
 		if cl.ClientID == "sso-admin" {
 			continue
 		}
-		// 受限应用：grant_mode != public 时必须在 allowedSet 里（super_admin 兜底可见）
-		if cl.GrantMode != "" && cl.GrantMode != "public" {
-			if (allowedSet == nil || !allowedSet[cl.ClientID]) && !user.IsStaff {
+		if cl.IsBuiltin {
+			// 内置应用走内置路径，不应用门户过滤
+		} else if user.IsStaff {
+			// super_admin / staff 兜底全部可见，避免锁死管理员
+		} else {
+			if !cl.VisibleInPortal {
 				continue
+			}
+			switch cl.AccessPolicy {
+			case "none":
+				continue
+			case "assigned":
+				if allowedSet == nil || !allowedSet[cl.ClientID] {
+					continue
+				}
 			}
 		}
 		apps = append(apps, PortalApp{

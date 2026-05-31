@@ -9,11 +9,10 @@ import (
 
 // AppGrantRepository 应用授权仓储。
 //
-// 应用的可见性由 sso_oauth2_client.grant_mode 决定：
-//   public -> 所有登录用户可见，sso_app_grant 表里没有该应用的记录（或被忽略）
-//   user   -> 显式指定的用户列表
-//   group  -> 显式指定的用户组列表（成员均可见）
-//   org    -> 显式指定的组织/部门列表（部门下用户均可见，含子部门）
+// 应用的可见性由 sso_oauth2_client.access_policy 决定：
+//   all      -> 所有登录用户可见
+//   assigned -> 显式指定（user/group/org 任意混选，写入 sso_app_grant）
+//   none     -> 暂不授权（仅 super_admin 兜底可见）
 //
 // principal_type 取值：user | group | org
 type AppGrantRepository struct{ db *gorm.DB }

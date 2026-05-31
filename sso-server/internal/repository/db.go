@@ -88,7 +88,22 @@ func AutoMigrate(db *gorm.DB) error {
 		db.Exec("ALTER TABLE sso_oauth2_client ALTER COLUMN " + col + " DROP NOT NULL")
 	}
 	backfillHealthCheckURLs(db)
+	migrateAccessPolicy(db)
 	return nil
+}
+
+// migrateAccessPolicy 把旧的 grant_mode (public/user/group/org) 迁移到新的 access_policy (all/assigned/none)
+// public         -> all
+// user/group/org -> assigned
+// 同时把已存在的 grants 应用关联保持不变；新建列 access_policy 默认 'all'
+func migrateAccessPolicy(db *gorm.DB) {
+	// 旧值映射：public -> all；其他视为 assigned
+	db.Exec(`UPDATE sso_oauth2_client SET access_policy = 'all'
+	         WHERE COALESCE(access_policy, '') = ''
+	           AND COALESCE(grant_mode, '') IN ('', 'public')`)
+	db.Exec(`UPDATE sso_oauth2_client SET access_policy = 'assigned'
+	         WHERE COALESCE(access_policy, '') = ''
+	           AND COALESCE(grant_mode, '') IN ('user', 'group', 'org')`)
 }
 
 // BackfillLogRegion 在 geoip.Init 之后由 main 调用，重算所有缺 city 的日志行。

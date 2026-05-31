@@ -132,8 +132,11 @@ export default function AppWizard({
         cas_expires_seconds: editing.cas_expires_seconds || 300,
         cas_return_attributes: editing.cas_return_attributes !== false,
 
-        grant_mode: (editing as any).grant_mode || 'public',
+        access_policy: (editing as any).access_policy || 'assigned',
         grants: (editing as any).grants || [],
+        visible_in_portal: (editing as any).visible_in_portal !== false,
+        allow_idp_initiated: (editing as any).allow_idp_initiated !== false,
+        allow_sp_initiated: (editing as any).allow_sp_initiated !== false,
       });
     } else {
       const initVersion = defaultProtocolVersion(family);
@@ -168,8 +171,11 @@ export default function AppWizard({
         cas_expires_seconds: 300,
         cas_return_attributes: true,
 
-        grant_mode: 'public',
+        access_policy: 'assigned',
         grants: [],
+        visible_in_portal: true,
+        allow_idp_initiated: true,
+        allow_sp_initiated: true,
       });
     }
   }, [open, editing, family]);
@@ -235,16 +241,19 @@ export default function AppWizard({
         cas_return_attributes: !!v.cas_return_attributes,
       });
     }
-    // 应用授权
-    base.grant_mode = v.grant_mode || 'public';
-    if (base.grant_mode === 'public') {
-      base.grants = [];
-    } else {
-      base.grants = (v.grants || []).map((g: any) => ({
-        principal_type: g.principal_type,
-        principal_id: g.principal_id,
-      }));
-    }
+    // 访问授权
+    const policy = v.access_policy || 'assigned';
+    base.access_policy = policy;
+    base.visible_in_portal = v.visible_in_portal !== false;
+    base.allow_idp_initiated = v.allow_idp_initiated !== false;
+    base.allow_sp_initiated = v.allow_sp_initiated !== false;
+    base.grants =
+      policy === 'assigned'
+        ? (v.grants || []).map((g: any) => ({
+            principal_type: g.principal_type,
+            principal_id: g.principal_id,
+          }))
+        : [];
     return base;
   };
 
@@ -276,12 +285,11 @@ export default function AppWizard({
         return;
       }
       if (step === 2) {
-        // 应用授权步骤：非 public 时校验已选 principal 至少 1 个
+        // 访问授权步骤：assigned 时校验已选 principal 至少 1 个
         const v = form.getFieldsValue(true);
-        const mode = v.grant_mode || 'public';
-        if (mode !== 'public' && (!v.grants || v.grants.length === 0)) {
-          const label = mode === 'user' ? '用户' : mode === 'group' ? '用户组' : '组织';
-          message.warning(`请至少选择一个${label}，或将授权范围改为「全部」`);
+        const policy = v.access_policy || 'assigned';
+        if (policy === 'assigned' && (!v.grants || v.grants.length === 0)) {
+          message.warning('请至少选择一个用户、组织或用户组，或切换到「所有人可访问」/「暂不授权」');
           return;
         }
         await submitAndAdvance();
