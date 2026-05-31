@@ -49,7 +49,7 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
-  { key: '/admin/monitor', icon: <MonitorOutlined />, label: '应用状态' },
+  { key: '/admin/monitor', icon: <MonitorOutlined />, label: '应用健康' },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
 ];
 
@@ -62,7 +62,7 @@ const labelMap: Record<string, string> = {
   '/admin/access/login-rules': '登录控制',
   '/admin/access/sessions': '在线会话',
   '/admin/settings': '系统设置',
-  '/admin/monitor': '应用状态',
+  '/admin/monitor': '应用健康',
   '/admin/logs': '日志审计',
   '/admin/profile': '个人资料',
 };
