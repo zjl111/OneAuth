@@ -89,7 +89,10 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 16)
 	for _, m := range monitors {
-		if m.HealthCheckURL == "" {
+		if !isValidHealthURL(m.HealthCheckURL) {
+			// 不合法 URL（空 / 字符串名 "MaxKB" / 内部路径 "/admin"）直接跳过，
+			// 否则每 30s 就写一条 "unsupported protocol scheme" 的 down 记录，
+			// 一天积 2880 行垃圾数据
 			continue
 		}
 		wg.Add(1)
@@ -101,6 +104,17 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		}(m)
 	}
 	wg.Wait()
+}
+
+// isValidHealthURL 校验 health_check_url 是否能跑 HTTP 探测：必须是 http:// 或 https:// 开头的绝对 URL
+func isValidHealthURL(u string) bool {
+	if u == "" {
+		return false
+	}
+	if len(u) < 8 {
+		return false
+	}
+	return u[:7] == "http://" || u[:8] == "https://"
 }
 
 // ProbeOne 立即执行一次探测

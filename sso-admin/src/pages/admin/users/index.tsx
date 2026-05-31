@@ -457,12 +457,17 @@ export default function UserListPage() {
                     <Form.Item
                       name="role_ids"
                       label="角色"
-                      extra="选择超级管理员角色将自动获得管理后台访问权限，其他角色按所分配的权限进入对应菜单"
+                      extra="勾选「超级管理员」即可访问管理后台；不勾则仅为普通用户。其他角色（应用管理员 / 审计员）目前还未在后端生效，暂不暴露。"
                     >
                       <Select
                         mode="multiple"
                         placeholder="选择角色"
-                        options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                        // 暂时只暴露 super_admin —— 其他角色 (app_admin / auditor / user)
+                        // 后端 middleware 仅看 is_staff bool，没有按 permission 真正放行，
+                        // 选了也白搭。在权限引擎完整接入之前先隐藏，避免误导。
+                        options={roles
+                          .filter((r) => r.code === 'super_admin')
+                          .map((r) => ({ value: r.id, label: r.name }))}
                       />
                     </Form.Item>
                   </>

@@ -7,6 +7,7 @@ interface AuthState {
   refreshToken: string | null;
   user: UserInfo | null;
   permissions: string[];
+  /** 派生值：accessToken 与 user 同时存在才算已登录。不持久化。 */
   isAuthenticated: boolean;
 
   login: (username: string, password: string, remember?: boolean) => Promise<UserInfo>;
@@ -16,6 +17,8 @@ interface AuthState {
   hasPermission: (perm: string) => boolean;
   clear: () => void;
 }
+
+const authed = (s: Pick<AuthState, 'accessToken' | 'user'>) => !!(s.accessToken && s.user);
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -85,13 +88,19 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'oneauth-auth',
+      // isAuthenticated 不持久化 —— rehydrate 后从 accessToken+user 派生，
+      // 避免 storage 里残留的 true 误导首页 useEffect。
       partialize: (s) => ({
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,
         user: s.user,
         permissions: s.permissions,
-        isAuthenticated: s.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isAuthenticated = authed(state);
+        }
+      },
     }
   )
 );

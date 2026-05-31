@@ -19,6 +19,7 @@ package handler
 //   （由 RSA 私钥派生的自签名 X.509 证书）。
 
 import (
+	"bytes"
 	"compress/flate"
 	"context"
 	"crypto/rsa"
@@ -42,10 +43,12 @@ import (
 
 	"crypto/rand"
 
+	"github.com/beevik/etree"
 	"github.com/crewjam/saml"
 	samllogger "github.com/crewjam/saml/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	dsig "github.com/russellhaering/goxmldsig"
 
 	"sso-server/internal/model"
 	"sso-server/internal/oauth"
@@ -434,11 +437,12 @@ func (h *SAMLHandler) SSO(c *gin.Context) {
 		return
 	}
 	// 解 base64+inflate 拿到 AuthnRequest XML，先解析 issuer 找 client
-	authn, err := decodeAuthnRequest(rawReq.SAMLRequest, rawReq.IsRedirect)
+	authn, rawXML, err := decodeAuthnRequest(rawReq.SAMLRequest, rawReq.IsRedirect)
 	if err != nil {
 		c.String(http.StatusBadRequest, "AuthnRequest 解析失败：%v", err)
 		return
 	}
+	rawReq.RawXML = rawXML
 	issuer := ""
 	if authn.Issuer != nil {
 		issuer = authn.Issuer.Value
@@ -460,6 +464,18 @@ func (h *SAMLHandler) SSO(c *gin.Context) {
 		authn.AssertionConsumerServiceURL != client.SAMLACSURL {
 		c.String(http.StatusBadRequest, "AssertionConsumerServiceURL 与应用配置不一致")
 		return
+	}
+	// 当 SP 在 POST 绑定的 AuthnRequest 里附带签名时，强制用配置的 SP 证书校验。
+	// （Redirect 绑定的 detached query 签名暂未实现，命中再处理。）
+	if !rawReq.IsRedirect && containsSignature(rawReq.RawXML) {
+		if client.SAMLCertificate == "" {
+			c.String(http.StatusBadRequest, "AuthnRequest 已签名，但应用未配置 SP 公钥证书")
+			return
+		}
+		if err := verifySignedAuthnRequest(rawReq.RawXML, client.SAMLCertificate); err != nil {
+			c.String(http.StatusBadRequest, "AuthnRequest 签名校验失败：%v", err)
+			return
+		}
 	}
 
 	// 检查登录态
@@ -577,6 +593,7 @@ type rawSAMLRequest struct {
 	SAMLRequest string
 	RelayState  string
 	IsRedirect  bool
+	RawXML      []byte // 解码并 inflate 后的 AuthnRequest XML，供签名校验复用
 }
 
 func readSAMLRequest(c *gin.Context) (*rawSAMLRequest, error) {
@@ -598,15 +615,16 @@ func readSAMLRequest(c *gin.Context) (*rawSAMLRequest, error) {
 }
 
 // decodeAuthnRequest base64 解码（Redirect 绑定还要 inflate）。
-func decodeAuthnRequest(s string, redirect bool) (*saml.AuthnRequest, error) {
+// 第二个返回值是解码后的原始 XML 字节，便于上层做签名校验。
+func decodeAuthnRequest(s string, redirect bool) (*saml.AuthnRequest, []byte, error) {
 	if s == "" {
-		return nil, errors.New("SAMLRequest 为空")
+		return nil, nil, errors.New("SAMLRequest 为空")
 	}
 	raw, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
 		raw, err = base64.RawStdEncoding.DecodeString(s)
 		if err != nil {
-			return nil, fmt.Errorf("base64: %w", err)
+			return nil, nil, fmt.Errorf("base64: %w", err)
 		}
 	}
 	if redirect {
@@ -614,15 +632,47 @@ func decodeAuthnRequest(s string, redirect bool) (*saml.AuthnRequest, error) {
 		defer fr.Close()
 		raw2, err := io.ReadAll(fr)
 		if err != nil {
-			return nil, fmt.Errorf("inflate: %w", err)
+			return nil, nil, fmt.Errorf("inflate: %w", err)
 		}
 		raw = raw2
 	}
 	var req saml.AuthnRequest
 	if err := xml.Unmarshal(raw, &req); err != nil {
-		return nil, fmt.Errorf("xml: %w", err)
+		return nil, nil, fmt.Errorf("xml: %w", err)
 	}
-	return &req, nil
+	return &req, raw, nil
+}
+
+// containsSignature 简单字符串检查 AuthnRequest XML 是否带 <ds:Signature>
+func containsSignature(raw []byte) bool {
+	return bytes.Contains(raw, []byte("Signature")) && bytes.Contains(raw, []byte("xmldsig"))
+}
+
+// verifySignedAuthnRequest 用 SP 证书校验 POST 绑定 AuthnRequest 的 enveloped 签名
+func verifySignedAuthnRequest(raw []byte, certPEM string) error {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return errors.New("SP 证书 PEM 解析失败")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("SP 证书无效：%w", err)
+	}
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(raw); err != nil {
+		return fmt.Errorf("XML 解析失败：%w", err)
+	}
+	root := doc.Root()
+	if root == nil {
+		return errors.New("AuthnRequest 根节点缺失")
+	}
+	ctx := dsig.NewDefaultValidationContext(&dsig.MemoryX509CertificateStore{
+		Roots: []*x509.Certificate{cert},
+	})
+	if _, err := ctx.Validate(root); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *SAMLHandler) findClientByEntityID(entityID string) (*model.OAuth2Client, error) {
