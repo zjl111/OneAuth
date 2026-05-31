@@ -322,8 +322,14 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if in.HomeURL != nil {
 		c.HomeURL = *in.HomeURL
 	}
+	// "应用入口"变更：如果用户之前没单独配过 HealthCheckURL（也就是它和旧 LoginURL 一致），
+	// 那么 HealthCheckURL 跟着新 LoginURL 走；已单独配过的不动。
 	if in.LoginURL != nil {
+		oldLogin := c.LoginURL
 		c.LoginURL = *in.LoginURL
+		if in.HealthCheckURL == nil && c.HealthCheckURL == oldLogin {
+			c.HealthCheckURL = *in.LoginURL
+		}
 	}
 	if in.HealthCheckURL != nil {
 		c.HealthCheckURL = *in.HealthCheckURL
@@ -416,9 +422,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	if err := s.repo.Update(c); err != nil {
 		return nil, err
 	}
-	// 同步更新 monitor URL
-	if s.monitorRepo != nil && in.HealthCheckURL != nil {
-		s.monitorRepo.UpdateHealthURL(c.ClientID, *in.HealthCheckURL)
+	// 同步更新 monitor URL（包括用户改 LoginURL 跟着传染过来的情况）
+	if s.monitorRepo != nil {
+		s.monitorRepo.UpdateHealthURL(c.ClientID, c.HealthCheckURL)
 	}
 	// 同步授权列表：
 	//   access_policy=all/none → 清空 sso_app_grant
