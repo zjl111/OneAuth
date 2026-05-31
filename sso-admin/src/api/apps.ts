@@ -69,6 +69,7 @@ export const appsApi = {
   detail: (id: string) => get<OAuth2Client>(`/apps/${id}`),
   update: (id: string, data: Partial<OAuth2Client>) => put<OAuth2Client>(`/apps/${id}`, data),
   delete: (id: string) => del(`/apps/${id}`),
+  batchDelete: (ids: string[]) => post<{ deleted: number; failed: string[] }>('/apps/batch-delete', { ids }),
   rotateSecret: (id: string) => post<{ client_secret: string }>(`/apps/${id}/rotate-secret`),
   toggleStatus: (id: string) => post<OAuth2Client>(`/apps/${id}/toggle-status`),
 };

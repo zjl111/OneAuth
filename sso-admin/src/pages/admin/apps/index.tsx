@@ -23,6 +23,7 @@ import {
   ApiOutlined,
   LoginOutlined,
   SelectOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
 import PageToolbar from '@/components/PageToolbar';
@@ -36,6 +37,35 @@ export default function AppListPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    const builtin = data.filter((d) => selectedIds.includes(d.id) && d.is_builtin);
+    if (builtin.length > 0) {
+      message.warning(`内置应用「${builtin.map((b) => b.client_name).join('、')}」不可删除，请先取消勾选`);
+      return;
+    }
+    modal.confirm({
+      title: `确认删除选中的 ${selectedIds.length} 个应用？`,
+      content: '删除后该应用将无法再发起 SSO 登录，相关授权与监控数据也会一并清除。',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const r: any = await appsApi.batchDelete(selectedIds);
+          if (r?.failed?.length) {
+            message.warning(`已删除 ${r.deleted} 个，${r.failed.length} 个失败`);
+          } else {
+            message.success(`已删除 ${selectedIds.length} 个应用`);
+          }
+          setSelectedIds([]);
+          load();
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '批量删除失败');
+        }
+      },
+    });
+  };
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -137,6 +167,11 @@ export default function AppListPage() {
           onPressEnter={load}
           style={{ width: 240 }}
         />
+        {selectedIds.length > 0 && (
+          <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+            批量删除（{selectedIds.length}）
+          </Button>
+        )}
         <Button icon={<ReloadOutlined />} onClick={load}>
           刷新
         </Button>
@@ -150,6 +185,11 @@ export default function AppListPage() {
         loading={loading}
         dataSource={data}
         scroll={{ x: 1100 }}
+        rowSelection={{
+          selectedRowKeys: selectedIds,
+          onChange: (keys) => setSelectedIds(keys as string[]),
+          getCheckboxProps: (r: any) => ({ disabled: r.is_builtin }),
+        }}
         pagination={{
           current: pagination.current,
           pageSize: pagination.pageSize,

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"sso-server/internal/model"
 	"sso-server/internal/repository"
@@ -110,6 +111,32 @@ func (h *LoginRuleHandler) Delete(c *gin.Context) {
 		return
 	}
 	response.OK(c, nil)
+}
+
+// BatchDelete 批量删除登录规则
+func (h *LoginRuleHandler) BatchDelete(c *gin.Context) {
+	var req struct {
+		IDs []string `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	deleted := 0
+	failed := []string{}
+	for _, raw := range req.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			failed = append(failed, raw)
+			continue
+		}
+		if err := h.Repo.Delete(id); err != nil {
+			failed = append(failed, raw)
+			continue
+		}
+		deleted++
+	}
+	response.OK(c, gin.H{"deleted": deleted, "failed": failed})
 }
 
 func (h *LoginRuleHandler) Toggle(c *gin.Context) {

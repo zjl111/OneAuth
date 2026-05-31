@@ -206,6 +206,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/apps/:id", h.App.Detail)
 		admin.PUT("/apps/:id", h.App.Update)
 		admin.DELETE("/apps/:id", h.App.Delete)
+		admin.POST("/apps/batch-delete", h.App.BatchDelete)
 		admin.POST("/apps/:id/rotate-secret", h.App.RotateSecret)
 		admin.POST("/apps/:id/toggle-status", h.App.ToggleStatus)
 		// SAML：粘贴/上传 SP metadata URL 或 XML，返回前端要回填的字段
@@ -248,6 +249,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/access/login-rules", h.LoginRule.Create)
 		admin.PUT("/access/login-rules/:id", h.LoginRule.Update)
 		admin.DELETE("/access/login-rules/:id", h.LoginRule.Delete)
+		admin.POST("/access/login-rules/batch-delete", h.LoginRule.BatchDelete)
 		admin.POST("/access/login-rules/:id/toggle", h.LoginRule.Toggle)
 
 		// 监控

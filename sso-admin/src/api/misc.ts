@@ -187,6 +187,7 @@ export const loginRuleApi = {
   create: (data: Partial<LoginRule>) => post<LoginRule>('/access/login-rules', data),
   update: (id: string, data: Partial<LoginRule>) => put<LoginRule>(`/access/login-rules/${id}`, data),
   delete: (id: string) => del(`/access/login-rules/${id}`),
+  batchDelete: (ids: string[]) => post<{ deleted: number; failed: string[] }>('/access/login-rules/batch-delete', { ids }),
   toggle: (id: string) => post<{ enabled: boolean }>(`/access/login-rules/${id}/toggle`),
 };
 

@@ -15,16 +15,39 @@ import {
   Popconfirm,
   App as AntdApp,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { loginRuleApi, type LoginRule } from '@/api/misc';
 import { usersApi, type User } from '@/api/users';
 import TimeMaskPicker from '@/components/TimeMaskPicker';
 
 export default function LoginRulesPage() {
-  const { message } = AntdApp.useApp();
+  const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<LoginRule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    modal.confirm({
+      title: `确认删除选中的 ${selectedIds.length} 条登录规则？`,
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const r: any = await loginRuleApi.batchDelete(selectedIds);
+          if (r?.failed?.length) {
+            message.warning(`已删除 ${r.deleted} 条，${r.failed.length} 条失败`);
+          } else {
+            message.success(`已删除 ${selectedIds.length} 条`);
+          }
+          setSelectedIds([]);
+          load();
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '批量删除失败');
+        }
+      },
+    });
+  };
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<LoginRule | null>(null);
@@ -119,6 +142,11 @@ export default function LoginRulesPage() {
           按规则的优先级（数字越小越优先）顺序匹配登录请求的 IP 与时段。命中首条匹配规则即决定允许或拒绝；未命中任一规则时默认放行。
         </div>
         <Space>
+          {selectedIds.length > 0 && (
+            <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+              批量删除（{selectedIds.length}）
+            </Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>
             刷新
           </Button>
@@ -133,6 +161,10 @@ export default function LoginRulesPage() {
         loading={loading}
         dataSource={data}
         pagination={false}
+        rowSelection={{
+          selectedRowKeys: selectedIds,
+          onChange: (keys) => setSelectedIds(keys as string[]),
+        }}
         columns={[
           { title: '优先级', dataIndex: 'priority', width: 90, align: 'center' },
           { title: '名称', dataIndex: 'name' },
