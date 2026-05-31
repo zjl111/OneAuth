@@ -104,7 +104,7 @@ const RESOURCE_LABEL: Record<string, string> = {
   apps: '应用',
   configs: '系统配置',
   access: '访问控制',
-  monitor: '状态监控',
+  monitor: '应用状态',
   dictionaries: '字典',
   auth: '账户',
   permissions: '权限',
