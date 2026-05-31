@@ -37,6 +37,15 @@ function HandoffRow({
   );
 }
 
+const codeStyle: React.CSSProperties = {
+  background: '#dbeafe',
+  color: '#1d4ed8',
+  padding: '0 6px',
+  borderRadius: 4,
+  fontSize: 12,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+};
+
 export default function Step3Handoff({
   family,
   isOIDC,
@@ -84,40 +93,83 @@ export default function Step3Handoff({
           </Descriptions>
         </div>
 
-        {/* 接入说明 */}
+        {/* 接入指南 */}
         <div style={{ border: '1px solid #bfdbfe', borderRadius: 12, padding: '20px 24px', background: '#eff6ff' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1d4ed8', fontWeight: 600, marginBottom: 12 }}>
-            <InfoCircleOutlined /> 接入说明
+            <InfoCircleOutlined /> 接入指南
           </div>
-          <ul style={{ paddingLeft: 18, margin: 0, color: '#475569', fontSize: 13, lineHeight: 1.8 }}>
+          <ol style={{ paddingLeft: 22, margin: 0, color: '#475569', fontSize: 13, lineHeight: 1.85 }}>
             {isOAuth && (
               <>
-                <li>应用侧请将客户端 ID、客户端密钥和回调地址配置到认证设置中</li>
-                <li>如启用 HTTPS，请确保回调地址与应用配置完全一致</li>
+                <li>
+                  <b>配置应用侧（Client）</b>：请将右侧的 <b>客户端 ID</b>、<b>客户端密钥</b>、
+                  以及 {isOIDC ? 'Discovery / Issuer 端点' : '授权 / Token 端点'} 复制并提供给应用侧，让他们配置到对应的系统中。
+                </li>
+                <li>
+                  <b>回调地址必须一致</b>：应用侧使用的 redirect_uri 必须与左侧"回调地址 / Redirect URI"列表完全匹配，
+                  HTTPS 与末尾斜杠都不能差。
+                </li>
+                <li>
+                  <b>用户字段映射</b>：OneAuth 在 access_token / id_token 中下发的字段为
+                  <code style={codeStyle}> sub / preferred_username / name / email / phone_number / department</code>，
+                  应用侧根据这些字段匹配自己的用户表。
+                </li>
+                <li>
+                  <b>快速交付</b>：可通过下方按钮一键复制全部配置或下载 JSON，直接发给实施人员。
+                </li>
               </>
             )}
             {family === 'saml' && (
               <>
-                <li>应用侧需将下方 Entity ID、ACS URL 配置到 SP 元数据</li>
-                <li>如需加密 Assertion，请向应用侧提供 IdP 签名证书</li>
+                <li>
+                  <b>配置应用侧（SP）</b>：请将下方的 <b>IdP Metadata URL</b> 复制并提供给应用侧，让他们配置到对应的系统中。
+                </li>
+                <li>
+                  <b>安全证书</b>：如需加密传输，请在第 2 步打开"加密断言"，并向应用侧索要 SP 公钥证书配置到本系统。
+                </li>
+                <li>
+                  <b>字段映射</b>：OneAuth 在 SAML Assertion 中签发的属性为
+                  <code style={codeStyle}> username / email / mobile / nickname / department / employee_no / is_staff</code>，
+                  应用侧将这些 Attribute Name 映射到自己的用户字段即可。
+                </li>
+                <li>
+                  <b>快速交付</b>：可通过下方按钮一键复制全部配置或下载 JSON，直接发给实施人员。
+                </li>
               </>
             )}
             {family === 'cas' && (
               <>
-                <li>应用侧需将服务地址 (service) 加入 CAS 客户端配置</li>
-                <li>CAS Ticket 默认 5 分钟过期，可在管理端调整</li>
+                <li>
+                  <b>配置应用侧（CAS Client）</b>：请将下方的 <b>CAS Server URL</b>（OneAuth 提供）填入应用 CAS 客户端的"服务器地址"，
+                  并把应用自己的回调 URL 在 OneAuth 这边填到"服务地址"白名单。
+                </li>
+                <li>
+                  <b>验票端点</b>：CAS 客户端会自动从 Server URL 拼出 <code style={codeStyle}>/p3/serviceValidate</code>，
+                  无需单独配置；如客户端要求显式填写，使用下方"验票端点 (V3)"。
+                </li>
+                <li>
+                  <b>用户属性</b>：第 2 步开启"返回用户属性"后，CAS V3 验票响应会带
+                  <code style={codeStyle}> username / email / mobile / department</code> 等属性，应用侧读取后映射到自己用户表。
+                </li>
+                <li>
+                  <b>快速交付</b>：可通过下方按钮一键复制全部配置或下载 JSON，直接发给实施人员。
+                </li>
               </>
             )}
             {family === 'link' && (
               <>
-                <li>用户在门户点击该应用图标会直接跳转到上方"应用入口"地址</li>
-                <li>无单点登录，应用方自行处理登录鉴权</li>
+                <li>
+                  <b>非单点登录应用</b>：用户在门户点击该应用图标会直接跳转到上方"应用入口"地址，OneAuth 不参与登录态传递。
+                </li>
+                <li>
+                  <b>登录鉴权</b>：应用方自行处理登录与会话；门户图标右下角会显示锁形标识，提醒用户这是非 SSO 应用。
+                </li>
+                <li>
+                  <b>访问审计</b>：用户每次点击进入仍会写入"应用访问日志"，便于审计和热门应用统计。
+                </li>
               </>
             )}
-            {family !== 'link' && (
-              <li>可通过下方按钮复制全部配置或下载 JSON 提供给实施人员</li>
-            )}
-          </ul>
+          </ol>
         </div>
       </div>
 
