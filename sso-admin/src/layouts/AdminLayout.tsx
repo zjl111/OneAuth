@@ -38,14 +38,6 @@ const menuItems: any[] = [
       { key: '/admin/user-groups', icon: <UsergroupAddOutlined />, label: '用户组' },
     ],
   },
-  {
-    key: 'perms',
-    icon: <SafetyOutlined />,
-    label: '权限管理',
-    children: [
-      { key: '/admin/roles', icon: <SafetyOutlined />, label: '角色权限' },
-    ],
-  },
   { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用中心' },
   {
     key: 'access',
@@ -56,7 +48,7 @@ const menuItems: any[] = [
       { key: '/admin/access/sessions', icon: <UserOutlined />, label: '在线会话' },
     ],
   },
-  { key: '/admin/settings', icon: <SettingOutlined />, label: '配置管理' },
+  { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
   { key: '/admin/monitor', icon: <MonitorOutlined />, label: '应用状态' },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
 ];
@@ -66,11 +58,10 @@ const labelMap: Record<string, string> = {
   '/admin/users': '用户',
   '/admin/orgs': '组织',
   '/admin/user-groups': '用户组',
-  '/admin/roles': '角色权限',
   '/admin/apps': '应用中心',
   '/admin/access/login-rules': '登录控制',
   '/admin/access/sessions': '在线会话',
-  '/admin/settings': '配置管理',
+  '/admin/settings': '系统设置',
   '/admin/monitor': '应用状态',
   '/admin/logs': '日志审计',
   '/admin/profile': '个人资料',
@@ -80,7 +71,6 @@ const breadcrumbExtra: Record<string, string> = {
   '/admin/users': '身份目录',
   '/admin/orgs': '身份目录',
   '/admin/user-groups': '身份目录',
-  '/admin/roles': '权限管理',
   '/admin/access/login-rules': '访问控制',
   '/admin/access/sessions': '访问控制',
 };
@@ -118,9 +108,6 @@ export default function AdminLayout() {
     const keys: string[] = [];
     if (['/admin/users', '/admin/orgs', '/admin/user-groups'].includes(location.pathname)) {
       keys.push('identity');
-    }
-    if (location.pathname === '/admin/roles') {
-      keys.push('perms');
     }
     if (location.pathname.startsWith('/admin/access')) {
       keys.push('access');

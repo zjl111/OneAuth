@@ -11,7 +11,6 @@ import DashboardPage from '@/pages/admin/dashboard';
 import UserListPage from '@/pages/admin/users';
 import OrgPage from '@/pages/admin/orgs';
 import UserGroupsPage from '@/pages/admin/user-groups';
-import RolePage from '@/pages/admin/roles';
 import AppListPage from '@/pages/admin/apps';
 import LoginRulesPage from '@/pages/admin/login-rules';
 import OnlineSessionsPage from '@/pages/admin/sessions';
@@ -67,7 +66,6 @@ export const router = createBrowserRouter([
       { path: 'users', element: <UserListPage /> },
       { path: 'orgs', element: <OrgPage /> },
       { path: 'user-groups', element: <UserGroupsPage /> },
-      { path: 'roles', element: <RolePage /> },
       { path: 'apps', element: <AppListPage /> },
       { path: 'access', element: <Navigate to="/admin/access/login-rules" replace /> },
       { path: 'access/login-rules', element: <LoginRulesPage /> },
