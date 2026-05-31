@@ -259,7 +259,7 @@ export default function Step2Saml() {
                   >
                     <Radio.Group buttonStyle="solid">
                       <Radio.Button value="yes">是</Radio.Button>
-                      <Radio.Button value="no">否（推荐）</Radio.Button>
+                      <Radio.Button value="no">否</Radio.Button>
                     </Radio.Group>
                   </Form.Item>
 
