@@ -218,23 +218,6 @@ export default function UserListPage() {
             render: (_, r) => r.department?.name || '-',
           },
           {
-            title: '角色',
-            dataIndex: 'roles',
-            width: 200,
-            render: (rs: User['roles']) =>
-              rs?.length ? (
-                <Space>
-                  {rs.map((r) => (
-                    <Tag color="blue" key={r.id}>
-                      {r.name}
-                    </Tag>
-                  ))}
-                </Space>
-              ) : (
-                '-'
-              ),
-          },
-          {
             title: '管理员',
             dataIndex: 'is_staff',
             width: 90,
