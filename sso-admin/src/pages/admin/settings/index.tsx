@@ -80,13 +80,15 @@ export default function SettingsPage() {
   }, []);
 
   const grouped = useMemo(() => {
-    // 强制 tab 顺序：平台信息 > 监控设置 > 安全策略 > SMTP
+    // 强制 tab 顺序，且只展示白名单内的 category
+    // 内部用的（_migration、临时迁移标记等）以下划线开头，从不暴露给用户
     const order = ['platform', 'monitor', 'security', 'smtp', 'ldap', 'wecom'];
+    const allowed = new Set(order);
     const g: Record<string, SystemConfig[]> = {};
     order.forEach((k) => (g[k] = []));
     data.forEach((c) => {
-      if (c.category === 'oauth') return; // OAuth/OIDC 已下沉到应用级别
-      (g[c.category] ||= []).push(c);
+      if (!allowed.has(c.category)) return; // _migration / oauth / 任何未来内部类别都拦在这里
+      g[c.category].push(c);
     });
     for (const k of Object.keys(g)) {
       if (g[k].length === 0) delete g[k];

@@ -119,11 +119,15 @@ export default function UserListPage() {
 
   const handleSave = async () => {
     const values = await form.validateFields();
-    // is_admin checkbox → role_ids
     const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
     const payload: any = { ...values };
     delete payload.is_admin;
     payload.role_ids = values.is_admin && superAdminRoleID ? [superAdminRoleID] : [];
+    // Select allowClear 清空后 form 给的是 undefined → JSON 里直接缺字段 → 后端
+    // *DepartmentID == nil 跳过更新。改用全零 UUID 当哨兵，后端识别后真清空。
+    if (editing && payload.department_id === undefined) {
+      payload.department_id = '00000000-0000-0000-0000-000000000000';
+    }
     try {
       if (editing) {
         await usersApi.update(editing.id, payload);

@@ -132,7 +132,10 @@ func (r *ConfigRepository) InvalidateSiteURL() {
 
 func (r *ConfigRepository) ListAll() ([]model.SystemConfig, error) {
 	var items []model.SystemConfig
-	err := r.db.Order("category, key").Find(&items).Error
+	// 排除内部用的 category（约定以下划线开头，比如 _migration 这种迁移标记）
+	err := r.db.Where("category NOT LIKE ?", "\\_%").
+		Order("category, key").
+		Find(&items).Error
 	return items, err
 }
 
