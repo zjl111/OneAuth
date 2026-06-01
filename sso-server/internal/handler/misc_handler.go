@@ -116,6 +116,73 @@ func (h *DepartmentHandler) Delete(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// Move 移动部门：变更 parent_id 并校验不形成环
+//   POST /api/v1/departments/:id/move  body={"parent_id":"<uuid|null>"}
+//   parent_id == null  → 移到根
+//   parent_id == self  → 拒绝
+//   parent_id 是 self 的子孙 → 拒绝
+func (h *DepartmentHandler) Move(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	d, err := h.Repo.Get(id)
+	if err != nil {
+		response.NotFound(c, "部门不存在")
+		return
+	}
+	var in struct {
+		ParentID *uuid.UUID `json:"parent_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	// 移到根
+	if in.ParentID == nil {
+		d.ParentID = nil
+		if err := h.Repo.Update(d); err != nil {
+			response.ServerError(c, err.Error())
+			return
+		}
+		response.OK(c, d)
+		return
+	}
+	// 不允许设为自己
+	if *in.ParentID == id {
+		response.BadRequest(c, "不能将部门移动到自身下")
+		return
+	}
+	// 不允许设为自己的子孙——遍历目标父节点的祖先链
+	all, err := h.Repo.ListAll()
+	if err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	parents := make(map[uuid.UUID]*uuid.UUID, len(all))
+	for i := range all {
+		parents[all[i].ID] = all[i].ParentID
+	}
+	cursor := in.ParentID
+	for cursor != nil {
+		if *cursor == id {
+			response.BadRequest(c, "不能将部门移动到其子部门下")
+			return
+		}
+		next, ok := parents[*cursor]
+		if !ok {
+			break
+		}
+		cursor = next
+	}
+	d.ParentID = in.ParentID
+	if err := h.Repo.Update(d); err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	response.OK(c, d)
+}
+
 // RoleHandler ------------------------------------
 type RoleHandler struct {
 	Repo     *repository.RoleRepository

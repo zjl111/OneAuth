@@ -24,6 +24,7 @@ import {
   SearchOutlined,
   MoreOutlined,
   UserAddOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import { usersApi, type User } from '@/api/users';
@@ -88,6 +89,29 @@ export default function OrgPage() {
   const [candidateUsers, setCandidateUsers] = useState<User[]>([]);
   const [pickedUserId, setPickedUserId] = useState<string | undefined>();
   const [roles, setRoles] = useState<Role[]>([]);
+
+  // 移动部门 Modal
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [movingDept, setMovingDept] = useState<Department | null>(null);
+  const [moveTargetParent, setMoveTargetParent] = useState<string | null>(null);
+
+  const openDeptMove = (d: Department) => {
+    setMovingDept(d);
+    setMoveTargetParent(d.parent_id || null);
+    setMoveOpen(true);
+  };
+  const handleDeptMove = async () => {
+    if (!movingDept) return;
+    try {
+      await orgApi.move(movingDept.id, moveTargetParent || null);
+      message.success('已移动');
+      setMoveOpen(false);
+      setMovingDept(null);
+      loadTree();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '移动失败');
+    }
+  };
 
   const loadTree = () => orgApi.tree().then(setTree);
   useEffect(() => {
@@ -221,6 +245,7 @@ export default function OrgPage() {
                     items: [
                       { key: 'add', icon: <PlusOutlined />, label: '新建子部门', onClick: () => handleDeptAdd(d) },
                       { key: 'edit', icon: <EditOutlined />, label: '编辑', onClick: () => handleDeptEdit(d) },
+                      { key: 'move', icon: <SwapOutlined />, label: '移动', onClick: () => openDeptMove(d) },
                       { type: 'divider' as const },
                       { key: 'del', icon: <DeleteOutlined />, label: '删除', danger: true, onClick: () => handleDeptDel(d) },
                     ],
@@ -418,6 +443,44 @@ export default function OrgPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 移动部门 Modal */}
+      <Modal
+        title={movingDept ? `移动部门「${movingDept.name}」` : '移动部门'}
+        open={moveOpen}
+        onCancel={() => setMoveOpen(false)}
+        onOk={handleDeptMove}
+        okText="确认移动"
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 12, color: '#475569', fontSize: 13 }}>
+          选择新的上级部门：选"根部门"将变成顶级部门；不能选择自身或自身的子部门。
+        </div>
+        <Select
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="根部门"
+          value={moveTargetParent || undefined}
+          onChange={(v) => setMoveTargetParent(v || null)}
+          showSearch
+          optionFilterProp="label"
+          options={(() => {
+            // 平铺并排除自己 + 自己子树
+            const exclude = movingDept ? new Set(collectSubtreeIds(tree, movingDept.id)) : new Set<string>();
+            const flat: Array<{ value: string; label: string }> = [];
+            const dfs = (nodes: Department[], depth: number) => {
+              for (const n of nodes) {
+                if (!exclude.has(n.id)) {
+                  flat.push({ value: n.id, label: '— '.repeat(depth) + n.name });
+                }
+                if (n.children?.length) dfs(n.children, depth + 1);
+              }
+            };
+            dfs(tree, 0);
+            return flat;
+          })()}
+        />
       </Modal>
 
       {/* 添加成员 Modal */}

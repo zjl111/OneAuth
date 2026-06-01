@@ -184,6 +184,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/departments", h.Department.List)
 		admin.POST("/departments", h.Department.Create)
 		admin.PUT("/departments/:id", h.Department.Update)
+		admin.POST("/departments/:id/move", h.Department.Move)
 		admin.DELETE("/departments/:id", h.Department.Delete)
 
 		// 角色与权限

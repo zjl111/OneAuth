@@ -106,6 +106,8 @@ export const orgApi = {
   create: (data: Partial<Department>) => post<Department>('/departments', data),
   update: (id: string, data: Partial<Department>) => put<Department>(`/departments/${id}`, data),
   delete: (id: string) => del(`/departments/${id}`),
+  move: (id: string, parentId: string | null) =>
+    post<Department>(`/departments/${id}/move`, { parent_id: parentId }),
 };
 
 export const roleApi = {
