@@ -192,12 +192,16 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: #f5f7fb;
-  color: #1677ff;
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  font-size: 14px;
+  overflow: hidden;
+}
+.rank-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .rank-name {
   flex: 1;

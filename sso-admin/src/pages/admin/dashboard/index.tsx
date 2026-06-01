@@ -7,7 +7,6 @@ import {
   LoginOutlined,
   ClockCircleOutlined,
   ArrowRightOutlined,
-  MailOutlined,
   TeamOutlined,
   EnvironmentOutlined,
   CheckCircleOutlined,
@@ -52,7 +51,7 @@ export default function DashboardPage() {
     active_users: 0, active_window_minutes: 120,
   });
   const [trend, setTrend] = useState<Array<{ date: string; count: number }>>([]);
-  const [dist, setDist] = useState<Array<{ client_id: string; client_name: string; count: number }>>([]);
+  const [dist, setDist] = useState<Array<{ client_id: string; client_name: string; logo_url?: string; count: number }>>([]);
   const [regionTop, setRegionTop] = useState<Array<{ province: string; count: number }>>([]);
   const [overview, setOverview] = useState<StatusOverview | null>(null);
 
@@ -227,16 +226,45 @@ export default function DashboardPage() {
               <Empty description="暂无访问数据" />
             ) : (
               <ul className="rank-list">
-                {dist.slice(0, 10).map((d, i) => (
-                  <li key={d.client_id}>
-                    <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>
-                    <span className="rank-icon">
-                      <MailOutlined />
-                    </span>
-                    <span className="rank-name">{d.client_name}</span>
-                    <span className="rank-count">{d.count.toLocaleString()}</span>
-                  </li>
-                ))}
+                {dist.slice(0, 10).map((d, i) => {
+                  const isImg = d.logo_url && /^(https?:|\/)/i.test(d.logo_url);
+                  const isEmoji = d.logo_url && d.logo_url.length <= 4 && !isImg;
+                  return (
+                    <li key={d.client_id}>
+                      <span className={`rank-badge rank-${i + 1}`}>{i + 1}</span>
+                      <span className="rank-icon">
+                        {isImg ? (
+                          <img
+                            src={d.logo_url!}
+                            alt={d.client_name}
+                            style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }}
+                          />
+                        ) : isEmoji ? (
+                          <span style={{ fontSize: 22 }}>{d.logo_url}</span>
+                        ) : (
+                          <span
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 6,
+                              background: '#e0e7ff',
+                              color: '#4338ca',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 13,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {(d.client_name || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                      </span>
+                      <span className="rank-name">{d.client_name}</span>
+                      <span className="rank-count">{d.count.toLocaleString()}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>

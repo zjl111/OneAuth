@@ -288,21 +288,25 @@ func (r *LogRepository) LoginTrend(days int) ([]DailyLoginCount, error) {
 type AppAccessCount struct {
 	ClientID   string `json:"client_id"`
 	ClientName string `json:"client_name"`
+	LogoURL    string `json:"logo_url"`
 	Count      int64  `json:"count"`
 }
 
 func (r *LogRepository) AppAccessDistribution(days int) ([]AppAccessCount, error) {
-	// 按 client_id 聚合，client_name 取客户端表里的最新值（access_log 里写的是访问时的快照，
-	// 后续改名/删除会让前端展示同名多条或残留已删应用）。
+	// 按 client_id 聚合，client_name / logo_url 取客户端表里的最新值
+	// （access_log 里写的是访问时的快照，后续改名 / 删除会让前端展示同名多条或残留已删应用）。
 	// 隐藏：sso-admin 管理后台自身、已经删除的 client（c.id is null）。
 	results := []AppAccessCount{}
 	start := time.Now().AddDate(0, 0, -days)
 	r.db.Table("sso_access_log AS a").
-		Select("a.client_id AS client_id, COALESCE(c.client_name, a.client_name) AS client_name, COUNT(*) AS count").
+		Select(`a.client_id AS client_id,
+			COALESCE(c.client_name, a.client_name) AS client_name,
+			COALESCE(c.logo_url, '') AS logo_url,
+			COUNT(*) AS count`).
 		Joins("LEFT JOIN sso_oauth2_client AS c ON c.client_id = a.client_id").
 		Where("a.created_at >= ? AND a.client_id <> ?", start, "sso-admin").
 		Where("c.id IS NOT NULL").
-		Group("a.client_id, COALESCE(c.client_name, a.client_name)").
+		Group("a.client_id, c.client_name, a.client_name, c.logo_url").
 		Order("count DESC").
 		Limit(10).
 		Scan(&results)
