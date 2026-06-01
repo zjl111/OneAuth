@@ -109,9 +109,10 @@ export default function UserListPage() {
   const openEdit = (u: User) => {
     setEditing(u);
     const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
+    const userRoles = u.roles || [];
     form.setFieldsValue({
       ...u,
-      is_admin: !!superAdminRoleID && u.roles.some((r) => r.id === superAdminRoleID),
+      is_admin: !!superAdminRoleID && userRoles.some((r) => r.id === superAdminRoleID),
     });
     setModalOpen(true);
   };
