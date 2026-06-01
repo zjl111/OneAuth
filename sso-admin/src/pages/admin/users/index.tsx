@@ -118,7 +118,14 @@ export default function UserListPage() {
   };
 
   const handleSave = async () => {
-    const values = await form.validateFields();
+    // validateFields 只校验已挂载的字段；表单字段分布在两个 Tab 里，
+    // 切到非激活 Tab 时其 Form.Item 已 unmount，validateFields() 拿不到
+    // 该 Tab 字段的值（但 form store 里还在）。先 validateFields 走校验，
+    // 再用 getFieldsValue(true) 抓全量值（包括 unmounted Tab）。
+    await form.validateFields().catch(() => {
+      throw new Error('表单校验未通过');
+    });
+    const values = form.getFieldsValue(true);
     const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
     const payload: any = { ...values };
     delete payload.is_admin;
@@ -289,7 +296,6 @@ export default function UserListPage() {
         <Form
           form={form}
           layout="vertical"
-          preserve={false}
           initialValues={{
             is_active: true,
             user_type: 'internal',
