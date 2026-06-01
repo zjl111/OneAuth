@@ -23,11 +23,30 @@ export default function HomePage() {
   const [loginOpen, setLoginOpen] = useState(false);
 
   // 携带 return_to 落地时：已登录直接回跳；未登录自动弹出登录框
+  // 防回环：access_token 在 localStorage 但 sso_session cookie 已失效时，
+  //   后端协议入口 (/cas/* /saml/* /oauth/authorize) 又会 302 回 "/?return_to=同一个URL"，
+  //   useEffect 又跳过去，循环。用 sessionStorage 记录"最近 5 秒内是否已经因这个 returnTo
+  //   被弹回来过一次"，命中就放弃自动跳转，弹登录框让用户重新登录。
   useEffect(() => {
     if (!returnTo) return;
     if (isAuthenticated) {
-      // /oauth/authorize、/cas/、/saml/ 都是后端路由，必须 full reload 以便后端读到 cookie
-      if (returnTo.startsWith('/oauth/authorize') || returnTo.startsWith('/cas/') || returnTo.startsWith('/saml/')) {
+      const isProtoRoute =
+        returnTo.startsWith('/oauth/authorize') ||
+        returnTo.startsWith('/cas/') ||
+        returnTo.startsWith('/saml/');
+      if (isProtoRoute) {
+        const key = '__protoRedirect:' + returnTo;
+        const last = Number(sessionStorage.getItem(key) || 0);
+        if (last && Date.now() - last < 5000) {
+          // 5 秒内第二次回到首页 → 协议端点持续要求登录 = sso_session 失效
+          // 清掉本地 token, 弹登录框让用户重新登录
+          sessionStorage.removeItem(key);
+          useAuthStore.getState().clear();
+          setLoginOpen(true);
+          return;
+        }
+        sessionStorage.setItem(key, String(Date.now()));
+        // /oauth/authorize、/cas/、/saml/ 都是后端路由，必须 full reload 以便后端读到 cookie
         window.location.replace(returnTo);
       } else {
         navigate(returnTo, { replace: true });
