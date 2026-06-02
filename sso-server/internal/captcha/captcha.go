@@ -73,6 +73,13 @@ type Challenge struct {
 	Background string `json:"bg"`     // data:image/png;base64,...
 	Piece      string `json:"piece"`  // data:image/png;base64,...
 	PieceY     int    `json:"piece_y"`
+
+	// Unsplash 署名（fallback 本地图时为空）
+	// 按 Unsplash API Guidelines 必须显示：Photo by <PhotographerName> on Unsplash
+	// 链接需带 utm_source=oneauth&utm_medium=referral
+	PhotographerName string `json:"photographer_name,omitempty"`
+	PhotographerURL  string `json:"photographer_url,omitempty"`
+	UnsplashURL      string `json:"unsplash_url,omitempty"`
 }
 
 type challengeState struct {
@@ -80,9 +87,17 @@ type challengeState struct {
 	CreatedAt int64 `json:"t"`
 }
 
+// unsplashPhoto 描述一张拉到的图 + 作者署名（用于按 Unsplash Guidelines 在前端展示）。
+type unsplashPhoto struct {
+	Image            image.Image
+	PhotographerName string
+	PhotographerURL  string
+	UnsplashURL      string
+}
+
 // Generate 拉一张图 → 切拼图 → 存 expect X → 返回 base64
 func (s *Service) Generate(ctx context.Context) (*Challenge, error) {
-	src, err := s.fetchImage(ctx)
+	src, photo, err := s.fetchImage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +108,18 @@ func (s *Service) Generate(ctx context.Context) (*Challenge, error) {
 	if err := s.Store.Set(ctx, "captcha:ch:"+id, raw, challengeTTL); err != nil {
 		return nil, err
 	}
-	return &Challenge{
+	ch := &Challenge{
 		ID:         id,
 		Background: pngDataURL(bgImg),
 		Piece:      pngDataURL(pieceImg),
 		PieceY:     pieceY,
-	}, nil
+	}
+	if photo != nil {
+		ch.PhotographerName = photo.PhotographerName
+		ch.PhotographerURL = photo.PhotographerURL
+		ch.UnsplashURL = photo.UnsplashURL
+	}
+	return ch, nil
 }
 
 // Verify 校验拖动结果，通过则签发一次性 ticket，30s 内可用。
@@ -144,18 +165,19 @@ func (s *Service) ConsumeTicket(ctx context.Context, ticket string) bool {
 }
 
 // fetchImage：优先走 Unsplash，失败回退本地。永远返回 320x180 RGBA。
-func (s *Service) fetchImage(ctx context.Context) (image.Image, error) {
+// 第二个返回值是 Unsplash 的署名信息；本地兜底时为 nil。
+func (s *Service) fetchImage(ctx context.Context) (image.Image, *unsplashPhoto, error) {
 	if key := s.keyOrEmpty(); key != "" {
-		if img, err := s.fetchUnsplash(ctx, key); err == nil {
-			return resizeCrop(img, bgW, bgH), nil
+		if photo, err := s.fetchUnsplash(ctx, key); err == nil {
+			return resizeCrop(photo.Image, bgW, bgH), photo, nil
 		}
 		// Unsplash 失败：静默回退本地，不打断登录页加载
 	}
 	img, err := loadFallback()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return resizeCrop(img, bgW, bgH), nil
+	return resizeCrop(img, bgW, bgH), nil, nil
 }
 
 func (s *Service) keyOrEmpty() string {
@@ -165,13 +187,18 @@ func (s *Service) keyOrEmpty() string {
 	return s.KeyProvider()
 }
 
-func (s *Service) fetchUnsplash(ctx context.Context, key string) (image.Image, error) {
-	// 用 /photos/random 拿一张横版图；topic 在 nature/architecture/textures 间轮换
+// fetchUnsplash 拉一张图 + 作者署名。按 Unsplash API Guidelines:
+//   1. 用 /photos/random 拿到图的 download_location
+//   2. 下载图片之前，先 GET 一次 download_location（这是 Unsplash 统计下载量的方式）
+//   3. 在前端展示 "Photo by <name> on Unsplash"
+//   4. 链接带 utm_source=oneauth&utm_medium=referral
+func (s *Service) fetchUnsplash(ctx context.Context, key string) (*unsplashPhoto, error) {
 	topics := []string{"nature", "architecture", "textures-patterns"}
 	t := topics[randIntN(len(topics))]
 	url := fmt.Sprintf("https://api.unsplash.com/photos/random?orientation=landscape&topics=%s", t)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Client-ID "+key)
+	req.Header.Set("Accept-Version", "v1")
 	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -181,9 +208,19 @@ func (s *Service) fetchUnsplash(ctx context.Context, key string) (image.Image, e
 		return nil, fmt.Errorf("unsplash %d", resp.StatusCode)
 	}
 	var meta struct {
+		Links struct {
+			HTML             string `json:"html"`
+			DownloadLocation string `json:"download_location"`
+		} `json:"links"`
 		URLs struct {
 			Small string `json:"small"`
 		} `json:"urls"`
+		User struct {
+			Name  string `json:"name"`
+			Links struct {
+				HTML string `json:"html"`
+			} `json:"links"`
+		} `json:"user"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
 		return nil, err
@@ -191,6 +228,23 @@ func (s *Service) fetchUnsplash(ctx context.Context, key string) (image.Image, e
 	if meta.URLs.Small == "" {
 		return nil, errors.New("unsplash empty url")
 	}
+
+	// Step 1: trigger download_location（异步、失败不影响主流程；Unsplash 文档要求"在下载前"调）
+	if meta.Links.DownloadLocation != "" {
+		go func(loc, k string) {
+			tCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			r, _ := http.NewRequestWithContext(tCtx, http.MethodGet, loc, nil)
+			r.Header.Set("Authorization", "Client-ID "+k)
+			r.Header.Set("Accept-Version", "v1")
+			if resp, err := s.HTTPClient.Do(r); err == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
+		}(meta.Links.DownloadLocation, key)
+	}
+
+	// Step 2: 真正下载图片
 	imgReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, meta.URLs.Small, nil)
 	imgResp, err := s.HTTPClient.Do(imgReq)
 	if err != nil {
@@ -202,7 +256,18 @@ func (s *Service) fetchUnsplash(ctx context.Context, key string) (image.Image, e
 	}
 	body, _ := io.ReadAll(io.LimitReader(imgResp.Body, 4*1024*1024))
 	img, _, err := image.Decode(bytes.NewReader(body))
-	return img, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 3: 拼接带 UTM 的署名链接
+	const utm = "?utm_source=oneauth&utm_medium=referral"
+	return &unsplashPhoto{
+		Image:            img,
+		PhotographerName: meta.User.Name,
+		PhotographerURL:  meta.User.Links.HTML + utm,
+		UnsplashURL:      meta.Links.HTML + utm,
+	}, nil
 }
 
 func loadFallback() (image.Image, error) {

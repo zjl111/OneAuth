@@ -13,6 +13,10 @@ interface ChallengeResp {
   bg: string;
   piece: string;
   piece_y: number;
+  // Unsplash 署名（按 API Guidelines 必须显示）；本地兜底图时为空
+  photographer_name?: string;
+  photographer_url?: string;
+  unsplash_url?: string;
 }
 
 interface Props {
@@ -142,6 +146,41 @@ export default function SliderCaptcha({ open, onCancel, onSuccess }: Props) {
                 transition: draggingRef.current ? 'none' : 'left 0.2s',
               }}
             />
+            {data.photographer_name && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 4,
+                  bottom: 4,
+                  fontSize: 10,
+                  lineHeight: 1.2,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  background: 'rgba(0,0,0,0.45)',
+                  color: '#fff',
+                  pointerEvents: 'auto',
+                }}
+              >
+                Photo by{' '}
+                <a
+                  href={data.photographer_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#fff', textDecoration: 'underline' }}
+                >
+                  {data.photographer_name}
+                </a>
+                {' on '}
+                <a
+                  href={data.unsplash_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#fff', textDecoration: 'underline' }}
+                >
+                  Unsplash
+                </a>
+              </div>
+            )}
           </>
         )}
         {loading && (
