@@ -111,7 +111,12 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
       const option: any = {
         tooltip: {
           trigger: 'item',
-          formatter: (p: any) => `${p.name}<br/>访问量: ${p.value ?? 0}`,
+          formatter: (p: any) => {
+            // echarts 对没有数据的省份给的 value 是 NaN（不是 null），?? 拦不住，
+            // 显式判 isFinite 兜底成 0
+            const v = typeof p.value === 'number' && isFinite(p.value) ? p.value : 0;
+            return `${p.name}<br/>访问量: ${v}`;
+          },
         },
         visualMap: {
           type: 'piecewise',
