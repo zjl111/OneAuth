@@ -169,6 +169,12 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 		} else {
 			u.DepartmentID = in.DepartmentID
 		}
+		// 关键：清掉预加载的 Department 关联对象。
+		// User 模型上 `Department *Department gorm:"foreignKey:DepartmentID"` 是 belongs-to，
+		// db.Save 会用 u.Department.ID 反向同步 u.DepartmentID —— 即使我们改了 u.DepartmentID，
+		// 只要 u.Department 还指向旧部门对象（从 GetByID 的 Preload 来的），保存后就会被覆盖回旧值。
+		// 这就是用户报告的"变更部门不生效"的根因。
+		u.Department = nil
 	}
 	if in.Avatar != nil {
 		u.Avatar = *in.Avatar
