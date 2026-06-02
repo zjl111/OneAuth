@@ -12,7 +12,6 @@ import {
   Popconfirm,
   Select,
   Drawer,
-  Tabs,
   Row,
   Col,
   Upload,
@@ -118,14 +117,7 @@ export default function UserListPage() {
   };
 
   const handleSave = async () => {
-    // validateFields 只校验已挂载的字段；表单字段分布在两个 Tab 里，
-    // 切到非激活 Tab 时其 Form.Item 已 unmount，validateFields() 拿不到
-    // 该 Tab 字段的值（但 form store 里还在）。先 validateFields 走校验，
-    // 再用 getFieldsValue(true) 抓全量值（包括 unmounted Tab）。
-    await form.validateFields().catch(() => {
-      throw new Error('表单校验未通过');
-    });
-    const values = form.getFieldsValue(true);
+    const values = await form.validateFields();
     const superAdminRoleID = roles.find((r) => r.code === 'super_admin')?.id;
     const payload: any = { ...values };
     delete payload.is_admin;
@@ -301,173 +293,161 @@ export default function UserListPage() {
             user_type: 'internal',
           }}
         >
-          <Tabs
-            items={[
-              {
-                key: 'basic',
-                label: '基本信息',
-                children: (
-                  <Row gutter={24}>
-                    <Col span={14}>
-                      {!editing && (
-                        <Form.Item
-                          name="username"
-                          label="登录账号"
-                          rules={[{ required: true, message: '请输入登录账号' }]}
-                          extra="登录账号为唯一标识，创建后不可更改"
-                        >
-                          <Input placeholder="字母/数字/点/下划线" />
-                        </Form.Item>
-                      )}
-                      {!editing && (
-                        <Form.Item
-                          name="nickname"
-                          label="姓名"
-                          rules={[{ required: true, message: '请输入姓名' }]}
-                        >
-                          <Input placeholder="请输入姓名" />
-                        </Form.Item>
-                      )}
-                      {editing && (
-                        <Form.Item name="nickname" label="姓名">
-                          <Input placeholder="请输入姓名" />
-                        </Form.Item>
-                      )}
-                      {!editing && (
-                        <Form.Item
-                          name="password"
-                          label="密码"
-                          rules={[{ required: true, min: 8, message: '至少 8 位' }]}
-                        >
-                          <Input.Password
-                            placeholder="new password"
-                            addonAfter={
-                              <Button
-                                size="small"
-                                type="primary"
-                                style={{ marginRight: -8 }}
-                                onClick={() =>
-                                  form.setFieldValue('password', randomPassword(12))
-                                }
-                              >
-                                生成
-                              </Button>
-                            }
-                          />
-                        </Form.Item>
-                      )}
-                      <Form.Item name="phone" label="手机号码">
-                        <Input />
-                      </Form.Item>
-                    </Col>
-                    <Col span={10}>
-                      <Form.Item name="avatar" label="头像">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                          <Form.Item
-                            noStyle
-                            shouldUpdate={(p, n) =>
-                              p.avatar !== n.avatar || p.nickname !== n.nickname || p.username !== n.username
-                            }
-                          >
-                            {({ getFieldValue }) => {
-                              const av = (getFieldValue('avatar') as string | undefined) || '';
-                              const nm =
-                                (getFieldValue('nickname') as string | undefined) ||
-                                (getFieldValue('username') as string | undefined) ||
-                                '新用户';
-                              return <UserAvatar src={av} name={nm} size={72} />;
-                            }}
-                          </Form.Item>
-                          <Upload
-                            name="file"
-                            action="/api/v1/configs/upload-image"
-                            headers={{ Authorization: `Bearer ${accessToken}` }}
-                            data={{ prefix: 'avatar' }}
-                            accept=".png,.jpg,.jpeg,.webp,.gif"
-                            showUploadList={false}
-                            beforeUpload={(file) => {
-                              if (file.size > 5 * 1024 * 1024) {
-                                message.error('头像不能超过 5MB');
-                                return Upload.LIST_IGNORE;
-                              }
-                              return true;
-                            }}
-                            onChange={(info) => {
-                              if (info.file.status === 'done') {
-                                const url = info.file.response?.data?.url;
-                                if (url) {
-                                  form.setFieldValue('avatar', url);
-                                  message.success('头像已上传');
-                                }
-                              } else if (info.file.status === 'error') {
-                                message.error(info.file.response?.message || '上传失败');
-                              }
-                            }}
-                          >
-                            <Button icon={<UploadOutlined />}>Upload</Button>
-                          </Upload>
-                        </div>
-                      </Form.Item>
-                    </Col>
-
-                    <Col span={12}>
-                      <Form.Item name="email" label="电子邮箱">
-                        <Input />
-                      </Form.Item>
-                    </Col>
-
-                    <Col span={12}>
-                      <Form.Item
-                        name="user_type"
-                        label="用户类型"
-                        rules={[{ required: true }]}
+          <Row gutter={24}>
+            <Col span={14}>
+              {!editing && (
+                <Form.Item
+                  name="username"
+                  label="登录账号"
+                  rules={[{ required: true, message: '请输入登录账号' }]}
+                  extra="登录账号为唯一标识，创建后不可更改"
+                >
+                  <Input placeholder="字母/数字/点/下划线" />
+                </Form.Item>
+              )}
+              {!editing && (
+                <Form.Item
+                  name="nickname"
+                  label="姓名"
+                  rules={[{ required: true, message: '请输入姓名' }]}
+                >
+                  <Input placeholder="请输入姓名" />
+                </Form.Item>
+              )}
+              {editing && (
+                <Form.Item name="nickname" label="姓名">
+                  <Input placeholder="请输入姓名" />
+                </Form.Item>
+              )}
+              {!editing && (
+                <Form.Item
+                  name="password"
+                  label="密码"
+                  rules={[{ required: true, min: 8, message: '至少 8 位' }]}
+                >
+                  <Input.Password
+                    placeholder="new password"
+                    addonAfter={
+                      <Button
+                        size="small"
+                        type="primary"
+                        style={{ marginRight: -8 }}
+                        onClick={() =>
+                          form.setFieldValue('password', randomPassword(12))
+                        }
                       >
-                        <Select
-                          options={[
-                            { value: 'internal', label: '内部员工' },
-                            { value: 'external', label: '外部协作' },
-                          ]}
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item
-                        name="is_active"
-                        label="状态"
-                        valuePropName="checked"
-                        rules={[{ required: true }]}
-                      >
-                        <Switch checkedChildren="活动" unCheckedChildren="禁用" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                ),
-              },
-              {
-                key: 'org',
-                label: '组织与角色',
-                children: (
-                  <>
-                    <Form.Item name="department_id" label="所属部门">
-                      <Select
-                        allowClear
-                        placeholder="选择部门"
-                        options={flatDept(depts).map((d) => ({ value: d.id, label: d.label }))}
-                      />
-                    </Form.Item>
-                    <Form.Item
-                      name="is_admin"
-                      label="管理员权限"
-                      valuePropName="checked"
-                      extra="勾选后该用户可登录 OneAuth 管理后台；不勾默认为普通用户，仅能访问已授权应用。"
-                    >
-                      <Checkbox>授予管理员权限</Checkbox>
-                    </Form.Item>
-                  </>
-                ),
-              },
-            ]}
-          />
+                        生成
+                      </Button>
+                    }
+                  />
+                </Form.Item>
+              )}
+              <Form.Item name="phone" label="手机号码">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item name="avatar" label="头像">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(p, n) =>
+                      p.avatar !== n.avatar || p.nickname !== n.nickname || p.username !== n.username
+                    }
+                  >
+                    {({ getFieldValue }) => {
+                      const av = (getFieldValue('avatar') as string | undefined) || '';
+                      const nm =
+                        (getFieldValue('nickname') as string | undefined) ||
+                        (getFieldValue('username') as string | undefined) ||
+                        '新用户';
+                      return <UserAvatar src={av} name={nm} size={72} />;
+                    }}
+                  </Form.Item>
+                  <Upload
+                    name="file"
+                    action="/api/v1/configs/upload-image"
+                    headers={{ Authorization: `Bearer ${accessToken}` }}
+                    data={{ prefix: 'avatar' }}
+                    accept=".png,.jpg,.jpeg,.webp,.gif"
+                    showUploadList={false}
+                    beforeUpload={(file) => {
+                      if (file.size > 5 * 1024 * 1024) {
+                        message.error('头像不能超过 5MB');
+                        return Upload.LIST_IGNORE;
+                      }
+                      return true;
+                    }}
+                    onChange={(info) => {
+                      if (info.file.status === 'done') {
+                        const url = info.file.response?.data?.url;
+                        if (url) {
+                          form.setFieldValue('avatar', url);
+                          message.success('头像已上传');
+                        }
+                      } else if (info.file.status === 'error') {
+                        message.error(info.file.response?.message || '上传失败');
+                      }
+                    }}
+                  >
+                    <Button icon={<UploadOutlined />}>Upload</Button>
+                  </Upload>
+                </div>
+              </Form.Item>
+            </Col>
+
+            <Col span={12}>
+              <Form.Item name="email" label="电子邮箱">
+                <Input />
+              </Form.Item>
+            </Col>
+
+            <Col span={12}>
+              <Form.Item name="department_id" label="所属部门">
+                <Select
+                  allowClear
+                  placeholder="选择部门"
+                  options={flatDept(depts).map((d) => ({ value: d.id, label: d.label }))}
+                />
+              </Form.Item>
+            </Col>
+
+            <Col span={12}>
+              <Form.Item
+                name="user_type"
+                label="用户类型"
+                rules={[{ required: true }]}
+              >
+                <Select
+                  options={[
+                    { value: 'internal', label: '内部员工' },
+                    { value: 'external', label: '外部协作' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="is_active"
+                label="状态"
+                valuePropName="checked"
+                rules={[{ required: true }]}
+              >
+                <Switch checkedChildren="活动" unCheckedChildren="禁用" />
+              </Form.Item>
+            </Col>
+
+            <Col span={24}>
+              <Form.Item
+                name="is_admin"
+                label="管理员权限"
+                valuePropName="checked"
+                extra="勾选后该用户可登录 OneAuth 管理后台；不勾默认为普通用户，仅能访问已授权应用。"
+              >
+                <Checkbox>授予管理员权限</Checkbox>
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Drawer>
       </Card>
