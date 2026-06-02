@@ -301,6 +301,9 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "security", Key: "captcha_enabled", Value: "false", Description: "启用滑动验证码"},
 		{Category: "security", Key: "captcha_threshold", Value: "3", Description: "连续失败 N 次后弹滑块（0=每次都要）"},
 		{Category: "security", Key: "captcha_unsplash_key", Value: "", Description: "Unsplash Access Key（留空则用本地兜底图）"},
+		{Category: "security", Key: "ip_ban_enabled", Value: "false", Description: "启用 IP 自动封禁"},
+		{Category: "security", Key: "ip_ban_threshold", Value: "20", Description: "同一 IP 失败 N 次后自动加入黑名单（30 分钟滚动窗口）"},
+		{Category: "security", Key: "ip_ban_duration", Value: "3600", Description: "封禁时长（秒），0 = 永久"},
 		{Category: "monitor", Key: "interval", Value: "30", Description: "监控周期(秒)"},
 		{Category: "monitor", Key: "public_status_page", Value: "true", Description: "状态页是否公开"},
 		// OAuth2 / OIDC 协议参数 — 修改后重启服务生效

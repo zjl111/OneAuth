@@ -53,6 +53,34 @@ export default function SecurityPanel() {
           <Input.Password placeholder="VH0m9DUQ...（留空也能用）" autoComplete="off" />
         </Form.Item>
       </div>
+
+      <div style={cardStyle}>
+        <SectionHead title="IP 自动封禁" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)', columnGap: 24 }}>
+          <Form.Item
+            label="启用自动封禁"
+            name="security.ip_ban_enabled"
+            valuePropName="checked"
+            extra="同一 IP 在 30 分钟窗口内失败次数超阈值，自动加入黑名单"
+          >
+            <Switch checkedChildren="开" unCheckedChildren="关" />
+          </Form.Item>
+          <Form.Item
+            label="封禁阈值（30 分钟内失败次数）"
+            name="security.ip_ban_threshold"
+            extra="到达后自动加入黑名单"
+          >
+            <InputNumber min={1} max={1000} style={{ width: '100%' }} addonAfter="次" />
+          </Form.Item>
+          <Form.Item
+            label="封禁时长"
+            name="security.ip_ban_duration"
+            extra="0 = 永久封禁，需手动从黑名单移除"
+          >
+            <InputNumber min={0} max={2592000} style={{ width: '100%' }} addonAfter="秒" />
+          </Form.Item>
+        </div>
+      </div>
     </div>
   );
 }

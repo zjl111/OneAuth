@@ -158,6 +158,15 @@ func main() {
 		}
 	}()
 
+	// 自动 IP 封禁条目的过期清理：每分钟扫一次，过期的就从黑名单里删掉
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for range t.C {
+			ipRepo.PurgeExpiredAutoBans()
+		}
+	}()
+
 	probeFunc := func(clientID string) {
 		if scheduler != nil {
 			scheduler.ProbeByClientID(clientID)
@@ -193,6 +202,7 @@ func main() {
 			LogRepo:       logRepo,
 			LoginRuleRepo: loginRuleRepo,
 			ConfigRepo:    configRepo,
+			IPAccessRepo:  ipRepo,
 			Mailer:        mailService,
 			Captcha: captcha.New(store, func() string {
 				return configRepo.Get("security", "captcha_unsplash_key")

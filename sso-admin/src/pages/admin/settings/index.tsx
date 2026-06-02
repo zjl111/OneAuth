@@ -18,6 +18,8 @@ const NUMERIC_SECURITY_KEYS = new Set([
   'login_lockout_threshold',
   'login_lockout_duration',
   'captcha_threshold',
+  'ip_ban_threshold',
+  'ip_ban_duration',
 ]);
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
 const NUMERIC_SMTP_KEYS = new Set(['port']);
@@ -25,7 +27,7 @@ const PASSWORD_SMTP_KEYS = new Set(['password']);
 const PASSWORD_LDAP_KEYS = new Set(['bind_password']);
 const PASSWORD_WECOM_KEYS = new Set(['secret']);
 const PASSWORD_SECURITY_KEYS = new Set(['captcha_unsplash_key']);
-const BOOL_SECURITY_KEYS = new Set(['captcha_enabled']);
+const BOOL_SECURITY_KEYS = new Set(['captcha_enabled', 'ip_ban_enabled']);
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',

@@ -3,6 +3,7 @@ package repository
 import (
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -222,6 +223,61 @@ func (r *IPAccessRepository) List() ([]model.IPAccess, error) {
 func (r *IPAccessRepository) Create(i *model.IPAccess) error { return r.db.Create(i).Error }
 func (r *IPAccessRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.IPAccess{}, "id = ?", id).Error
+}
+
+// IsBlackBanned 当前 IP 是否处于"黑名单 + 未过期"状态。
+// 简化版：精确匹配 IP 字符串；CIDR 匹配交给中间件遍历做（条目少，O(n) 完全可接受）。
+func (r *IPAccessRepository) IsBlackBanned(ip string) (bool, error) {
+	var count int64
+	now := time.Now()
+	err := r.db.Model(&model.IPAccess{}).
+		Where("type = ? AND ip = ? AND (expires_at IS NULL OR expires_at > ?)", "black", ip, now).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// UpsertAutoBan 自动封禁：如果该 IP 已在黑名单则刷新过期时间，否则插入。
+// note 形如 "登录失败超过 N 次自动封禁"；duration 0 表示永久。
+func (r *IPAccessRepository) UpsertAutoBan(ip, note string, duration time.Duration) error {
+	var existing model.IPAccess
+	err := r.db.Where("type = ? AND ip = ?", "black", ip).First(&existing).Error
+	if err == nil {
+		// 已存在 → 刷新过期时间和备注（仅在自动封禁条目上更新）
+		if !existing.AutoBan {
+			return nil // 手动条目不动
+		}
+		updates := map[string]any{"note": note}
+		if duration > 0 {
+			t := time.Now().Add(duration)
+			updates["expires_at"] = &t
+		} else {
+			updates["expires_at"] = nil
+		}
+		return r.db.Model(&existing).Updates(updates).Error
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
+	rec := &model.IPAccess{
+		ID:      uuid.New(),
+		Type:    "black",
+		IP:      ip,
+		Note:    note,
+		AutoBan: true,
+	}
+	if duration > 0 {
+		t := time.Now().Add(duration)
+		rec.ExpiresAt = &t
+	}
+	return r.db.Create(rec).Error
+}
+
+// PurgeExpiredAutoBans 清掉过期的自动封禁条目；手动条目不受影响。
+// 后台 goroutine 每分钟跑一次。
+func (r *IPAccessRepository) PurgeExpiredAutoBans() (int64, error) {
+	res := r.db.Where("auto_ban = ? AND expires_at IS NOT NULL AND expires_at <= ?", true, time.Now()).
+		Delete(&model.IPAccess{})
+	return res.RowsAffected, res.Error
 }
 
 // AuthorizationGrantRepository --------------------------

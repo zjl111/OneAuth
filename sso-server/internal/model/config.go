@@ -45,11 +45,15 @@ func (d *Dictionary) BeforeCreate(tx *gorm.DB) error {
 }
 
 type IPAccess struct {
-	ID        uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
-	Type      string    `gorm:"size:10;not null" json:"type"` // black/white
-	IP        string    `gorm:"size:64;not null" json:"ip"`   // CIDR or exact
-	Note      string    `gorm:"size:255" json:"note"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `gorm:"type:char(36);primaryKey" json:"id"`
+	Type      string     `gorm:"size:10;not null" json:"type"` // black/white
+	IP        string     `gorm:"size:64;not null" json:"ip"`   // CIDR or exact
+	Note      string     `gorm:"size:255" json:"note"`
+	CreatedAt time.Time  `json:"created_at"`
+	// ExpiresAt 自动封禁条目的解除时间；手动添加为 nil（永久）
+	ExpiresAt *time.Time `gorm:"index" json:"expires_at"`
+	// AutoBan 标记由系统自动添加（用于前端区分"手动 / 自动"两类条目）
+	AutoBan   bool       `gorm:"default:false" json:"auto_ban"`
 }
 
 func (IPAccess) TableName() string { return "sso_ip_access" }

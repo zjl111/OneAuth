@@ -77,6 +77,8 @@ export interface IPRule {
   ip: string;
   note: string;
   created_at: string;
+  expires_at: string | null;
+  auto_ban: boolean;
 }
 
 export interface UserGroup {

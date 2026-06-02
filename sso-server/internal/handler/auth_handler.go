@@ -38,6 +38,7 @@ type AuthHandler struct {
 	LogRepo       *repository.LogRepository
 	LoginRuleRepo *repository.LoginRuleRepository
 	ConfigRepo    *repository.ConfigRepository
+	IPAccessRepo  *repository.IPAccessRepository
 	Mailer        *mailer.Mailer
 	Captcha       *captcha.Service
 	Issuer        string // 兜底 issuer（config.yaml）
@@ -131,6 +132,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// IP 黑名单：被自动封禁或人工拉黑的 IP 直接拒登。
+	clientIP := c.ClientIP()
+	if h.IPAccessRepo != nil {
+		if banned, _ := h.IPAccessRepo.IsBlackBanned(clientIP); banned {
+			h.LogRepo.RecordLogin(nil, req.Username, clientIP, c.GetHeader("User-Agent"), "password", "failure", "IP banned")
+			response.Forbidden(c, "您的 IP 已被封禁，请稍后再试或联系管理员")
+			return
+		}
+	}
+
 	// captcha gate：失败次数 >= 阈值时强制校验 ticket
 	if h.captchaRequired(c.Request.Context(), req.Username, c.ClientIP()) {
 		if h.Captcha == nil || !h.Captcha.ConsumeTicket(c.Request.Context(), req.CaptchaTicket) {
@@ -162,6 +173,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 		if err != nil {
 			h.recordLoginFail(c.Request.Context(), req.Username, c.ClientIP())
+			h.recordIPFailAndMaybeBan(c.Request.Context(), c.ClientIP())
 			h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
 			response.Unauthorized(c, err.Error())
 			return
@@ -194,6 +206,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
 	h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
+	h.clearIPFail(c.Request.Context(), c.ClientIP())
 
 	response.OK(c, LoginResponse{
 		AccessToken:  access,
@@ -561,6 +574,85 @@ func (h *AuthHandler) clearLoginFail(ctx context.Context, username, ip string) {
 		return
 	}
 	_ = h.Store.Del(ctx, h.loginFailKey(username, ip))
+}
+
+// ---------- IP auto-ban ----------
+
+func (h *AuthHandler) ipBanEnabled() bool {
+	if h.IPAccessRepo == nil || h.ConfigRepo == nil {
+		return false
+	}
+	return h.ConfigRepo.Get("security", "ip_ban_enabled") == "true"
+}
+
+// ipBanThreshold 同一 IP 在 ipBanWindow 内失败几次后自动封禁；0 表示禁用。
+func (h *AuthHandler) ipBanThreshold() int {
+	if h.ConfigRepo == nil {
+		return 20
+	}
+	v := h.ConfigRepo.Get("security", "ip_ban_threshold")
+	if v == "" {
+		return 20
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 20
+	}
+	return n
+}
+
+// ipBanDuration 自动封禁时长（秒）；0 表示永久。默认 1 小时。
+func (h *AuthHandler) ipBanDuration() time.Duration {
+	if h.ConfigRepo == nil {
+		return time.Hour
+	}
+	v := h.ConfigRepo.Get("security", "ip_ban_duration")
+	if v == "" {
+		return time.Hour
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return time.Hour
+	}
+	return time.Duration(n) * time.Second
+}
+
+// ipBanWindow 失败计数滚动窗口；和 captchaFailWindow 区分（IP 维度更宽容）
+const ipBanWindow = 30 * time.Minute
+
+func (h *AuthHandler) ipFailKey(ip string) string { return "ipfail:" + ip }
+
+func (h *AuthHandler) recordIPFailAndMaybeBan(ctx context.Context, ip string) {
+	if !h.ipBanEnabled() || h.Store == nil {
+		return
+	}
+	count, err := h.Store.Incr(ctx, h.ipFailKey(ip), ipBanWindow)
+	if err != nil {
+		return
+	}
+	threshold := h.ipBanThreshold()
+	if int(count) < threshold {
+		return
+	}
+	// 触发自动封禁
+	dur := h.ipBanDuration()
+	note := fmt.Sprintf("登录失败 %d 次自动封禁", count)
+	if dur > 0 {
+		note = fmt.Sprintf("%s（%s 解除）", note, time.Now().Add(dur).Format("2006-01-02 15:04"))
+	} else {
+		note = fmt.Sprintf("%s（永久）", note)
+	}
+	if err := h.IPAccessRepo.UpsertAutoBan(ip, note, dur); err == nil {
+		// 同时清掉失败计数，避免封禁后还在累加
+		_ = h.Store.Del(ctx, h.ipFailKey(ip))
+	}
+}
+
+func (h *AuthHandler) clearIPFail(ctx context.Context, ip string) {
+	if h.Store == nil {
+		return
+	}
+	_ = h.Store.Del(ctx, h.ipFailKey(ip))
 }
 
 // CaptchaChallenge GET /api/v1/auth/captcha/challenge
