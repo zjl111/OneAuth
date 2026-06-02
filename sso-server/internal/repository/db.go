@@ -89,7 +89,37 @@ func AutoMigrate(db *gorm.DB) error {
 	}
 	runOnce(db, "backfill_health_check_urls_v1", func() { backfillHealthCheckURLs(db) })
 	runOnce(db, "migrate_access_policy_v1", func() { migrateAccessPolicy(db) })
+	runOnce(db, "purge_soft_deleted_users_v1", func() { purgeSoftDeletedUsers(db) })
 	return nil
+}
+
+// purgeSoftDeletedUsers 历史上 User 有 DeletedAt 字段、走软删；现在改为物理删除。
+// 启动时把残留的 deleted_at IS NOT NULL 行（"幽灵行"）真删掉，否则它们仍占用
+// username/email/phone 的 UNIQUE 索引，导致管理员重新创建同名用户报"已存在"。
+// 同时清掉这些用户的 sso_user_roles 关联行，避免成为孤儿。
+// 在 deleted_at 列被 DROP 之前必须先跑（DROP COLUMN 之后这条 WHERE 就找不到列了）。
+func purgeSoftDeletedUsers(db *gorm.DB) {
+	// 列不存在就跳过（model 改完后第一次启动时列还在；DROP 之后这里就该跳过）
+	if !db.Migrator().HasColumn("sso_user", "deleted_at") {
+		return
+	}
+	type row struct{ ID string }
+	var rows []row
+	if err := db.Raw(`SELECT id FROM sso_user WHERE deleted_at IS NOT NULL`).Scan(&rows).Error; err != nil {
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	db.Exec(`DELETE FROM sso_user_roles WHERE user_id IN ?`, ids)
+	db.Exec(`DELETE FROM sso_user WHERE deleted_at IS NOT NULL`)
+	// 列本身 GORM AutoMigrate 不会主动 DROP（怕误删），手工 DROP 一次。
+	// 失败也无所谓 —— 留着不影响功能，下次启动 HasColumn 仍 true 会再尝试。
+	db.Exec(`ALTER TABLE sso_user DROP COLUMN deleted_at`)
 }
 
 // runOnce 用 sso_system_config 里的标志位防止启动时重复扫表。

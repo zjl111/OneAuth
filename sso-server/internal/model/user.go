@@ -29,7 +29,6 @@ type User struct {
 	LastLogin    *time.Time     `json:"last_login"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Department *Department `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
 	Roles      []Role      `gorm:"many2many:sso_user_roles;" json:"roles,omitempty"`
