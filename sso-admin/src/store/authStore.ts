@@ -10,7 +10,7 @@ interface AuthState {
   /** 派生值：accessToken 与 user 同时存在才算已登录。不持久化。 */
   isAuthenticated: boolean;
 
-  login: (username: string, password: string, remember?: boolean) => Promise<UserInfo>;
+  login: (username: string, password: string, remember?: boolean, captchaTicket?: string) => Promise<UserInfo>;
   logout: () => Promise<void>;
   refresh: () => Promise<string | null>;
   loadProfile: () => Promise<void>;
@@ -29,8 +29,8 @@ export const useAuthStore = create<AuthState>()(
       permissions: [],
       isAuthenticated: false,
 
-      login: async (username, password, remember) => {
-        const data = await authApi.login({ username, password, remember });
+      login: async (username, password, remember, captchaTicket) => {
+        const data = await authApi.login({ username, password, remember, captcha_ticket: captchaTicket });
         set({
           accessToken: data.access_token,
           refreshToken: data.refresh_token,

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useSite } from '@/hooks/useSite';
 import { get } from '@/api/request';
 import WecomQRLogin from './WecomQRLogin';
+import SliderCaptcha from './SliderCaptcha';
 import './LoginModal.css';
 
 interface Props {
@@ -25,6 +26,9 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
   const [submitting, setSubmitting] = useState(false);
   const [wecomEnabled, setWecomEnabled] = useState(false);
   const [showWecomQR, setShowWecomQR] = useState(false);
+  // captcha：失败到达阈值时后端返回 4090，弹拼图；通过后用 ticket 重发登录
+  const [captchaOpen, setCaptchaOpen] = useState(false);
+  const [pending, setPending] = useState<{ username: string; password: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -33,11 +37,12 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       .catch(() => setWecomEnabled(false));
   }, [open]);
 
-  const onFinish = async (values: { username: string; password: string }) => {
+  const doLogin = async (username: string, password: string, ticket?: string) => {
     setSubmitting(true);
     try {
-      const u = await login(values.username, values.password);
+      const u = await login(username, password, undefined, ticket);
       message.success(`欢迎回来，${u.nickname || u.username}`);
+      setPending(null);
       onClose();
       const target = returnTo || redirectTo;
       if (target.startsWith('/oauth/authorize') || target.startsWith('/cas/') || target.startsWith('/saml/')) {
@@ -47,9 +52,28 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       }
       navigate(target);
     } catch (e: any) {
-      message.error(e?.response?.data?.message || '登录失败');
+      const code = e?.response?.data?.code;
+      const msg = e?.response?.data?.message;
+      // 后端 captcha gate：要求滑块验证
+      if (code === 4090 || msg === 'captcha_required') {
+        setPending({ username, password });
+        setCaptchaOpen(true);
+        return;
+      }
+      message.error(msg || '登录失败');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onFinish = (values: { username: string; password: string }) => {
+    doLogin(values.username, values.password);
+  };
+
+  const onCaptchaSuccess = (ticket: string) => {
+    setCaptchaOpen(false);
+    if (pending) {
+      doLogin(pending.username, pending.password, ticket);
     }
   };
 
@@ -117,6 +141,11 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
           忘记密码？
         </a>
       </div>
+      <SliderCaptcha
+        open={captchaOpen}
+        onCancel={() => setCaptchaOpen(false)}
+        onSuccess={onCaptchaSuccess}
+      />
     </Modal>
   );
 }

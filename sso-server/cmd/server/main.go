@@ -13,6 +13,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"sso-server/internal/captcha"
 	"sso-server/internal/config"
 	"sso-server/internal/geoip"
 	"sso-server/internal/handler"
@@ -193,8 +194,11 @@ func main() {
 			LoginRuleRepo: loginRuleRepo,
 			ConfigRepo:    configRepo,
 			Mailer:        mailService,
-			Issuer:        cfg.OAuth.Issuer,
-			FrontendBase:  frontendBase,
+			Captcha: captcha.New(store, func() string {
+				return configRepo.Get("security", "captcha_unsplash_key")
+			}),
+			Issuer:       cfg.OAuth.Issuer,
+			FrontendBase: frontendBase,
 		},
 		WeCom: &handler.WeComHandler{
 			WeCom:        wecomService,

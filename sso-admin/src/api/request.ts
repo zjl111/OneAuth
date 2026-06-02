@@ -67,8 +67,12 @@ request.interceptors.response.use(
     }
 
     const msg = error?.response?.data?.message || error.message || '请求失败';
+    const code = error?.response?.data?.code;
     if (status && status !== 401) {
-      message.error(msg);
+      // captcha_required (4090) 是登录页要 catch 处理的"半成功"信号，不要弹全局 toast
+      if (code !== 4090) {
+        message.error(msg);
+      }
     }
     return Promise.reject(error);
   }

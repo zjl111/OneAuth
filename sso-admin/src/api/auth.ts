@@ -22,7 +22,7 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  login: (data: { username: string; password: string; remember?: boolean }) =>
+  login: (data: { username: string; password: string; remember?: boolean; captcha_ticket?: string }) =>
     post<LoginResponse>('/auth/login', data),
   logout: () => post('/auth/logout'),
   refresh: (refresh_token: string) =>

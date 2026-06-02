@@ -298,6 +298,9 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "security", Key: "password_min_length", Value: "8", Description: "密码最小长度"},
 		{Category: "security", Key: "login_lockout_threshold", Value: "10", Description: "登录失败锁定阈值"},
 		{Category: "security", Key: "login_lockout_duration", Value: "1800", Description: "锁定时长(秒)"},
+		{Category: "security", Key: "captcha_enabled", Value: "false", Description: "启用滑动验证码"},
+		{Category: "security", Key: "captcha_threshold", Value: "3", Description: "连续失败 N 次后弹滑块（0=每次都要）"},
+		{Category: "security", Key: "captcha_unsplash_key", Value: "", Description: "Unsplash Access Key（留空则用本地兜底图）"},
 		{Category: "monitor", Key: "interval", Value: "30", Description: "监控周期(秒)"},
 		{Category: "monitor", Key: "public_status_page", Value: "true", Description: "状态页是否公开"},
 		// OAuth2 / OIDC 协议参数 — 修改后重启服务生效

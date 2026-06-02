@@ -17,12 +17,15 @@ const NUMERIC_SECURITY_KEYS = new Set([
   'password_min_length',
   'login_lockout_threshold',
   'login_lockout_duration',
+  'captcha_threshold',
 ]);
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
 const NUMERIC_SMTP_KEYS = new Set(['port']);
 const PASSWORD_SMTP_KEYS = new Set(['password']);
 const PASSWORD_LDAP_KEYS = new Set(['bind_password']);
 const PASSWORD_WECOM_KEYS = new Set(['secret']);
+const PASSWORD_SECURITY_KEYS = new Set(['captcha_unsplash_key']);
+const BOOL_SECURITY_KEYS = new Set(['captcha_enabled']);
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',
@@ -57,12 +60,14 @@ export default function SettingsPage() {
       const isPasswordField =
         (c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key)) ||
         (c.category === 'ldap' && PASSWORD_LDAP_KEYS.has(c.key)) ||
-        (c.category === 'wecom' && PASSWORD_WECOM_KEYS.has(c.key));
+        (c.category === 'wecom' && PASSWORD_WECOM_KEYS.has(c.key)) ||
+        (c.category === 'security' && PASSWORD_SECURITY_KEYS.has(c.key));
       const isBoolSwitch =
         (c.category === 'monitor' && c.key === 'public_status_page') ||
         (c.category === 'smtp' && c.key === 'enabled') ||
         (c.category === 'ldap' && (c.key === 'enabled' || c.key === 'start_tls')) ||
-        (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user'));
+        (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user')) ||
+        (c.category === 'security' && BOOL_SECURITY_KEYS.has(c.key));
       if (isPasswordField) {
         obj[`${c.category}.${c.key}`] = '';
       } else if (isBoolSwitch) {
@@ -106,6 +111,7 @@ export default function SettingsPage() {
       if (category === 'smtp' && PASSWORD_SMTP_KEYS.has(key) && v === '') continue;
       if (category === 'ldap' && PASSWORD_LDAP_KEYS.has(key) && v === '') continue;
       if (category === 'wecom' && PASSWORD_WECOM_KEYS.has(key) && v === '') continue;
+      if (category === 'security' && PASSWORD_SECURITY_KEYS.has(key) && v === '') continue;
       const strVal = typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v);
       items.push({ category, key, value: strVal });
     }

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"sso-server/internal/captcha"
 	"sso-server/internal/model"
 	"sso-server/internal/oauth"
 	"sso-server/internal/repository"
@@ -37,6 +39,7 @@ type AuthHandler struct {
 	LoginRuleRepo *repository.LoginRuleRepository
 	ConfigRepo    *repository.ConfigRepository
 	Mailer        *mailer.Mailer
+	Captcha       *captcha.Service
 	Issuer        string // 兜底 issuer（config.yaml）
 	FrontendBase  string
 }
@@ -62,9 +65,10 @@ type resetTokenPayload struct {
 }
 
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	Remember bool   `json:"remember"`
+	Username      string `json:"username" binding:"required"`
+	Password      string `json:"password" binding:"required"`
+	Remember      bool   `json:"remember"`
+	CaptchaTicket string `json:"captcha_ticket"` // 失败次数 >= 阈值时必须提供
 }
 
 type LoginResponse struct {
@@ -126,6 +130,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.BadRequest(c, "参数错误")
 		return
 	}
+
+	// captcha gate：失败次数 >= 阈值时强制校验 ticket
+	if h.captchaRequired(c.Request.Context(), req.Username, c.ClientIP()) {
+		if h.Captcha == nil || !h.Captcha.ConsumeTicket(c.Request.Context(), req.CaptchaTicket) {
+			// 用 403 而不是 200 + code=4090，让前端 axios 走 reject 路径；
+			// 也避开 401 的 refresh 拦截器死循环。
+			c.JSON(http.StatusForbidden, gin.H{
+				"code":    4090,
+				"message": "captcha_required",
+				"data":    nil,
+			})
+			return
+		}
+	}
+
 	user, err := h.UserService.Authenticate(req.Username, req.Password)
 	loginMethod := "password"
 	if err != nil {
@@ -142,6 +161,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			}
 		}
 		if err != nil {
+			h.recordLoginFail(c.Request.Context(), req.Username, c.ClientIP())
 			h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
 			response.Unauthorized(c, err.Error())
 			return
@@ -173,6 +193,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
+	h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
 
 	response.OK(c, LoginResponse{
 		AccessToken:  access,
@@ -469,4 +490,125 @@ func maskEmail(email string) string {
 		return prefix[:1] + "***" + email[at:]
 	}
 	return prefix[:2] + "***" + email[at:]
+}
+
+// ---------- captcha helpers ----------
+
+// captchaFailWindow 失败计数滚动窗口；超过这段时间后计数自然过期
+const captchaFailWindow = 10 * time.Minute
+
+func (h *AuthHandler) captchaEnabled() bool {
+	if h.Captcha == nil || h.ConfigRepo == nil {
+		return false
+	}
+	return h.ConfigRepo.Get("security", "captcha_enabled") == "true"
+}
+
+func (h *AuthHandler) captchaThreshold() int {
+	if h.ConfigRepo == nil {
+		return 3
+	}
+	v := h.ConfigRepo.Get("security", "captcha_threshold")
+	if v == "" {
+		return 3
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 3
+	}
+	return n
+}
+
+// captchaRequired 当前 username/IP 组合是否需要 captcha。
+// 阈值为 0 表示"每次登录都要"。
+func (h *AuthHandler) captchaRequired(ctx context.Context, username, ip string) bool {
+	if !h.captchaEnabled() {
+		return false
+	}
+	threshold := h.captchaThreshold()
+	if threshold == 0 {
+		return true
+	}
+	count := h.loginFailCount(ctx, username, ip)
+	return count >= threshold
+}
+
+func (h *AuthHandler) loginFailKey(username, ip string) string {
+	return "loginfail:" + ip + ":" + username
+}
+
+func (h *AuthHandler) loginFailCount(ctx context.Context, username, ip string) int {
+	if h.Store == nil {
+		return 0
+	}
+	v, err := h.Store.Get(ctx, h.loginFailKey(username, ip))
+	if err != nil || len(v) == 0 {
+		return 0
+	}
+	n, _ := strconv.Atoi(string(v))
+	return n
+}
+
+func (h *AuthHandler) recordLoginFail(ctx context.Context, username, ip string) {
+	if h.Store == nil {
+		return
+	}
+	_, _ = h.Store.Incr(ctx, h.loginFailKey(username, ip), captchaFailWindow)
+}
+
+func (h *AuthHandler) clearLoginFail(ctx context.Context, username, ip string) {
+	if h.Store == nil {
+		return
+	}
+	_ = h.Store.Del(ctx, h.loginFailKey(username, ip))
+}
+
+// CaptchaChallenge GET /api/v1/auth/captcha/challenge
+func (h *AuthHandler) CaptchaChallenge(c *gin.Context) {
+	if h.Captcha == nil || !h.captchaEnabled() {
+		c.JSON(http.StatusOK, gin.H{"code": 4040, "message": "captcha disabled", "data": nil})
+		return
+	}
+	ch, err := h.Captcha.Generate(c.Request.Context())
+	if err != nil {
+		response.ServerError(c, "captcha generate failed: "+err.Error())
+		return
+	}
+	response.OK(c, ch)
+}
+
+// CaptchaVerify POST /api/v1/auth/captcha/verify  body={challenge_id, x, duration_ms}
+// 通过返回 ticket，失败返回 400。
+func (h *AuthHandler) CaptchaVerify(c *gin.Context) {
+	if h.Captcha == nil {
+		response.BadRequest(c, "captcha disabled")
+		return
+	}
+	var req struct {
+		ChallengeID string `json:"challenge_id"`
+		X           int    `json:"x"`
+		DurationMs  int    `json:"duration_ms"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	ticket, err := h.Captcha.Verify(c.Request.Context(), req.ChallengeID, req.X, req.DurationMs)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"ticket": ticket})
+}
+
+// CaptchaStatus GET /api/v1/auth/captcha/status?username=xxx
+// 让前端预先知道这次登录是否需要 captcha（避免多走一次 4090 401 来回）
+func (h *AuthHandler) CaptchaStatus(c *gin.Context) {
+	username := c.Query("username")
+	required := h.captchaRequired(c.Request.Context(), username, c.ClientIP())
+	response.OK(c, gin.H{
+		"enabled":   h.captchaEnabled(),
+		"required":  required,
+		"threshold": h.captchaThreshold(),
+	})
 }

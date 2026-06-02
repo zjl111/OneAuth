@@ -131,6 +131,10 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	api.POST("/auth/forgot-password", h.Auth.ForgotPassword)
 	api.GET("/auth/reset-password/verify", h.Auth.VerifyResetToken)
 	api.POST("/auth/reset-password", h.Auth.ResetPassword)
+	// captcha 公共端点（登录前/登录中调用，无需鉴权）
+	api.GET("/auth/captcha/challenge", h.Auth.CaptchaChallenge)
+	api.POST("/auth/captcha/verify", h.Auth.CaptchaVerify)
+	api.GET("/auth/captcha/status", h.Auth.CaptchaStatus)
 
 	// 状态页公开 API
 	statusGroup := r.Group("/api/status")
