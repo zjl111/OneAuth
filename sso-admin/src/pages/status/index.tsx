@@ -26,7 +26,7 @@ const statusConfig: Record<
     icon: <CheckCircleFilled />,
   },
   full: {
-    label: '可用率 100%',
+    label: '正常',
     color: '#10b981',
     bg: 'rgba(16, 185, 129, 0.12)',
     icon: <CheckCircleFilled />,
@@ -146,9 +146,9 @@ export default function StatusPage() {
 
       <div className="status-legend">
         {[
-          { key: 'full', label: '可用率 100%' },
-          { key: 'degraded', label: '可用率 ≥ 95%' },
-          { key: 'down', label: '服务中断' },
+          { key: 'full', label: '可用率 ≥ 98%' },
+          { key: 'degraded', label: '可用率 90% ~ 97%' },
+          { key: 'down', label: '可用率 < 90%' },
           { key: 'maintenance', label: '维护中' },
           { key: 'none', label: '无数据' },
         ].map((it) => (

@@ -241,13 +241,14 @@ func timelineFromDaily(rows []model.StatusDaily, days int, outages map[string]in
 			avail = float64(r.SuccessProbes) / float64(r.TotalProbes) * 100
 		}
 		// 状态语义：full / degraded / down / none
+		// 阈值：≥98% 绿 / 90-97% 橙 / <90% 红
 		status := "full"
 		switch {
 		case r.TotalProbes == 0:
 			status = "none"
-		case avail >= 99.99:
+		case avail >= 98:
 			status = "full"
-		case avail >= 95:
+		case avail >= 90:
 			status = "degraded"
 		default:
 			status = "down"
