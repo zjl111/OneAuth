@@ -20,12 +20,14 @@ export interface AppStatus {
   avg_response: Record<string, number>;
   timeline: Array<{
     date: string;
-    status: string;
+    status: string; // full / degraded / down / maintenance / none
     availability: number;
     avg_response_ms: number;
     max_response_ms: number;
     total_probes: number;
     success_probes: number;
+    failed_probes: number;
+    max_outage_seconds: number;
   }>;
 }
 

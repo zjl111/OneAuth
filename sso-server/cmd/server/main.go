@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -133,11 +134,18 @@ func main() {
 	}
 
 	// monitor scheduler
+	// 优先读 DB monitor.interval（用户通过系统设置改的）；DB 没设时回退到 yaml
 	var scheduler *monitor.Scheduler
 	if cfg.Monitor.Enabled {
-		scheduler = monitor.New(monitorRepo, cfg.Monitor.IntervalSeconds)
+		intervalSec := cfg.Monitor.IntervalSeconds
+		if v := configRepo.Get("monitor", "interval"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				intervalSec = n
+			}
+		}
+		scheduler = monitor.New(monitorRepo, intervalSec)
 		scheduler.Start(context.Background())
-		log.Printf("[startup] monitor scheduler started (interval=%ds)", cfg.Monitor.IntervalSeconds)
+		log.Printf("[startup] monitor scheduler started (interval=%ds)", intervalSec)
 	}
 
 	// 日志保留 90 天，每小时清理一次
@@ -214,10 +222,28 @@ func main() {
 		Department: &handler.DepartmentHandler{Repo: deptRepo},
 		Role:       &handler.RoleHandler{Repo: roleRepo, PermRepo: permRepo},
 		Log:        &handler.LogHandler{Repo: logRepo},
-		Config:     &handler.ConfigHandler{Repo: configRepo, DictRepo: dictRepo, Mailer: mailService, LDAP: ldapService},
+		Config: &handler.ConfigHandler{
+			Repo: configRepo, DictRepo: dictRepo, Mailer: mailService, LDAP: ldapService,
+			OnConfigChange: func(category, key, value string) {
+				if category == "monitor" && key == "interval" && scheduler != nil {
+					if n, err := strconv.Atoi(value); err == nil && n > 0 {
+						scheduler.SetInterval(n)
+					}
+				}
+			},
+		},
 		Access:     &handler.AccessHandler{Repo: ipRepo},
 		Monitor:    &handler.MonitorHandler{Repo: monitorRepo, ClientRepo: clientRepo, ProbeFunc: probeFunc},
-		Status:     &handler.StatusHandler{MonitorRepo: monitorRepo, ClientService: clientService},
+		Status: &handler.StatusHandler{
+			MonitorRepo:   monitorRepo,
+			ClientService: clientService,
+			IntervalSeconds: func() int {
+				if scheduler == nil {
+					return 0
+				}
+				return int(scheduler.Interval().Seconds())
+			},
+		},
 		Site:       &handler.SiteHandler{ConfigRepo: configRepo, Mailer: mailService},
 		Session:    &handler.SessionHandler{SessionMgr: sessionMgr},
 		UserGroup:  &handler.UserGroupHandler{Repo: userGroupRepo},

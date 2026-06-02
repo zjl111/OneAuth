@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,13 +16,14 @@ import (
 type StatusHandler struct {
 	MonitorRepo   *repository.MonitorRepository
 	ClientService *service.ClientService
+	// IntervalSeconds 返回当前监控周期（秒），用于把 refresh_interval_seconds 透传给状态页。
+	// 注入：main.go 通过闭包指向 scheduler.Interval()。
+	IntervalSeconds func() int
 
 	cacheMu  sync.RWMutex
 	cacheAt  time.Time
 	cacheVal gin.H
 }
-
-const overviewCacheTTL = 25 * time.Second
 
 type appOverview struct {
 	ID                  string             `json:"id"`
@@ -40,19 +42,29 @@ type appOverview struct {
 
 type timelineItem struct {
 	Date          string  `json:"date"`
-	Status        string  `json:"status"`
+	Status        string  `json:"status"` // full / degraded / down / maintenance / none
 	Availability  float64 `json:"availability"`
 	AvgResponseMs int     `json:"avg_response_ms"`
 	MaxResponseMs int     `json:"max_response_ms"`
 	TotalProbes   int     `json:"total_probes"`
 	SuccessProbes int     `json:"success_probes"`
+	FailedProbes  int     `json:"failed_probes"`
+	// 当天最长一次故障持续秒数，从 sso_app_incident 表算出
+	MaxOutageSeconds int `json:"max_outage_seconds"`
 }
 
-// Overview /api/status/overview — 状态页轮询周期 30s，缓存 25s 与之对齐
+// Overview /api/status/overview — 缓存 TTL 跟随当前监控周期，避免短周期时返回过期数据
 func (h *StatusHandler) Overview(c *gin.Context) {
-	c.Header("Cache-Control", "public, max-age=30")
+	ttl := 25 * time.Second
+	if h.IntervalSeconds != nil {
+		if v := h.IntervalSeconds(); v > 0 {
+			// 留 1/3 余量：周期 30s → 缓存 20s；周期 300s → 缓存 200s；周期 10s → 缓存 6s
+			ttl = time.Duration(v) * time.Second * 2 / 3
+		}
+	}
+	c.Header("Cache-Control", "public, max-age="+strconv.Itoa(int(ttl.Seconds())))
 	h.cacheMu.RLock()
-	if time.Since(h.cacheAt) < overviewCacheTTL && h.cacheVal != nil {
+	if time.Since(h.cacheAt) < ttl && h.cacheVal != nil {
 		val := h.cacheVal
 		h.cacheMu.RUnlock()
 		response.OK(c, val)
@@ -85,8 +97,9 @@ func (h *StatusHandler) computeOverview() gin.H {
 		winBatch[k] = h.MonitorRepo.WindowMetricsBatch(hours)
 	}
 
-	// 一次性拉取所有客户端的 90 天每日聚合
+	// 一次性拉取所有客户端的 90 天每日聚合 + 故障最长时长
 	daily := h.MonitorRepo.DailyRecordsBatch(90)
+	outages := h.MonitorRepo.DailyMaxOutageBatch(90)
 
 	apps := make([]appOverview, 0, len(clients))
 	overallOK := true
@@ -124,7 +137,11 @@ func (h *StatusHandler) computeOverview() gin.H {
 			ov.AvgResponse[k] = int(agg.Avg)
 		}
 		ov.AvailabilityCurrent = ov.Windows["24h"]
-		ov.Timeline = timelineFromDaily(daily[cl.ClientID], 90)
+		ov.Timeline = timelineFromDaily(daily[cl.ClientID], 90, outages[cl.ClientID])
+		// 维护中：把"今天"格强制改为 maintenance（蓝色），不影响历史天的颜色
+		if mon != nil && mon.Maintenance && len(ov.Timeline) > 0 {
+			ov.Timeline[len(ov.Timeline)-1].Status = "maintenance"
+		}
 		apps = append(apps, ov)
 	}
 
@@ -155,10 +172,16 @@ func (h *StatusHandler) computeOverview() gin.H {
 		avgResponse = respSum / respCount
 	}
 
+	refresh := 30
+	if h.IntervalSeconds != nil {
+		if v := h.IntervalSeconds(); v > 0 {
+			refresh = v
+		}
+	}
 	return gin.H{
 		"overall_status":           overall,
 		"last_updated":             time.Now(),
-		"refresh_interval_seconds": 30,
+		"refresh_interval_seconds": refresh,
 		"availability_24h_percent": availability,
 		"avg_response_ms":          avgResponse,
 		"apps":                     apps,
@@ -184,12 +207,13 @@ func (h *StatusHandler) Windows(c *gin.Context) {
 }
 
 func (h *StatusHandler) buildTimeline(clientID string, days int) []timelineItem {
-	return timelineFromDaily(nil, days, h.MonitorRepo.DailyRecords(clientID, days)...)
+	outages := h.MonitorRepo.DailyMaxOutageBatch(days)
+	return timelineFromDaily(nil, days, outages[clientID], h.MonitorRepo.DailyRecords(clientID, days)...)
 }
 
 // timelineFromDaily 将一段已按日期升序的 StatusDaily 转换成补齐 days 天的时间线。
-// 兼容两种调用：(rows, days) 或 (nil, days, rows...) — 前者用于已确定天数的预切片输入，后者方便单点查询。
-func timelineFromDaily(rows []model.StatusDaily, days int, extras ...model.StatusDaily) []timelineItem {
+// outages: date(YYYY-MM-DD) -> 最长故障秒数；可为 nil。
+func timelineFromDaily(rows []model.StatusDaily, days int, outages map[string]int, extras ...model.StatusDaily) []timelineItem {
 	if rows == nil {
 		rows = extras
 	}
@@ -205,21 +229,39 @@ func timelineFromDaily(rows []model.StatusDaily, days int, extras ...model.Statu
 		key := d.Format("2006-01-02")
 		r, ok := byDate[key]
 		if !ok {
-			items = append(items, timelineItem{Date: key, Status: model.StatusNoData, Availability: 0})
+			// 无数据 = 灰色（如果当天有故障记录，仍然把最长故障秒数带出来，方便排查）
+			items = append(items, timelineItem{
+				Date: key, Status: "none", Availability: 0,
+				MaxOutageSeconds: outages[key],
+			})
 			continue
 		}
 		avail := 100.0
 		if r.TotalProbes > 0 {
 			avail = float64(r.SuccessProbes) / float64(r.TotalProbes) * 100
 		}
+		// 状态语义：full / degraded / down / none
+		status := "full"
+		switch {
+		case r.TotalProbes == 0:
+			status = "none"
+		case avail >= 99.99:
+			status = "full"
+		case avail >= 95:
+			status = "degraded"
+		default:
+			status = "down"
+		}
 		items = append(items, timelineItem{
-			Date:          key,
-			Status:        r.WorstStatus,
-			Availability:  round2(avail),
-			AvgResponseMs: r.AvgResponseMs,
-			MaxResponseMs: r.MaxResponseMs,
-			TotalProbes:   r.TotalProbes,
-			SuccessProbes: r.SuccessProbes,
+			Date:             key,
+			Status:           status,
+			Availability:     round2(avail),
+			AvgResponseMs:    r.AvgResponseMs,
+			MaxResponseMs:    r.MaxResponseMs,
+			TotalProbes:      r.TotalProbes,
+			SuccessProbes:    r.SuccessProbes,
+			FailedProbes:     r.TotalProbes - r.SuccessProbes,
+			MaxOutageSeconds: outages[key],
 		})
 	}
 	return items

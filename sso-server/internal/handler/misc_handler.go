@@ -340,6 +340,9 @@ type ConfigHandler struct {
 	DictRepo *repository.DictionaryRepository
 	Mailer   *mailer.Mailer
 	LDAP     *service.LDAPService
+	// OnConfigChange 配置保存成功后回调（category, key, value）。
+	// main.go 注入：用来让 monitor.interval 改动立刻通知 scheduler 重建 ticker。
+	OnConfigChange func(category, key, value string)
 }
 
 func (h *ConfigHandler) List(c *gin.Context) {
@@ -366,6 +369,9 @@ func (h *ConfigHandler) Set(c *gin.Context) {
 		if err := h.Repo.Set(r.Category, r.Key, r.Value); err != nil {
 			response.ServerError(c, err.Error())
 			return
+		}
+		if h.OnConfigChange != nil {
+			h.OnConfigChange(r.Category, r.Key, r.Value)
 		}
 	}
 	response.OK(c, nil)

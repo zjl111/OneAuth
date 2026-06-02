@@ -224,6 +224,33 @@ func (r *MonitorRepository) DailyRecordsBatch(days int) map[string][]model.Statu
 	return out
 }
 
+// DailyMaxOutageBatch 一次拉过去 days 天每个 client 每天的最长故障时长（秒），
+// 用 incident 表里的 duration_s 按 started_at 的 UTC 日分桶后取每日最大值。
+// 跨日 incident 简化为归到 started_at 当天（一日内不会跨多个 incident 还重叠，影响极小）。
+// 仍在 ongoing 的 incident 以 now - started_at 估算。
+func (r *MonitorRepository) DailyMaxOutageBatch(days int) map[string]map[string]int {
+	end := time.Now().Truncate(24 * time.Hour).AddDate(0, 0, 1) // 包含今天
+	start := end.AddDate(0, 0, -days)
+	var rows []model.Incident
+	r.db.Where("started_at >= ? AND started_at < ?", start, end).Find(&rows)
+	out := make(map[string]map[string]int)
+	now := time.Now()
+	for _, in := range rows {
+		dur := in.DurationS
+		if in.Status == "ongoing" && dur == 0 {
+			dur = int(now.Sub(in.StartedAt).Seconds())
+		}
+		day := in.StartedAt.UTC().Format("2006-01-02")
+		if out[in.ClientID] == nil {
+			out[in.ClientID] = make(map[string]int)
+		}
+		if dur > out[in.ClientID][day] {
+			out[in.ClientID][day] = dur
+		}
+	}
+	return out
+}
+
 func (r *MonitorRepository) ListIncidents(clientID string, page, pageSize int) ([]model.Incident, int64, error) {
 	tx := r.db.Model(&model.Incident{})
 	if clientID != "" {

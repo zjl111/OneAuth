@@ -12,11 +12,13 @@ import (
 )
 
 type Scheduler struct {
-	repo     *repository.MonitorRepository
-	client   *http.Client
-	interval time.Duration
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
+	repo       *repository.MonitorRepository
+	client     *http.Client
+	mu         sync.RWMutex
+	interval   time.Duration
+	intervalCh chan time.Duration // 通知探测循环重建 ticker
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 func New(repo *repository.MonitorRepository, intervalSeconds int) *Scheduler {
@@ -33,8 +35,44 @@ func New(repo *repository.MonitorRepository, intervalSeconds int) *Scheduler {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		interval: time.Duration(intervalSeconds) * time.Second,
+		interval:   time.Duration(intervalSeconds) * time.Second,
+		intervalCh: make(chan time.Duration, 1),
 	}
+}
+
+// SetInterval 热更新探测周期；下一次循环立即按新周期重建 ticker。
+// seconds <= 0 视为非法，忽略。
+func (s *Scheduler) SetInterval(seconds int) {
+	if seconds <= 0 {
+		return
+	}
+	d := time.Duration(seconds) * time.Second
+	s.mu.Lock()
+	if s.interval == d {
+		s.mu.Unlock()
+		return
+	}
+	s.interval = d
+	s.mu.Unlock()
+	// 非阻塞通知；如果上一次通知还没消费，直接覆盖（buffered=1 + select default）
+	select {
+	case s.intervalCh <- d:
+	default:
+		// drain 再塞一次，让消费者用到最新值
+		select {
+		case <-s.intervalCh:
+		default:
+		}
+		s.intervalCh <- d
+	}
+	log.Printf("[monitor] interval updated to %ds", seconds)
+}
+
+// Interval 当前探测周期（用于 /api/v1/monitor/global 等暴露给前端）
+func (s *Scheduler) Interval() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.interval
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -45,12 +83,18 @@ func (s *Scheduler) Start(ctx context.Context) {
 		defer s.wg.Done()
 		// 启动后立即跑一次
 		s.runOnce(ctx)
-		ticker := time.NewTicker(s.interval)
-		defer ticker.Stop()
+		ticker := time.NewTicker(s.Interval())
+		defer func() { ticker.Stop() }()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case d := <-s.intervalCh:
+				// 热更新周期：重建 ticker（time.Ticker.Reset 1.15+ 也能用，重建更直观）
+				ticker.Stop()
+				ticker = time.NewTicker(d)
+				// 立即跑一次让用户看到生效
+				s.runOnce(ctx)
 			case <-ticker.C:
 				s.runOnce(ctx)
 			}

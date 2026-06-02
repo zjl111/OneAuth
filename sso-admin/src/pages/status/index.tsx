@@ -12,12 +12,21 @@ import dayjs from 'dayjs';
 import { statusApi, type StatusOverview, type AppStatus } from '@/api/status';
 import './status.css';
 
+// 顶部行状态（应用当前状态）：up/degraded/down/maintenance/no_data
+// 时间线小格状态（每日聚合）：full/degraded/down/maintenance/none
+// "full" 是小格特有的"当日 100% 可用"语义，复用 up 的绿
 const statusConfig: Record<
   string,
   { label: string; color: string; icon: JSX.Element; bg: string }
 > = {
   up: {
     label: '正常',
+    color: '#10b981',
+    bg: 'rgba(16, 185, 129, 0.12)',
+    icon: <CheckCircleFilled />,
+  },
+  full: {
+    label: '可用率 100%',
     color: '#10b981',
     bg: 'rgba(16, 185, 129, 0.12)',
     icon: <CheckCircleFilled />,
@@ -46,7 +55,27 @@ const statusConfig: Record<
     bg: 'rgba(156, 163, 175, 0.12)',
     icon: <QuestionCircleFilled />,
   },
+  none: {
+    label: '无数据',
+    color: '#9ca3af',
+    bg: 'rgba(156, 163, 175, 0.12)',
+    icon: <QuestionCircleFilled />,
+  },
 };
+
+// 把秒数格式化成 "1分23秒" / "2小时5分" / "—"
+function formatOutage(sec: number): string {
+  if (!sec || sec <= 0) return '—';
+  if (sec < 60) return `${sec} 秒`;
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分钟`;
+  }
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return m > 0 ? `${h} 小时 ${m} 分` : `${h} 小时`;
+}
 
 export default function StatusPage() {
   const [data, setData] = useState<StatusOverview | null>(null);
@@ -59,6 +88,9 @@ export default function StatusPage() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('status-theme', theme);
   }, [theme]);
+
+  // 后端用 refresh_interval_seconds 告诉我们当前监控周期；前端轮询按它走
+  const refreshSec = data?.refresh_interval_seconds || 30;
 
   useEffect(() => {
     let cancelled = false;
@@ -73,12 +105,12 @@ export default function StatusPage() {
         });
     };
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, refreshSec * 1000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [refreshSec]);
 
   const downCount = data?.apps.filter((a) => a.status === 'down').length || 0;
   const isAllOk = downCount === 0;
@@ -97,7 +129,7 @@ export default function StatusPage() {
               {data?.last_updated
                 ? dayjs(data.last_updated).format('YYYY-MM-DD HH:mm:ss')
                 : '加载中...'}
-              （每 30 秒自动更新）
+              （每 {refreshSec} 秒自动更新）
             </div>
           </div>
         </div>
@@ -113,10 +145,19 @@ export default function StatusPage() {
       </div>
 
       <div className="status-legend">
-        {Object.entries(statusConfig).map(([k, v]) => (
-          <span key={k} className="legend-item">
-            <span className="legend-dot" style={{ background: v.color }} />
-            {v.label}
+        {[
+          { key: 'full', label: '可用率 100%' },
+          { key: 'degraded', label: '可用率 ≥ 95%' },
+          { key: 'down', label: '服务中断' },
+          { key: 'maintenance', label: '维护中' },
+          { key: 'none', label: '无数据' },
+        ].map((it) => (
+          <span key={it.key} className="legend-item">
+            <span
+              className="legend-dot"
+              style={{ background: statusConfig[it.key].color }}
+            />
+            {it.label}
           </span>
         ))}
       </div>
@@ -172,19 +213,27 @@ function AppStatusCardInner({ app }: { app: AppStatus }) {
 
       <div className="timeline">
         {app.timeline.map((t, idx) => {
-          const c = statusConfig[t.status] || statusConfig.no_data;
+          const c = statusConfig[t.status] || statusConfig.none;
+          const isNone = t.status === 'none' || t.status === 'no_data';
           return (
             <Tooltip
               key={idx}
               title={
-                <div>
-                  <div>{t.date}</div>
+                <div style={{ minWidth: 180 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.date}</div>
                   <div>状态：{c.label}</div>
-                  {t.total_probes > 0 && (
+                  {!isNone && (
                     <>
-                      <div>可用性：{t.availability}%</div>
-                      <div>平均响应：{t.avg_response_ms}ms</div>
+                      <div>可用率：{t.availability}%</div>
+                      <div>检查次数：{t.total_probes}</div>
+                      <div>成功次数：{t.success_probes}</div>
+                      <div>失败次数：{t.failed_probes}</div>
+                      <div>平均延迟：{t.avg_response_ms} ms</div>
+                      <div>最长故障：{formatOutage(t.max_outage_seconds)}</div>
                     </>
+                  )}
+                  {isNone && t.max_outage_seconds > 0 && (
+                    <div>最长故障：{formatOutage(t.max_outage_seconds)}</div>
                   )}
                 </div>
               }
@@ -194,7 +243,7 @@ function AppStatusCardInner({ app }: { app: AppStatus }) {
                 className="timeline-cell"
                 style={{
                   background: c.color,
-                  opacity: t.status === 'no_data' ? 0.35 : 1,
+                  opacity: isNone ? 0.35 : 1,
                 }}
               />
             </Tooltip>
