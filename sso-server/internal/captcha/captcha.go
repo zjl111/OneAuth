@@ -57,14 +57,62 @@ type Service struct {
 	HTTPClient *http.Client
 	// KeyProvider 返回当前生效的 Unsplash Access Key（从系统设置读，可热更）
 	KeyProvider func() string
+
+	// 预生成池：后台 goroutine 持续往里塞已切好的 challenge，
+	// Generate 优先 pop 池里现成的；池空时同步生成（首次冷启动会等一下）。
+	// 这样能把"用户点登录 → 看到滑块"这一路上的 Unsplash API + 下载耗时
+	// 全部摊到后台，前端基本秒开。
+	pool chan *prebuilt
 }
 
+// prebuilt 池里的预生成元素：图 + 缺口 X + Unsplash 署名（fallback 时为 nil）
+type prebuilt struct {
+	bgURL   string
+	pieceURL string
+	expectX int
+	photo   *unsplashPhoto
+}
+
+const poolSize = 8 // 同时持有 8 张备用 challenge，足够应对突发
+
 func New(store oauth.Store, keyProvider func() string) *Service {
-	return &Service{
+	s := &Service{
 		Store:       store,
 		HTTPClient:  &http.Client{Timeout: 5 * time.Second},
 		KeyProvider: keyProvider,
+		pool:        make(chan *prebuilt, poolSize),
 	}
+	go s.poolWorker()
+	return s
+}
+
+// poolWorker 后台 goroutine：持续填充 pool。
+// 池满时阻塞在 send；用户消费后腾出空位继续填。
+// 每次填充失败（Unsplash 报错且本地图加载也失败）就 sleep 5s 避免打爆。
+func (s *Service) poolWorker() {
+	for {
+		pb, err := s.buildOne(context.Background())
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		s.pool <- pb // 满则阻塞
+	}
+}
+
+// buildOne 拉一张图、切拼图、编码 base64 —— 池里塞的就是它的产物。
+func (s *Service) buildOne(ctx context.Context) (*prebuilt, error) {
+	src, photo, err := s.fetchImage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bgImg, pieceImg, expectX := makePuzzle(src)
+	return &prebuilt{
+		bgURL:    jpegDataURL(bgImg, 78),
+		pieceURL: pngDataURL(pieceImg),
+		expectX:  expectX,
+		photo:    photo,
+	}, nil
 }
 
 // Challenge 是发给前端的 challenge 描述。
@@ -95,29 +143,37 @@ type unsplashPhoto struct {
 	UnsplashURL      string
 }
 
-// Generate 拉一张图 → 切拼图 → 存 expect X → 返回 base64
+// Generate 优先消费预生成池里的 challenge（瞬间返回）；
+// 池空时退化为同步生成（只在服务刚启动或 Unsplash 持续报错把池抽干时才会发生）。
 func (s *Service) Generate(ctx context.Context) (*Challenge, error) {
-	src, photo, err := s.fetchImage(ctx)
-	if err != nil {
-		return nil, err
+	var pb *prebuilt
+	select {
+	case pb = <-s.pool:
+		// 命中池：~0ms
+	default:
+		// 池空：同步生成，承担一次外网 + 编码耗时
+		var err error
+		pb, err = s.buildOne(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
-	bgImg, pieceImg, expectX := makePuzzle(src)
 	id := randHex(16)
-	st := challengeState{ExpectX: expectX, CreatedAt: time.Now().Unix()}
+	st := challengeState{ExpectX: pb.expectX, CreatedAt: time.Now().Unix()}
 	raw, _ := json.Marshal(st)
 	if err := s.Store.Set(ctx, "captcha:ch:"+id, raw, challengeTTL); err != nil {
 		return nil, err
 	}
 	ch := &Challenge{
 		ID:         id,
-		Background: pngDataURL(bgImg),
-		Piece:      pngDataURL(pieceImg),
+		Background: pb.bgURL,
+		Piece:      pb.pieceURL,
 		PieceY:     pieceY,
 	}
-	if photo != nil {
-		ch.PhotographerName = photo.PhotographerName
-		ch.PhotographerURL = photo.PhotographerURL
-		ch.UnsplashURL = photo.UnsplashURL
+	if pb.photo != nil {
+		ch.PhotographerName = pb.photo.PhotographerName
+		ch.PhotographerURL = pb.photo.PhotographerURL
+		ch.UnsplashURL = pb.photo.UnsplashURL
 	}
 	return ch, nil
 }
@@ -359,6 +415,12 @@ func pngDataURL(img image.Image) string {
 	var buf bytes.Buffer
 	_ = png.Encode(&buf, img)
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+func jpegDataURL(img image.Image, quality int) string {
+	var buf bytes.Buffer
+	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
 }
 
 func randHex(n int) string {
