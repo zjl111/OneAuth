@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Button, App as AntdApp, Divider } from 'antd';
+import { Modal, Form, Input, Button, App as AntdApp, Divider, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, WechatOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, setRememberMe } from '@/store/authStore';
 import { useSite } from '@/hooks/useSite';
 import { get } from '@/api/request';
 import WecomQRLogin from './WecomQRLogin';
@@ -66,7 +66,11 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
     }
   };
 
-  const onFinish = (values: { username: string; password: string }) => {
+  const onFinish = (values: { username: string; password: string; remember?: boolean }) => {
+    // 记住我：勾上则把后续 storage 写入 localStorage（关浏览器仍登录）；
+    // 不勾默认 sessionStorage（关浏览器即掉）。必须在 doLogin 之前调，
+    // 这样 set({...}) 触发 persist 时已选好正确的盘。
+    setRememberMe(!!values.remember);
     doLogin(values.username, values.password);
   };
 
@@ -100,6 +104,9 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
         </Form.Item>
         <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
           <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+        </Form.Item>
+        <Form.Item name="remember" valuePropName="checked" style={{ marginBottom: 8 }}>
+          <Checkbox>记住我（7 天内免登）</Checkbox>
         </Form.Item>
         <Form.Item>
           <Button type="primary" htmlType="submit" block loading={submitting} className="login-modal-submit">
