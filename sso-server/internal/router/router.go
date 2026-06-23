@@ -172,6 +172,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/users/:id", h.User.Detail)
 		admin.PUT("/users/:id", h.User.Update)
 		admin.DELETE("/users/:id", h.User.Delete)
+		admin.POST("/users/batch-delete", h.User.BatchDelete)
 		admin.POST("/users/:id/reset-password", h.User.ResetPassword)
 		admin.POST("/users/:id/lock", h.User.Lock)
 		admin.PUT("/users/:id/roles", h.User.SetRoles)

@@ -62,6 +62,7 @@ export default function UserListPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importResult, setImportResult] = useState<ImportUsersResult | null>(null);
   const [importing, setImporting] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [form] = Form.useForm();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -153,6 +154,29 @@ export default function UserListPage() {
     load();
   };
 
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) return;
+    modal.confirm({
+      title: `确认删除选中的 ${selectedRowKeys.length} 个用户？`,
+      content: '删除后不可恢复，关联角色与会话也会一并清理。',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const r = await usersApi.batchDelete(selectedRowKeys);
+          if (r.failed.length === 0) {
+            message.success(`已删除 ${r.deleted} 个用户`);
+          } else {
+            message.warning(`删除 ${r.deleted} 成功，${r.failed.length} 失败`);
+          }
+          setSelectedRowKeys([]);
+          load();
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '批量删除失败');
+        }
+      },
+    });
+  };
+
   const handleLock = async (u: User) => {
     await usersApi.lock(u.id, !u.is_locked);
     message.success(u.is_locked ? '已解锁' : '已锁定');
@@ -197,6 +221,13 @@ export default function UserListPage() {
         <Button icon={<ImportOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }}>
           批量导入
         </Button>
+        <Button
+          danger
+          disabled={selectedRowKeys.length === 0}
+          onClick={handleBatchDelete}
+        >
+          批量删除{selectedRowKeys.length > 0 ? `（${selectedRowKeys.length}）` : ''}
+        </Button>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
           新建用户
         </Button>
@@ -206,7 +237,11 @@ export default function UserListPage() {
         rowKey="id"
         loading={loading}
         dataSource={data}
-        scroll={{ x: 1000 }}
+        scroll={{ x: 1100 }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys as string[]),
+        }}
         pagination={{
           current: pagination.current,
           pageSize: pagination.pageSize,
@@ -241,6 +276,13 @@ export default function UserListPage() {
               ) : (
                 <Tag>禁用</Tag>
               ),
+          },
+          {
+            title: '最后登录',
+            dataIndex: 'last_login',
+            width: 160,
+            render: (v: string | null) =>
+              v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—',
           },
           {
             title: '操作',

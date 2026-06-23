@@ -238,6 +238,32 @@ func (h *UserHandler) SetRoles(c *gin.Context) {
 	response.OK(c, u)
 }
 
+// BatchDelete POST /api/v1/users/batch-delete  body={ids:[uuid,...]}
+//   逐条调用 service.Delete；任何一条失败也继续，返回 deleted 数量 + 失败 ids。
+func (h *UserHandler) BatchDelete(c *gin.Context) {
+	var req struct {
+		IDs []uuid.UUID `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	if len(req.IDs) == 0 {
+		response.BadRequest(c, "未选择用户")
+		return
+	}
+	deleted := 0
+	failed := []string{}
+	for _, id := range req.IDs {
+		if err := h.Service.Delete(id); err != nil {
+			failed = append(failed, id.String())
+			continue
+		}
+		deleted++
+	}
+	response.OK(c, gin.H{"deleted": deleted, "failed": failed})
+}
+
 // ImportUsers 接 multipart/form-data：file 字段 = .csv / .xlsx
 //   POST /api/v1/users/import
 // 返回 {total, success, failed, errors:[{row,username,reason}]}

@@ -45,6 +45,8 @@ export const usersApi = {
   update: (id: string, data: Partial<User> & { role_ids?: string[] }) =>
     put<User>(`/users/${id}`, data),
   delete: (id: string) => del(`/users/${id}`),
+  batchDelete: (ids: string[]) =>
+    post<{ deleted: number; failed: string[] }>('/users/batch-delete', { ids }),
   resetPassword: (id: string, new_password: string) =>
     post(`/users/${id}/reset-password`, { new_password }),
   lock: (id: string, lock: boolean) => post(`/users/${id}/lock`, { lock }),
