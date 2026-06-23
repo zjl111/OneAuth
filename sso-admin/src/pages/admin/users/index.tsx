@@ -25,8 +25,10 @@ import {
   UnlockOutlined,
   KeyOutlined,
   UploadOutlined,
+  ImportOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
-import { usersApi, type User } from '@/api/users';
+import { usersApi, type User, type ImportUsersResult } from '@/api/users';
 import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
 import UserAvatar from '@/components/UserAvatar';
@@ -57,6 +59,9 @@ export default function UserListPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importResult, setImportResult] = useState<ImportUsersResult | null>(null);
+  const [importing, setImporting] = useState(false);
   const [form] = Form.useForm();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -188,6 +193,9 @@ export default function UserListPage() {
         />
         <Button icon={<ReloadOutlined />} onClick={load}>
           刷新
+        </Button>
+        <Button icon={<ImportOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }}>
+          批量导入
         </Button>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
           新建用户
@@ -450,6 +458,113 @@ export default function UserListPage() {
           </Row>
         </Form>
       </Drawer>
+
+      <Modal
+        title="批量导入用户"
+        open={importOpen}
+        onCancel={() => { setImportOpen(false); setImportResult(null); }}
+        footer={null}
+        width={640}
+        destroyOnClose
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7 }}>
+              先下载模板填好再上传，**带 <span style={{ color: '#ef4444' }}>*</span> 的列必填**：
+              <br />
+              · 登录账号<span style={{ color: '#ef4444' }}>*</span> · 姓名<span style={{ color: '#ef4444' }}>*</span> · 密码<span style={{ color: '#ef4444' }}>*</span> · 邮箱 · 手机号 · 部门 · 用户类型 · 管理员
+              <br />
+              · 部门按"名称"匹配（与系统中的部门同名）；用户类型 internal/external；管理员是/否
+              <br />
+              · 文件 ≤ 5MB，支持 .csv 和 .xlsx
+            </div>
+            <Space style={{ marginTop: 10 }}>
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                href={usersApi.templateURL('xlsx')}
+                target="_blank"
+                rel="noopener"
+              >
+                下载 XLSX 模板
+              </Button>
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                href={usersApi.templateURL('csv')}
+                target="_blank"
+                rel="noopener"
+              >
+                下载 CSV 模板
+              </Button>
+            </Space>
+          </div>
+
+          <Upload.Dragger
+            multiple={false}
+            showUploadList={false}
+            accept=".csv,.xlsx"
+            beforeUpload={(file) => {
+              if (file.size > 5 * 1024 * 1024) {
+                message.error('文件超过 5MB');
+                return Upload.LIST_IGNORE;
+              }
+              setImporting(true);
+              setImportResult(null);
+              usersApi
+                .importFile(file)
+                .then((r) => {
+                  setImportResult(r);
+                  if (r.failed === 0) {
+                    message.success(`已导入 ${r.success} 个用户`);
+                  } else {
+                    message.warning(`导入完成：成功 ${r.success}，失败 ${r.failed}`);
+                  }
+                  load();
+                })
+                .catch((e) => {
+                  message.error(e?.response?.data?.message || '导入失败');
+                })
+                .finally(() => setImporting(false));
+              return false; // 拦截默认上传
+            }}
+            disabled={importing}
+          >
+            <p style={{ margin: 0, fontSize: 32, color: '#1677ff' }}>
+              <UploadOutlined />
+            </p>
+            <p style={{ margin: '8px 0 4px', fontSize: 14 }}>
+              {importing ? '正在导入…' : '点击或拖拽文件到这里上传'}
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>仅支持 .csv / .xlsx</p>
+          </Upload.Dragger>
+
+          {importResult && (
+            <div>
+              <Space size="large" style={{ marginBottom: 8 }}>
+                <span>共 <b>{importResult.total}</b> 行</span>
+                <span style={{ color: '#10b981' }}>成功 <b>{importResult.success}</b></span>
+                <span style={{ color: '#ef4444' }}>失败 <b>{importResult.failed}</b></span>
+              </Space>
+              {importResult.errors.length > 0 && (
+                <Table
+                  size="small"
+                  rowKey={(r) => `${r.row}-${r.username}`}
+                  dataSource={importResult.errors}
+                  pagination={false}
+                  scroll={{ y: 200 }}
+                  columns={[
+                    { title: '行号', dataIndex: 'row', width: 60 },
+                    { title: '账号', dataIndex: 'username', width: 140 },
+                    { title: '失败原因', dataIndex: 'reason' },
+                  ]}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
+
       </Card>
     </>
   );

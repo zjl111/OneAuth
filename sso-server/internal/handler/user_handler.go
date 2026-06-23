@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 	"github.com/google/uuid"
 
 	"sso-server/internal/repository"
@@ -19,7 +21,8 @@ import (
 )
 
 type UserHandler struct {
-	Service *service.UserService
+	Service       *service.UserService
+	ImportService *service.UserImportService
 }
 
 func (h *UserHandler) List(c *gin.Context) {
@@ -233,4 +236,91 @@ func (h *UserHandler) SetRoles(c *gin.Context) {
 		return
 	}
 	response.OK(c, u)
+}
+
+// ImportUsers 接 multipart/form-data：file 字段 = .csv / .xlsx
+//   POST /api/v1/users/import
+// 返回 {total, success, failed, errors:[{row,username,reason}]}
+func (h *UserHandler) ImportUsers(c *gin.Context) {
+	if h.ImportService == nil {
+		response.ServerError(c, "导入服务未启用")
+		return
+	}
+	fh, err := c.FormFile("file")
+	if err != nil {
+		response.BadRequest(c, "请上传 file 字段")
+		return
+	}
+	if fh.Size > 5*1024*1024 {
+		response.BadRequest(c, "文件超过 5MB 上限")
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	defer f.Close()
+	buf := make([]byte, fh.Size)
+	if _, err := io.ReadFull(f, buf); err != nil {
+		response.ServerError(c, "读取文件失败："+err.Error())
+		return
+	}
+	res, err := h.ImportService.ImportFromBytes(fh.Filename, buf)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, res)
+}
+
+// ImportTemplate 下载导入模板。?format=csv 返回 utf-8 BOM csv，否则返回 xlsx。
+//   GET /api/v1/users/import/template
+func (h *UserHandler) ImportTemplate(c *gin.Context) {
+	headers := []string{
+		"登录账号*", "姓名*", "密码*",
+		"邮箱", "手机号", "部门", "用户类型", "管理员",
+	}
+	example := []string{
+		"jdoe", "张三", "Init@123456",
+		"jdoe@example.com", "13800000000", "总公司", "internal", "否",
+	}
+	if c.Query("format") == "csv" {
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		c.Header("Content-Disposition", `attachment; filename="oneauth-users-template.csv"`)
+		var b bytes.Buffer
+		b.Write([]byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM，让 Excel 不乱码
+		w := csv.NewWriter(&b)
+		_ = w.Write(headers)
+		_ = w.Write(example)
+		w.Flush()
+		c.Data(200, "text/csv; charset=utf-8", b.Bytes())
+		return
+	}
+	// 默认 xlsx
+	f := excelize.NewFile()
+	defer f.Close()
+	sheet := f.GetSheetName(0)
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue(sheet, cell, h)
+	}
+	for i, v := range example {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		_ = f.SetCellValue(sheet, cell, v)
+	}
+	// 表头加粗 + 浅灰底
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true},
+		Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#F1F5F9"}},
+	})
+	_ = f.SetCellStyle(sheet, "A1", "H1", headerStyle)
+	// 列宽
+	for i, w := range []float64{14, 14, 18, 24, 16, 16, 12, 10} {
+		col, _ := excelize.ColumnNumberToName(i + 1)
+		_ = f.SetColWidth(sheet, col, col, w)
+	}
+	c.Header("Content-Disposition", `attachment; filename="oneauth-users-template.xlsx"`)
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	_ = f.Write(c.Writer)
 }

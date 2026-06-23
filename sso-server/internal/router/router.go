@@ -131,6 +131,8 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	api.POST("/auth/forgot-password", h.Auth.ForgotPassword)
 	api.GET("/auth/reset-password/verify", h.Auth.VerifyResetToken)
 	api.POST("/auth/reset-password", h.Auth.ResetPassword)
+	// 用户导入模板（无敏感数据，公开下载，避免前端 a 标签下载没法带 Authorization）
+	api.GET("/users/import/template", h.User.ImportTemplate)
 	// captcha 公共端点（登录前/登录中调用，无需鉴权）
 	api.GET("/auth/captcha/challenge", h.Auth.CaptchaChallenge)
 	api.POST("/auth/captcha/verify", h.Auth.CaptchaVerify)
@@ -174,6 +176,8 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/users/:id/lock", h.User.Lock)
 		admin.PUT("/users/:id/roles", h.User.SetRoles)
 		admin.POST("/users/:id/avatar", h.User.UploadAvatar)
+		// 批量导入：上传 csv/xlsx
+		admin.POST("/users/import", h.User.ImportUsers)
 
 		// 用户组
 		admin.GET("/user-groups", h.UserGroup.List)

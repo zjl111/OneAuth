@@ -220,7 +220,10 @@ func main() {
 			Issuer:       cfg.OAuth.Issuer,
 			FrontendBase: frontendBase,
 		},
-		User: &handler.UserHandler{Service: userService},
+		User: &handler.UserHandler{
+			Service:       userService,
+			ImportService: service.NewUserImportService(userService, deptRepo, roleRepo),
+		},
 		App:  &handler.AppHandler{Service: clientService},
 		Dashboard: &handler.DashboardHandler{
 			UserRepo: userRepo, ClientRepo: clientRepo,
