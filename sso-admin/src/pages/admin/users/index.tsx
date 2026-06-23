@@ -85,7 +85,7 @@ export default function UserListPage() {
       .list({
         page: pagination.current,
         page_size: pagination.pageSize,
-        username: keyword,
+        keyword,
       })
       .then((d) => {
         setData(d.items || []);
@@ -208,12 +208,13 @@ export default function UserListPage() {
     <>
       <PageToolbar>
         <Input
-          placeholder="搜索登录账号"
+          placeholder="搜索 账号 / 姓名 / 邮箱 / 手机号"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onPressEnter={load}
           allowClear
-          style={{ width: 220 }}
+          onClear={() => { setKeyword(''); load(); }}
+          style={{ width: 280 }}
         />
         <Button icon={<ReloadOutlined />} onClick={load}>
           刷新

@@ -83,7 +83,10 @@ func (r *UserRepository) List(q UserQuery) ([]model.User, int64, error) {
 	}
 	if q.Keyword != "" {
 		kw := "%" + q.Keyword + "%"
-		tx = tx.Where("username LIKE ? OR nickname LIKE ? OR email LIKE ?", kw, kw, kw)
+		tx = tx.Where(
+			"username LIKE ? OR nickname LIKE ? OR email LIKE ? OR phone LIKE ?",
+			kw, kw, kw, kw,
+		)
 	}
 	if len(q.DepartmentIDs) > 0 {
 		tx = tx.Where("department_id IN ?", q.DepartmentIDs)
