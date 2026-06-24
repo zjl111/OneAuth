@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"sso-server/internal/captcha"
+	"sso-server/internal/middleware"
 	"sso-server/internal/model"
 	"sso-server/internal/oauth"
 	"sso-server/internal/repository"
@@ -207,6 +208,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
 	h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
 	h.clearIPFail(c.Request.Context(), c.ClientIP())
+	middleware.MarkActive(h.Store, user.ID.String())
 
 	response.OK(c, LoginResponse{
 		AccessToken:  access,
@@ -248,6 +250,17 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		response.Unauthorized(c, "用户不存在")
 		return
+	}
+	// 无活动超时校验：系统设置 security.session_timeout 秒内没有"主动操作"
+	// （前端 X-User-Action: 1 标记的请求）就拒绝 refresh，并吊销当前 refresh token。
+	if timeout := h.sessionTimeout(); timeout > 0 {
+		lastActive := middleware.LastActiveAt(h.Store, rt.UserID)
+		// 从未活跃过的视为刚登录，跳过本次检查（Login 处已 MarkActive）
+		if !lastActive.IsZero() && time.Since(lastActive) > timeout {
+			_ = h.TokenService.DeleteRefreshToken(c.Request.Context(), req.RefreshToken)
+			response.Unauthorized(c, "会话已超时，请重新登录")
+			return
+		}
 	}
 	_ = h.TokenService.DeleteRefreshToken(c.Request.Context(), req.RefreshToken)
 	access, _ := h.TokenService.IssueAccessToken(user.Username, rt.UserID, rt.ClientID, user.Username, rt.Scope, 0)
@@ -509,6 +522,22 @@ func maskEmail(email string) string {
 
 // captchaFailWindow 失败计数滚动窗口；超过这段时间后计数自然过期
 const captchaFailWindow = 10 * time.Minute
+
+// sessionTimeout 系统设置 security.session_timeout 秒。0 / 未配置 = 禁用超时校验。
+func (h *AuthHandler) sessionTimeout() time.Duration {
+	if h.ConfigRepo == nil {
+		return 0
+	}
+	v := h.ConfigRepo.Get("security", "session_timeout")
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
+}
 
 func (h *AuthHandler) captchaEnabled() bool {
 	if h.Captcha == nil || h.ConfigRepo == nil {

@@ -14,6 +14,13 @@ request.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // 写操作（POST/PUT/PATCH/DELETE）= 用户主动行为；后端据此刷新 last_active_at。
+  // GET（包括 status overview、dashboard 等被动轮询）不带，不会"假活跃"导致永远不掉线。
+  // refresh 自身是被动的，也不带。
+  const method = (config.method || 'get').toLowerCase();
+  if (method !== 'get' && method !== 'head' && !config.url?.includes('/auth/refresh')) {
+    config.headers['X-User-Action'] = '1';
+  }
   return config;
 });
 

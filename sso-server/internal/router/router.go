@@ -149,6 +149,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	// 需要登录
 	authed := api.Group("")
 	authed.Use(middleware.JWTAuth(ts, userSvc))
+	authed.Use(middleware.TouchActivity(h.Auth.Store))
 	authed.Use(middleware.Audit(h.Log.Repo))
 	{
 		authed.GET("/auth/profile", h.Auth.Profile)
@@ -164,6 +165,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	admin := api.Group("")
 	admin.Use(middleware.JWTAuth(ts, userSvc))
 	admin.Use(middleware.RequireStaff())
+	admin.Use(middleware.TouchActivity(h.Auth.Store))
 	admin.Use(middleware.Audit(h.Log.Repo))
 	{
 		// 用户管理

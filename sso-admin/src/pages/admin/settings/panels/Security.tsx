@@ -7,8 +7,12 @@ export default function SecurityPanel() {
       <div style={cardStyle}>
         <SectionHead title="登录与会话" />
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', columnGap: 32 }}>
-          <Form.Item label="Session 超时（秒）" name="security.session_timeout">
-            <InputNumber min={60} max={31536000} style={{ width: '100%' }} addonAfter="秒" />
+          <Form.Item
+            label="无活动自动登出（秒）"
+            name="security.session_timeout"
+            extra="超过该秒数没有任何主动操作（点击/表单/搜索）将强制重新登录；0 = 禁用"
+          >
+            <InputNumber min={0} max={31536000} style={{ width: '100%' }} addonAfter="秒" />
           </Form.Item>
           <Form.Item label="登录失败锁定阈值" name="security.login_lockout_threshold">
             <InputNumber min={1} max={100} style={{ width: '100%' }} addonAfter="次" />
