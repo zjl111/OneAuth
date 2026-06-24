@@ -26,15 +26,17 @@ function isRemember(): boolean {
 }
 
 // 一次性迁移：升级前的用户 token 全在 localStorage 但没有 remember flag。
-// 把这种状态解释为"已经登录过的存量用户"，给他们补上 remember=1，
-// 否则新逻辑会从 sessionStorage 读，看不到 token → 莫名其妙被踢回登录页。
+// 把这种状态视为"未勾记住我"——直接清掉，让他们下次访问被踢回登录页，
+// 明确选择是否勾选"记住我"，从而进入新规则的二选一状态。
 // 仅在模块加载时跑一次。
 (function migrateLegacyAuth() {
   if (typeof window === 'undefined') return;
   const hasLegacy = localStorage.getItem('oneauth-auth') != null;
   const hasFlag = localStorage.getItem(REMEMBER_FLAG_KEY) != null;
   if (hasLegacy && !hasFlag) {
-    localStorage.setItem(REMEMBER_FLAG_KEY, '1');
+    // 删掉旧 token 数据；rehydrate 时新 dynamicStorage 走 sessionStorage（空）
+    // → AuthGuard 看到 isAuthenticated=false → Navigate 回登录
+    localStorage.removeItem('oneauth-auth');
   }
 })();
 
