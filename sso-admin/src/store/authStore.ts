@@ -2,60 +2,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authApi, type UserInfo } from '@/api/auth';
 
-// 持久化策略：
-//   勾"记住我"  → localStorage（关浏览器仍在；7 天 refresh TTL 自动续）
-//   未勾        → sessionStorage（关浏览器即清，每次重开都得登）
-// 由登录时 setRememberMe() 写入 REMEMBER_FLAG_KEY，persist storage adapter 据此选盘。
-const REMEMBER_FLAG_KEY = 'oneauth-remember';
-
-export function setRememberMe(remember: boolean) {
-  // 切换前，把当前盘里的内容搬到目标盘，让 persist 接下来读得到
-  const fromKey = remember ? sessionStorage : localStorage;
-  const toKey = remember ? localStorage : sessionStorage;
-  const v = fromKey.getItem('oneauth-auth');
-  if (v != null) {
-    toKey.setItem('oneauth-auth', v);
-    fromKey.removeItem('oneauth-auth');
-  }
-  if (remember) localStorage.setItem(REMEMBER_FLAG_KEY, '1');
-  else localStorage.removeItem(REMEMBER_FLAG_KEY);
-}
-
-function isRemember(): boolean {
-  return localStorage.getItem(REMEMBER_FLAG_KEY) === '1';
-}
-
-// 一次性迁移：升级前的用户 token 全在 localStorage 但没有 remember flag。
-// 把这种状态视为"未勾记住我"——直接清掉，让他们下次访问被踢回登录页，
-// 明确选择是否勾选"记住我"，从而进入新规则的二选一状态。
-// 仅在模块加载时跑一次。
+// 持久化策略：固定用 sessionStorage —— 关浏览器/标签页即清。
+// 不再支持"记住我"长会话，避免登录态被无限续命。
+// 关闭浏览器掉线是用户明确的诉求。
+//
+// 一次性迁移：旧版本曾把 token 存 localStorage，加载时清掉避免残留续命。
 (function migrateLegacyAuth() {
   if (typeof window === 'undefined') return;
-  const hasLegacy = localStorage.getItem('oneauth-auth') != null;
-  const hasFlag = localStorage.getItem(REMEMBER_FLAG_KEY) != null;
-  if (hasLegacy && !hasFlag) {
-    // 删掉旧 token 数据；rehydrate 时新 dynamicStorage 走 sessionStorage（空）
-    // → AuthGuard 看到 isAuthenticated=false → Navigate 回登录
-    localStorage.removeItem('oneauth-auth');
-  }
+  localStorage.removeItem('oneauth-auth');
+  localStorage.removeItem('oneauth-remember');
 })();
 
-// 自定义 storage：每次读写时按 flag 选盘
-const dynamicStorage = {
-  getItem: (k: string) => {
-    const s = isRemember() ? localStorage : sessionStorage;
-    return s.getItem(k);
-  },
-  setItem: (k: string, v: string) => {
-    const s = isRemember() ? localStorage : sessionStorage;
-    s.setItem(k, v);
-  },
-  removeItem: (k: string) => {
-    // 清就两边都清
-    localStorage.removeItem(k);
-    sessionStorage.removeItem(k);
-  },
-};
+const sessionOnlyStorage = createJSONStorage(() => sessionStorage);
 
 interface AuthState {
   accessToken: string | null;
@@ -132,8 +90,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clear: () => {
-        // 同时清掉 remember flag，下次默认走 sessionStorage（关浏览器即掉）
-        localStorage.removeItem(REMEMBER_FLAG_KEY);
         set({
           accessToken: null,
           refreshToken: null,
@@ -145,8 +101,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'oneauth-auth',
-      // 默认 sessionStorage（关浏览器即掉），勾"记住我"才升到 localStorage
-      storage: createJSONStorage(() => dynamicStorage),
+      // 固定 sessionStorage：关浏览器/标签页即清登录态
+      storage: sessionOnlyStorage,
       // isAuthenticated 不持久化 —— rehydrate 后从 accessToken+user 派生，
       // 避免 storage 里残留的 true 误导首页 useEffect。
       partialize: (s) => ({
