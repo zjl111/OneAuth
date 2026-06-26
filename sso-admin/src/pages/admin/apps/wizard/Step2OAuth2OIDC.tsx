@@ -29,7 +29,10 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
       <Form.Item name="grant_types" label="授权方式" rules={[{ required: true }]}>
         <Select
           mode="multiple"
+          maxTagCount="responsive"
           options={[{ value: 'authorization_code', label: 'authorization_code' }]}
+          placeholder="选择授权方式"
+          className="wizard-multi-select"
         />
       </Form.Item>
 
@@ -51,6 +54,7 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
         >
           <Select
             mode="multiple"
+            maxTagCount="responsive"
             placeholder="选择需要的作用域"
             options={[
               ...(isOIDC ? [{ value: 'openid', label: 'openid', disabled: true }] : []),
@@ -75,6 +79,7 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
                 </Tag>
               );
             } : undefined}
+            className="wizard-multi-select"
           />
         </Form.Item>
 
@@ -209,6 +214,7 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
                   >
                     <Select
                       mode="multiple"
+                      maxTagCount="responsive"
                       placeholder="默认全部下发"
                       options={[
                         { value: 'name',       label: 'name（姓名/昵称）' },
@@ -219,6 +225,7 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
                         { value: 'department', label: 'department（部门）' },
                         { value: 'position',   label: 'position（岗位）' },
                       ]}
+                      className="wizard-multi-select"
                     />
                   </Form.Item>
                 </>

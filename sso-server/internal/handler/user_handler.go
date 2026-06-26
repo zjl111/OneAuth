@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/xuri/excelize/v2"
 	"github.com/google/uuid"
+	"github.com/xuri/excelize/v2"
 
 	"sso-server/internal/repository"
 	"sso-server/internal/service"
@@ -130,6 +131,10 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 	if err := h.Service.Delete(id); err != nil {
+		if errors.Is(err, service.ErrUserProtected) {
+			response.BadRequest(c, err.Error())
+			return
+		}
 		response.ServerError(c, err.Error())
 		return
 	}
@@ -239,7 +244,8 @@ func (h *UserHandler) SetRoles(c *gin.Context) {
 }
 
 // BatchDelete POST /api/v1/users/batch-delete  body={ids:[uuid,...]}
-//   逐条调用 service.Delete；任何一条失败也继续，返回 deleted 数量 + 失败 ids。
+//
+//	逐条调用 service.Delete；任何一条失败也继续，返回 deleted 数量 + 失败 ids。
 func (h *UserHandler) BatchDelete(c *gin.Context) {
 	var req struct {
 		IDs []uuid.UUID `json:"ids"`
@@ -265,7 +271,9 @@ func (h *UserHandler) BatchDelete(c *gin.Context) {
 }
 
 // ImportUsers 接 multipart/form-data：file 字段 = .csv / .xlsx
-//   POST /api/v1/users/import
+//
+//	POST /api/v1/users/import
+//
 // 返回 {total, success, failed, errors:[{row,username,reason}]}
 func (h *UserHandler) ImportUsers(c *gin.Context) {
 	if h.ImportService == nil {
@@ -301,7 +309,8 @@ func (h *UserHandler) ImportUsers(c *gin.Context) {
 }
 
 // ImportTemplate 下载导入模板。?format=csv 返回 utf-8 BOM csv，否则返回 xlsx。
-//   GET /api/v1/users/import/template
+//
+//	GET /api/v1/users/import/template
 func (h *UserHandler) ImportTemplate(c *gin.Context) {
 	headers := []string{
 		"登录账号*", "姓名*", "密码*",

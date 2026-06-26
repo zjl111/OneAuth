@@ -17,6 +17,7 @@ import { PlusOutlined, ReloadOutlined, TeamOutlined, UserAddOutlined } from '@an
 import { userGroupApi, type UserGroup } from '@/api/misc';
 import { usersApi, type User } from '@/api/users';
 import PageToolbar from '@/components/PageToolbar';
+import './user-groups.css';
 
 export default function UserGroupsPage() {
   const { message, modal } = AntdApp.useApp();
@@ -139,7 +140,7 @@ export default function UserGroupsPage() {
         </Button>
       </PageToolbar>
 
-      <Card>
+      <Card className="ug-page">
         <Table<UserGroup>
           rowKey="id"
           loading={loading}

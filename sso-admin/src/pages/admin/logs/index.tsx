@@ -4,6 +4,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { logApi, type LoginLog, type OperationLog, type AccessLog } from '@/api/misc';
 import type { PageData } from '@/api/request';
+import './logs.css';
 
 type Fetcher<T> = (params: Record<string, unknown>) => Promise<PageData<T>>;
 
@@ -48,7 +49,7 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   return (
     <>
       {filters.length > 0 && (
-        <Space style={{ marginBottom: 12 }}>
+        <Space className="log-filter-bar" style={{ marginBottom: 12, flexWrap: 'wrap', rowGap: 8 }}>
           {filters.map((f) =>
             f.type === 'select' ? (
               <Select
@@ -212,7 +213,7 @@ const accessColumns: TableColumnsType<AccessLog> = [
 
 export default function LogsPage() {
   return (
-    <Card>
+    <Card className="log-page">
       <Tabs
         items={[
           {

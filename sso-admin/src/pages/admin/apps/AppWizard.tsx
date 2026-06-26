@@ -5,11 +5,12 @@ import {
   Switch,
   Steps,
   Button,
+  Upload,
   App as AntdApp,
 } from 'antd';
-import { CopyOutlined, DownloadOutlined } from '@ant-design/icons';
+import { CopyOutlined, DownloadOutlined, AppstoreOutlined } from '@ant-design/icons';
 import type { OAuth2Client } from '@/api/apps';
-import LogoUploader from '@/components/LogoUploader';
+import { useAuthStore } from '@/store/authStore';
 import './wizard.css';
 
 import {
@@ -52,6 +53,34 @@ export default function AppWizard({
   const logoUrl = Form.useWatch('logo_url', form);
   const isOIDC = family === 'oidc';
   const [discovery, setDiscovery] = useState<Record<string, any> | null>(null);
+
+  // 内联 Logo 上传配置（Step0 横向布局复用）
+  const uploadConfig = useMemo(() => ({
+    name: 'file',
+    action: '/api/v1/configs/upload-image',
+    headers: { Authorization: `Bearer ${useAuthStore.getState().accessToken}` },
+    data: { prefix: 'app' },
+    accept: '.png,.jpg,.jpeg,.svg,.webp,.gif',
+    showUploadList: false,
+    beforeUpload: (file: File) => {
+      if (file.size > 2 * 1024 * 1024) {
+        message.error('图片不能超过 2MB');
+        return Upload.LIST_IGNORE;
+      }
+      return true;
+    },
+    onChange: (info: any) => {
+      if (info.file.status === 'done') {
+        const url = info.file.response?.data?.url;
+        if (url) {
+          form.setFieldValue('logo_url', url);
+          message.success('图标已上传');
+        }
+      } else if (info.file.status === 'error') {
+        message.error(info.file.response?.message || '上传失败');
+      }
+    },
+  }), [message, form]);
 
   // Step3 展示的"真实"应用数据：新建模式 = 后端 Create 返回；编辑模式 = 传入的 editing
   const [submitted, setSubmitted] = useState<OAuth2Client | null>(null);
@@ -304,7 +333,7 @@ export default function AppWizard({
 
   return (
     <div className="app-wizard">
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+      <div className="app-wizard-steps">
         <Steps
           current={family === 'link' && step >= 2 ? step - 1 : step}
           items={
@@ -312,94 +341,101 @@ export default function AppWizard({
               ? [{ title: '应用信息' }, { title: '应用授权' }, { title: '信息确认' }]
               : [{ title: '应用信息' }, { title: '客户端配置' }, { title: '应用授权' }, { title: '信息确认' }]
           }
-          style={{ width: family === 'link' ? 600 : 760 }}
         />
       </div>
 
-      <Form form={form} layout="horizontal" labelCol={{ flex: '120px' }} labelAlign="right" colon>
-        {/* ============== Step 1 应用信息（共用） ============== */}
+      <Form form={form} layout="vertical">
+        {/* ============== Step 0 应用信息（共用） ============== */}
         <div style={{ display: step === 0 ? 'block' : 'none' }}>
-          <div style={{ display: 'flex', gap: 20 }}>
-            <div
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: '1px solid #eef0f5',
-                borderRadius: 12,
-                padding: '28px 28px 8px',
-                background: '#fff',
-              }}
-            >
-              <Form.Item name="client_name" label="应用名称" rules={[{ required: true, message: '请输入应用名称' }]}>
-                <Input placeholder="例如：JumpServer 演示" />
-              </Form.Item>
-              <Form.Item
-                name="login_url"
-                label="应用入口"
-                rules={[
-                  { required: true, message: '请输入应用入口地址' },
-                  {
-                    validator: (_, v) => {
-                      if (!v) return Promise.resolve();
-                      if (/^https?:\/\/.+/i.test(String(v).trim())) return Promise.resolve();
-                      return Promise.reject(new Error('请填写完整 URL，必须以 http:// 或 https:// 开头'));
-                    },
-                  },
-                ]}
-              >
-                <Input placeholder="https://app.example.com" />
-              </Form.Item>
-              <Form.Item label="协议版本" required>
-                <Input
-                  value={
-                    PROTOCOL_VERSIONS[family].find((x) => x.value === defaultProtocolVersion(family))?.label
-                    || FAMILY_LABEL[family]
-                  }
-                  disabled
-                  style={{ background: '#f5f7fb' }}
-                />
-              </Form.Item>
-              <Form.Item name="protocol" hidden><Input /></Form.Item>
-              <Form.Item name="protocol_version" hidden><Input /></Form.Item>
-              {editing && (family === 'oidc' || family === 'oauth2') && (
-                <Form.Item label="客户端 ID">
-                  <Input value={editing.client_id} disabled style={{ background: '#f5f7fb' }} />
-                </Form.Item>
-              )}
-              <Form.Item name="is_active" label="状态" valuePropName="checked" rules={[{ required: true }]}>
-                <Switch />
-              </Form.Item>
-              <Form.Item name="description" label="描述">
-                <Input.TextArea rows={3} placeholder="一句话描述该应用" />
-              </Form.Item>
-            </div>
-
-            {/* 右侧图标卡 */}
-            <div
-              style={{
-                width: 320,
-                border: '1px solid #eef0f5',
-                borderRadius: 12,
-                padding: '28px 24px',
-                background: '#fff',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'stretch',
-              }}
-            >
-              <div style={{ marginBottom: 18 }}>
-                <span style={{ color: '#ef4444', marginRight: 4 }}>*</span>
-                <span style={{ color: '#1d2c5b', fontWeight: 500 }}>图标：</span>
+          <div className="wizard-form-body">
+            {/* 应用图标 — 横向流式布局 */}
+            <Form.Item label="应用图标">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Upload {...uploadConfig}>
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 12,
+                      border: logoUrl ? '1px solid #eef0f5' : '1.5px dashed #c7d2fe',
+                      background: logoUrl ? '#fff' : 'linear-gradient(180deg, #fafbff 0%, #eef2ff 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <AppstoreOutlined style={{ fontSize: 24, color: '#94a3b8' }} />
+                    )}
+                  </div>
+                </Upload>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Upload {...uploadConfig}>
+                    <Button size="small" style={{ fontSize: 13 }}>上传图标</Button>
+                  </Upload>
+                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.4 }}>
+                    支持 JPG、PNG，建议 256×256
+                  </span>
+                </div>
               </div>
-              <LogoUploader
-                value={logoUrl}
-                onChange={(u) => form.setFieldValue('logo_url', u)}
-                buttonText="上传图标"
+            </Form.Item>
+            <Form.Item name="logo_url" hidden>
+              <Input />
+            </Form.Item>
+
+            <Form.Item name="client_name" label="应用名称" rules={[{ required: true, message: '请输入应用名称' }]}>
+              <Input placeholder="例如：JumpServer 演示" />
+            </Form.Item>
+
+            <Form.Item
+              name="login_url"
+              label="应用入口"
+              rules={[
+                { required: true, message: '请输入应用入口地址' },
+                {
+                  validator: (_, v) => {
+                    if (!v) return Promise.resolve();
+                    if (/^https?:\/\/.+/i.test(String(v).trim())) return Promise.resolve();
+                    return Promise.reject(new Error('请填写完整 URL，必须以 http:// 或 https:// 开头'));
+                  },
+                },
+              ]}
+            >
+              <Input placeholder="https://app.example.com" />
+            </Form.Item>
+
+            <Form.Item label="协议版本" required>
+              <Input
+                value={
+                  PROTOCOL_VERSIONS[family].find((x) => x.value === defaultProtocolVersion(family))?.label
+                  || FAMILY_LABEL[family]
+                }
+                disabled
+                style={{ background: '#f5f7fb' }}
               />
-              <Form.Item name="logo_url" hidden>
-                <Input />
+            </Form.Item>
+            <Form.Item name="protocol" hidden><Input /></Form.Item>
+            <Form.Item name="protocol_version" hidden><Input /></Form.Item>
+
+            {editing && (family === 'oidc' || family === 'oauth2') && (
+              <Form.Item label="客户端 ID">
+                <Input value={editing.client_id} disabled style={{ background: '#f5f7fb' }} />
               </Form.Item>
-            </div>
+            )}
+
+            <Form.Item name="is_active" label="状态" valuePropName="checked" rules={[{ required: true }]}>
+              <Switch />
+            </Form.Item>
+
+            <Form.Item name="description" label="描述">
+              <Input.TextArea rows={3} placeholder="一句话描述该应用" />
+            </Form.Item>
           </div>
         </div>
 
@@ -429,11 +465,10 @@ export default function AppWizard({
       </Form>
 
       <div className="app-wizard-footer">
-        <Button size="large" style={{ minWidth: 96 }} onClick={onClose}>关闭</Button>
+        <Button style={{ minWidth: 88 }} onClick={onClose}>关闭</Button>
         {step > 0 && step < 3 && (
           <Button
-            size="large"
-            style={{ minWidth: 96 }}
+            style={{ minWidth: 88 }}
             onClick={() => {
               // link 协议从 step2 退回 step0（跳过 step1）
               if (family === 'link' && step === 2) {
@@ -447,7 +482,7 @@ export default function AppWizard({
           </Button>
         )}
         {step < 3 && (
-          <Button size="large" type="primary" style={{ minWidth: 120 }} loading={saving} onClick={handleNext}>
+          <Button type="primary" style={{ minWidth: 104 }} loading={saving} onClick={handleNext}>
             {step === 2 ? (editing ? '保存并继续' : '创建并继续') : '下一步'}
           </Button>
         )}
@@ -456,14 +491,12 @@ export default function AppWizard({
             {family !== 'link' && (
               <>
                 <Button
-                  size="large"
                   icon={<CopyOutlined />}
                   onClick={() => copyHandoffText(family, isOIDC, submitted, form.getFieldsValue(true), discovery, message)}
                 >
                   复制全部配置
                 </Button>
                 <Button
-                  size="large"
                   icon={<DownloadOutlined />}
                   onClick={() => downloadHandoffJSON(family, submitted, form.getFieldsValue(true), discovery)}
                 >
@@ -471,7 +504,7 @@ export default function AppWizard({
                 </Button>
               </>
             )}
-            <Button size="large" type="primary" style={{ minWidth: 120 }} onClick={handleFinish}>
+            <Button type="primary" style={{ minWidth: 104 }} onClick={handleFinish}>
               完成
             </Button>
           </>

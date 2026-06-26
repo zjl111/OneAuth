@@ -1,20 +1,313 @@
+/* ============================================================
+   应用向导抽屉 — 视觉优化（与用户抽屉风格统一）
+   ============================================================ */
+
 .app-wizard {
-  background: #f5f7fb;
+  background: #fff;
   min-height: 100%;
-  margin: -24px -24px -24px;
-  padding: 24px 32px 0;     /* 底部 padding 交给 footer 处理，避免与 sticky 叠加 */
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
   overflow-x: hidden;
 }
 .app-wizard * { box-sizing: border-box; }
 
-.app-wizard .ant-steps-item-title { font-weight: 500; }
+/* ---- Drawer 内部 reset ---- */
+.ant-drawer-body:has(.app-wizard) {
+  padding: 0 !important;
+  background: #fff;
+}
+
+/* Drawer 标题 */
+.app-drawer .ant-drawer-header {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+.app-drawer .ant-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d2c5b;
+}
+
+/* ============================================================
+   Steps 步骤条 — 作为连接线展示
+   ============================================================ */
+
+.app-wizard-steps {
+  padding: 16px 20px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+}
+
+.app-wizard .ant-steps-item-title {
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151;
+}
+
+.app-wizard .ant-steps-item-process .ant-steps-item-title {
+  color: #1677ff;
+  font-weight: 600;
+}
+
+/* ============================================================
+   表单主体 — 左对齐、全宽展开
+   ============================================================ */
+
+.wizard-form-body {
+  padding: 16px 20px 6px;
+}
+
+/* ============================================================
+   Form.Item 基础样式 — 与用户抽屉一致（top 对齐）
+   ============================================================ */
+
+.app-wizard .ant-form-item {
+  margin-bottom: 14px !important;
+}
+
+.app-wizard .ant-form-item-label {
+  text-align: left !important;
+}
+
+.app-wizard .ant-form-item-label > label {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+  height: auto !important;
+  padding-bottom: 6px !important;
+}
+
+/* 必填星号红色 */
+.app-wizard .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ef4444 !important;
+}
+
+/* extra 说明文字 */
+.app-wizard .ant-form-item-extra {
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+  margin-top: 3px !important;
+  line-height: 1.4 !important;
+}
+
+.app-wizard .ant-form-item-explain {
+  min-height: 0 !important;
+}
+
+/* ============================================================
+   输入控件统一高度 36px
+   ============================================================ */
+
+.app-wizard .ant-input {
+  height: 36px !important;
+  padding: 7px 11px !important;
+  font-size: 14px;
+  line-height: 20px !important;
+}
+
+.app-wizard textarea.ant-input {
+  height: auto !important;
+  padding: 7px 11px !important;
+}
+
+.app-wizard .ant-input-password {
+  height: 36px !important;
+  display: flex;
+  align-items: center;
+}
+
+.app-wizard .ant-input-password .ant-input {
+  height: auto !important;
+  padding: 0 11px !important;
+  line-height: 34px !important;
+}
+
+.app-wizard .ant-select .ant-select-selector,
+.app-wizard .ant-tree-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+  font-size: 14px;
+}
+
+/* 多选 Select 允许换行或折叠，不要把标签挤出输入框 */
+.app-wizard .ant-select-multiple .ant-select-selector {
+  height: auto !important;
+  min-height: 36px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  align-items: flex-start;
+}
+
+.app-wizard .ant-select-multiple .ant-select-selection-wrap {
+  align-items: flex-start;
+}
+
+.app-wizard .ant-select-multiple .ant-select-selection-overflow {
+  row-gap: 4px;
+}
+
+.app-wizard .ant-select-multiple .ant-select-selection-overflow-item {
+  max-width: 100%;
+}
+
+.app-wizard .ant-select .ant-select-selector .ant-select-selection-search-input,
+.app-wizard .ant-tree-select .ant-select-selector .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.app-wizard .ant-select .ant-select-selection-item,
+.app-wizard .ant-tree-select .ant-select-selection-item {
+  line-height: 34px !important;
+}
+
+.app-wizard .ant-input-number {
+  height: 36px !important;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.app-wizard .ant-input-number-input {
+  height: 34px !important;
+  padding: 0 11px !important;
+}
+
+.app-wizard .ant-input-number-group-addon {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ============================================================
+   Step2 网格 — 表单字段对齐
+   ============================================================ */
+
+.app-wizard-step2 .ant-form-item-label > label {
+  height: auto !important;
+  white-space: normal;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.app-wizard-step2 .ant-form-item {
+  margin-bottom: 18px;
+}
+
+/* Radio.Button 组 */
+.app-wizard-step2 .ant-radio-group {
+  height: 36px;
+}
+
+.app-wizard-step2 .ant-radio-button-wrapper {
+  height: 36px;
+  line-height: 34px;
+  min-width: 64px;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* ============================================================
+   Collapse 折叠面板
+   ============================================================ */
+
+.app-wizard .ant-collapse-header {
+  font-size: 14px !important;
+  padding: 12px 0 !important;
+}
+
+.app-wizard .ant-collapse-content-box {
+  padding-top: 8px !important;
+}
+
+/* ============================================================
+   Alert 提示条
+   ============================================================ */
+
+.app-wizard .ant-alert {
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.app-wizard .ant-alert-info {
+  background: #f0f7ff;
+  border-color: #d4e8ff;
+}
+
+.app-wizard .ant-alert-success {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+/* ============================================================
+   Descriptions 描述列表（Step4 信息确认）
+   ============================================================ */
+
+.app-wizard .ant-descriptions-item-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.app-wizard .ant-descriptions-item-content {
+  font-size: 13px;
+  color: #1d2c5b;
+}
+
+/* ============================================================
+   Tag 软色胶囊
+   ============================================================ */
+
+.app-wizard .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.app-wizard .ant-tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.app-wizard .ant-tag-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.app-wizard .ant-tag-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.app-wizard .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
+}
+
+.app-wizard .ant-tag-purple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.app-wizard .ant-tag-orange {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+/* ============================================================
+   Footer 固底按钮栏
+   ============================================================ */
 
 .app-wizard-footer {
   position: sticky;
   bottom: 0;
-  margin: 24px -32px 0;     /* 不向下溢出，避免 Drawer 把它裁掉 */
-  padding: 14px 32px;
+  margin: 0;
+  padding: 8px 20px;
   background: #fff;
   border-top: 1px solid #eef0f5;
   display: flex;
@@ -23,29 +316,59 @@
   z-index: 2;
 }
 
-/* Drawer 内部 reset 一下边距，让卡片底色露出 */
-.ant-drawer-body:has(.app-wizard) {
-  padding: 0 !important;
-  background: #f5f7fb;
+.app-wizard-footer .ant-btn {
+  min-width: 72px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 6px;
 }
 
-/* Step2 网格 label 上下对齐 */
-.app-wizard-step2 .ant-form-item-label > label {
-  height: auto !important;
-  white-space: normal;
-  line-height: 1.4;
+.app-wizard-footer .ant-btn-primary {
+  background: #1677ff;
+}
+
+/* ============================================================
+   Radio 组通用美化
+   ============================================================ */
+
+.app-wizard .ant-radio-wrapper {
+  font-size: 14px;
+  color: #374151;
+}
+
+/* ============================================================
+   Switch 行
+   ============================================================ */
+
+.app-wizard .ant-form-item .ant-switch {
+  margin-right: auto;
+}
+
+/* ============================================================
+   内部 section 卡片统一圆角
+   ============================================================ */
+
+.app-wizard div[style*="border-radius: 12"] {
+  border-radius: 10px !important;
+}
+
+/* ============================================================
+   授权对象列表中的 checkbox 行悬浮效果
+   ============================================================ */
+
+.app-wizard label:hover {
+  background: #f8fafb !important;
+}
+
+/* ============================================================
+   Tabs（授权对象 用户/组织/用户组 切换）
+   ============================================================ */
+
+.app-wizard .ant-tabs-tab {
+  font-size: 13px;
   font-weight: 500;
-  color: #1d2c5b;
 }
-.app-wizard-step2 .ant-radio-group {
-  height: 36px;
-}
-.app-wizard-step2 .ant-radio-button-wrapper {
-  height: 36px;
-  line-height: 34px;
-  min-width: 64px;
-  text-align: center;
-}
-.app-wizard-step2 .ant-form-item {
-  margin-bottom: 22px;
+
+.app-wizard .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1677ff;
 }

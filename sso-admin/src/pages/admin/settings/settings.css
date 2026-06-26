@@ -1,0 +1,77 @@
+/* ============================================================
+   配置管理页面 — 视觉优化（与用户列表风格统一）
+   ============================================================ */
+
+/* ---- Card ---- */
+.settings-page.ant-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+}
+
+/* ---- Tabs ---- */
+.settings-page .ant-tabs-tab {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 0 !important;
+}
+
+.settings-page .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1677ff;
+  font-weight: 600;
+}
+
+.settings-page .ant-tabs-nav {
+  margin-bottom: 24px !important;
+}
+
+.settings-page .ant-tabs-nav::before {
+  border-bottom-color: #f0f0f0 !important;
+}
+
+/* ---- Form ---- */
+.settings-page .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.settings-page .ant-input,
+.settings-page .ant-input-number,
+.settings-page .ant-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 14px;
+}
+
+.settings-page .ant-select .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.settings-page .ant-select .ant-select-selection-item {
+  line-height: 34px !important;
+}
+
+.settings-page .ant-input-number {
+  display: flex;
+  align-items: center;
+}
+
+.settings-page textarea.ant-input {
+  height: auto !important;
+  min-height: 80px !important;
+}
+
+/* ---- Form.Item 间距 ---- */
+.settings-page .ant-form-item {
+  margin-bottom: 18px !important;
+}
+
+/* ---- Switch 行 ---- */
+.settings-page .ant-form-item .ant-switch {
+  margin-right: auto;
+}
+
+/* ---- 保存按钮区域 ---- */
+.settings-page .ant-space {
+  margin-top: 8px;
+}

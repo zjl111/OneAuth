@@ -6,11 +6,11 @@ import {
   Input,
   Space,
   Tag,
-  Modal,
+  Dropdown,
   Drawer,
-  Popconfirm,
   App as AntdApp,
   Typography,
+  type MenuProps,
 } from 'antd';
 import {
   PlusOutlined,
@@ -24,10 +24,14 @@ import {
   LoginOutlined,
   SelectOutlined,
   DeleteOutlined,
+  MoreOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
 import PageToolbar from '@/components/PageToolbar';
 import AppWizard, { type Proto, type ProtoFamily } from './AppWizard';
+import Step3Handoff from './wizard/Step3Handoff';
+import './apps.css';
 
 const { Paragraph } = Typography;
 
@@ -70,6 +74,11 @@ export default function AppListPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<OAuth2Client | null>(null);
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState(false);
+  const [handoffClient, setHandoffClient] = useState<OAuth2Client | null>(null);
+  const [handoffSummary, setHandoffSummary] = useState<any>(null);
+  const [handoffDiscovery, setHandoffDiscovery] = useState<Record<string, any> | null>(null);
 
   // 创建应用前先弹协议家族选择
   const [protocolOpen, setProtocolOpen] = useState(false);
@@ -125,6 +134,45 @@ export default function AppListPage() {
     setDrawerOpen(true);
   };
 
+  const buildDiscovery = (family: ProtoFamily) => {
+    if (family !== 'oidc' && family !== 'oauth2') return null;
+    const origin = window.location.origin;
+    return {
+      issuer: origin,
+      authorization_endpoint: origin + '/oauth/authorize',
+      token_endpoint: origin + '/oauth/token',
+      userinfo_endpoint: origin + '/oauth/userinfo',
+      jwks_uri: origin + '/oauth/jwks.json',
+      end_session_endpoint: origin + '/oauth/end_session',
+    };
+  };
+
+  const openHandoffInfo = async (c: OAuth2Client) => {
+    setHandoffOpen(true);
+    setHandoffLoading(true);
+    setHandoffClient(null);
+    setHandoffSummary(null);
+    setHandoffDiscovery(null);
+    try {
+      const detail: any = await appsApi.detail(c.id);
+      const client: OAuth2Client = detail?.client || c;
+      const merged: any = { ...client, grants: detail?.grants || client.grants || [] };
+      merged.access_policy = client.access_policy || 'all';
+      merged.visible_in_portal = client.visible_in_portal !== false;
+      merged.allow_idp_initiated = client.allow_idp_initiated !== false;
+      merged.allow_sp_initiated = client.allow_sp_initiated !== false;
+      const family = ((merged.protocol as Proto) || 'oidc') as ProtoFamily;
+      setHandoffClient(merged);
+      setHandoffSummary(merged);
+      setHandoffDiscovery(buildDiscovery(family));
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '加载对接信息失败');
+      setHandoffOpen(false);
+    } finally {
+      setHandoffLoading(false);
+    }
+  };
+
   const handleWizardSubmit = async (values: any): Promise<OAuth2Client> => {
     if (editing) {
       const r = await appsApi.update(editing.id, values);
@@ -167,6 +215,50 @@ export default function AppListPage() {
     load();
   };
 
+  const buildActionMenu = (r: OAuth2Client): MenuProps['items'] => ([
+    {
+      key: 'handoff',
+      label: '第三方对接信息',
+      icon: <InfoCircleOutlined />,
+      onClick: () => openHandoffInfo(r),
+    },
+    {
+      key: 'rotate',
+      label: '轮换密钥',
+      icon: <KeyOutlined />,
+      disabled: !(r.protocol === 'oidc' || r.protocol === 'oauth2' || !r.protocol),
+      onClick: () => handleRotate(r),
+    },
+    {
+      key: 'toggle',
+      label: r.is_active ? '禁用' : '启用',
+      onClick: () => handleToggle(r),
+    },
+    { type: 'divider' },
+    {
+      key: 'delete',
+      label: '删除',
+      danger: true,
+      disabled: r.is_builtin,
+      onClick: () => {
+        modal.confirm({
+          title: `确认删除 ${r.client_name}？`,
+          content: '删除后该应用将无法再发起 SSO 登录，相关授权与监控数据也会一并清除。',
+          okType: 'danger',
+          onOk: async () => {
+            try {
+              await appsApi.delete(r.id);
+              message.success('已删除');
+              load();
+            } catch (e: any) {
+              message.error(e?.response?.data?.message || '删除失败');
+            }
+          },
+        });
+      },
+    },
+  ]);
+
   return (
     <>
       <PageToolbar>
@@ -191,7 +283,7 @@ export default function AppListPage() {
           新建应用
         </Button>
       </PageToolbar>
-      <Card>
+      <Card className="app-page">
       <Table
         rowKey="id"
         loading={loading}
@@ -315,37 +407,17 @@ export default function AppListPage() {
           {
             title: '操作',
             fixed: 'right',
-            width: 320,
+            width: 280,
             render: (_, r) => (
               <Space size="small">
                 <Button type="link" size="small" onClick={() => openEdit(r)}>
                   编辑
                 </Button>
-                {(r.protocol === 'oidc' || r.protocol === 'oauth2' || !r.protocol) && (
-                  <Button type="link" size="small" icon={<KeyOutlined />} onClick={() => handleRotate(r)}>
-                    轮换密钥
+                <Dropdown trigger={['click']} menu={{ items: buildActionMenu(r) }}>
+                  <Button type="link" size="small" icon={<MoreOutlined />}>
+                    更多
                   </Button>
-                )}
-                <Button type="link" size="small" onClick={() => handleToggle(r)}>
-                  {r.is_active ? '禁用' : '启用'}
-                </Button>
-                <Popconfirm
-                  title={`确认删除 ${r.client_name}？`}
-                  onConfirm={async () => {
-                    try {
-                      await appsApi.delete(r.id);
-                      message.success('已删除');
-                      load();
-                    } catch (e: any) {
-                      message.error(e?.response?.data?.message || '删除失败');
-                    }
-                  }}
-                  disabled={r.is_builtin}
-                >
-                  <Button type="link" size="small" danger disabled={r.is_builtin}>
-                    删除
-                  </Button>
-                </Popconfirm>
+                </Dropdown>
               </Space>
             ),
           },
@@ -358,6 +430,7 @@ export default function AppListPage() {
         onClose={() => setDrawerOpen(false)}
         width={1100}
         destroyOnClose
+        className="app-drawer"
       >
         <AppWizard
           open={drawerOpen}
@@ -368,23 +441,59 @@ export default function AppListPage() {
         />
       </Drawer>
 
-      {/* 协议选择 */}
-      <Modal
-        title={
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 600 }}>创建应用</div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>请选择应用接入方式</div>
-          </div>
-        }
-        open={protocolOpen}
-        onCancel={() => setProtocolOpen(false)}
-        onOk={handleProtocolNext}
-        okText="下一步"
-        width={720}
-        centered
+      <Drawer
+        title={handoffClient ? `${handoffClient.client_name} - 第三方对接信息` : '第三方对接信息'}
+        open={handoffOpen}
+        onClose={() => setHandoffOpen(false)}
+        width={1120}
+        destroyOnClose
+        className="app-handoff-drawer"
       >
-        <ProtocolPicker value={pickedFamily} onChange={setPickedFamily} />
-      </Modal>
+        {handoffLoading ? (
+          <div style={{ padding: 24, color: '#64748b' }}>正在加载对接信息...</div>
+        ) : (
+          handoffClient && (
+            <Step3Handoff
+              family={((handoffClient.protocol as Proto) || 'oidc') as ProtoFamily}
+              isOIDC={(handoffClient.protocol as Proto) === 'oidc'}
+              isNewly={false}
+              summary={handoffSummary}
+              submitted={handoffClient}
+              discovery={handoffDiscovery}
+            />
+          )
+        )}
+      </Drawer>
+
+      {/* 协议选择 */}
+      <Drawer
+        title="创建应用"
+        open={protocolOpen}
+        onClose={() => setProtocolOpen(false)}
+        closeIcon={null}
+        width={920}
+        destroyOnClose
+        className="protocol-drawer"
+      >
+        <div className="protocol-drawer-header">
+          <div>
+            <div className="protocol-drawer-title">创建应用</div>
+            <div className="protocol-drawer-subtitle">请选择应用接入方式</div>
+          </div>
+          <Button type="text" onClick={() => setProtocolOpen(false)} className="drawer-close-btn">
+            关闭
+          </Button>
+        </div>
+        <div className="protocol-drawer-body">
+          <ProtocolPicker value={pickedFamily} onChange={setPickedFamily} />
+        </div>
+        <div className="protocol-drawer-footer">
+          <Button onClick={() => setProtocolOpen(false)}>取消</Button>
+          <Button type="primary" onClick={handleProtocolNext}>
+            下一步
+          </Button>
+        </div>
+      </Drawer>
       </Card>
     </>
   );
@@ -412,7 +521,7 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
       style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }}
     />
   );
-  // SSO 协议（2×2）
+  // SSO 协议（单列）
   const ssoProtos: Item[] = [
     {
       key: 'oidc', title: 'OIDC',
@@ -539,7 +648,7 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
   return (
     <div style={{ padding: '4px 0' }}>
       <div style={{ color: '#1d2c5b', fontWeight: 600, fontSize: 14, marginBottom: 10 }}>单点登录协议</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
         {ssoProtos.map((p) => renderCard(p))}
       </div>
       <div style={{ borderTop: '1px solid #eef0f5', margin: '20px 0 14px' }} />

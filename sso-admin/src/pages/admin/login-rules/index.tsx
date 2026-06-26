@@ -19,6 +19,7 @@ import { PlusOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons'
 import { loginRuleApi, type LoginRule } from '@/api/misc';
 import { usersApi, type User } from '@/api/users';
 import TimeMaskPicker from '@/components/TimeMaskPicker';
+import './login-rules.css';
 
 export default function LoginRulesPage() {
   const { message, modal } = AntdApp.useApp();
@@ -136,7 +137,7 @@ export default function LoginRulesPage() {
   }, [users]);
 
   return (
-    <Card>
+    <Card className="lr-page">
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ color: '#6b7280', fontSize: 13 }}>
           按规则的优先级（数字越小越优先）顺序匹配登录请求的 IP 与时段。命中首条匹配规则即决定允许或拒绝；未命中任一规则时默认放行。

@@ -5,17 +5,16 @@ import {
   Button,
   Input,
   Space,
-  Tag,
   Modal,
   Form,
   Switch,
-  Popconfirm,
   Select,
+  TreeSelect,
   Drawer,
-  Row,
-  Col,
   Upload,
   Checkbox,
+  Dropdown,
+  Tooltip,
   App as AntdApp,
 } from 'antd';
 import {
@@ -27,7 +26,12 @@ import {
   UploadOutlined,
   ImportOutlined,
   DownloadOutlined,
+  MoreOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
+import './users.css';
 import { usersApi, type User, type ImportUsersResult } from '@/api/users';
 import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
@@ -65,19 +69,19 @@ export default function UserListPage() {
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [form] = Form.useForm();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
 
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
 
 
-  const flatDept = (list: Department[], depth = 0): Array<{ id: string; label: string }> => {
-    const result: Array<{ id: string; label: string }> = [];
-    for (const d of list) {
-      result.push({ id: d.id, label: '— '.repeat(depth) + d.name });
-      if (d.children?.length) result.push(...flatDept(d.children, depth + 1));
-    }
-    return result;
-  };
+  const toDeptTreeData = (list: Department[]): any[] =>
+    list.map((d) => ({
+      value: d.id,
+      title: d.name,
+      key: d.id,
+      children: d.children ? toDeptTreeData(d.children) : [],
+    }));
 
   const load = () => {
     setLoading(true);
@@ -108,6 +112,7 @@ export default function UserListPage() {
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({ is_active: true, is_admin: false });
+    setAvatarUrl('');
     setModalOpen(true);
   };
 
@@ -119,6 +124,7 @@ export default function UserListPage() {
       ...u,
       is_admin: !!superAdminRoleID && userRoles.some((r) => r.id === superAdminRoleID),
     });
+    setAvatarUrl(u.avatar || '');
     setModalOpen(true);
   };
 
@@ -149,6 +155,10 @@ export default function UserListPage() {
   };
 
   const handleDelete = async (u: User) => {
+    if (u.is_staff) {
+      message.warning('管理员用户不允许删除');
+      return;
+    }
     await usersApi.delete(u.id);
     message.success('已删除');
     load();
@@ -156,6 +166,11 @@ export default function UserListPage() {
 
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) return;
+    const protectedCount = data.filter((u) => selectedRowKeys.includes(u.id) && u.is_staff).length;
+    if (protectedCount > 0) {
+      message.warning('已选中管理员用户，不允许删除，请先取消选择');
+      return;
+    }
     modal.confirm({
       title: `确认删除选中的 ${selectedRowKeys.length} 个用户？`,
       content: '删除后不可恢复，关联角色与会话也会一并清理。',
@@ -216,10 +231,10 @@ export default function UserListPage() {
           onClear={() => { setKeyword(''); load(); }}
           style={{ width: 280 }}
         />
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button icon={<ReloadOutlined />} onClick={load} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
           刷新
         </Button>
-        <Button icon={<ImportOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }}>
+        <Button icon={<ImportOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
           批量导入
         </Button>
         <Button
@@ -229,12 +244,18 @@ export default function UserListPage() {
         >
           批量删除{selectedRowKeys.length > 0 ? `（${selectedRowKeys.length}）` : ''}
         </Button>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={openCreate}
+          style={{ boxShadow: '0 2px 8px rgba(22,119,255,0.25)' }}
+        >
           新建用户
         </Button>
       </PageToolbar>
-      <Card>
+      <Card className="user-card">
       <Table
+        className="user-table"
         rowKey="id"
         loading={loading}
         dataSource={data}
@@ -264,18 +285,23 @@ export default function UserListPage() {
             title: '管理员',
             dataIndex: 'is_staff',
             width: 90,
-            render: (v) => (v ? <Tag color="purple">是</Tag> : <Tag>否</Tag>),
+            render: (v) =>
+              v ? (
+                <span className="user-admin-dot">管理员</span>
+              ) : (
+                <span className="user-admin-no">—</span>
+              ),
           },
           {
             title: '状态',
             width: 100,
             render: (_, r) =>
               r.is_locked ? (
-                <Tag color="red">锁定</Tag>
+                <span className="user-tag user-tag--red">锁定</span>
               ) : r.is_active ? (
-                <Tag color="green">正常</Tag>
+                <span className="user-tag user-tag--green">正常</span>
               ) : (
-                <Tag>禁用</Tag>
+                <span className="user-tag user-tag--gray">禁用</span>
               ),
           },
           {
@@ -287,34 +313,51 @@ export default function UserListPage() {
           },
           {
             title: '操作',
-            width: 280,
+            width: 140,
             fixed: 'right',
             render: (_, r) => (
-              <Space size="small">
-                <Button type="link" size="small" onClick={() => openEdit(r)}>
-                  编辑
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<KeyOutlined />}
-                  onClick={() => handleResetPwd(r)}
+              <Space size={4}>
+                <Tooltip title="编辑">
+                  <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ color: '#6b7280' }} />
+                </Tooltip>
+                <Dropdown
+                  trigger={['click']}
+                  menu={{
+                    items: [
+                      {
+                        key: 'resetPwd',
+                        label: '重置密码',
+                        icon: <KeyOutlined />,
+                        onClick: () => handleResetPwd(r),
+                      },
+                      {
+                        key: 'lock',
+                        label: r.is_locked ? '解锁' : '锁定',
+                        icon: r.is_locked ? <UnlockOutlined /> : <LockOutlined />,
+                        onClick: () => handleLock(r),
+                      },
+                      { type: 'divider' },
+                      {
+                        key: 'delete',
+                        label: r.is_staff ? '管理员不可删除' : '删除',
+                        icon: <DeleteOutlined />,
+                        danger: true,
+                        disabled: r.is_staff,
+                        onClick: () => {
+                          if (r.is_staff) return;
+                          modal.confirm({
+                            title: `确认删除 ${r.username}？`,
+                            content: '删除后不可恢复。',
+                            okType: 'danger',
+                            onOk: () => handleDelete(r),
+                          });
+                        },
+                      },
+                    ],
+                  }}
                 >
-                  重置密码
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={r.is_locked ? <UnlockOutlined /> : <LockOutlined />}
-                  onClick={() => handleLock(r)}
-                >
-                  {r.is_locked ? '解锁' : '锁定'}
-                </Button>
-                <Popconfirm title={`确认删除 ${r.username}？`} onConfirm={() => handleDelete(r)}>
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
-                </Popconfirm>
+                  <Button type="text" size="small" icon={<MoreOutlined />} className="user-more-btn" />
+                </Dropdown>
               </Space>
             ),
           },
@@ -322,184 +365,218 @@ export default function UserListPage() {
       />
 
       <Drawer
-        title={editing ? '编辑用户' : '新增'}
+        title={editing ? '编辑用户' : '新增用户'}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         width={760}
         destroyOnClose
-        extra={
-          <Space>
-            <Button onClick={() => setModalOpen(false)}>关闭</Button>
-            <Button type="primary" onClick={handleSave}>
-              提交
-            </Button>
-          </Space>
-        }
+        className="user-drawer"
+        closable
       >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{
-            is_active: true,
-            user_type: 'internal',
-          }}
-        >
-          <Row gutter={24}>
-            <Col span={14}>
+        {/* ---- 头像头部：横向布局 ---- */}
+        <div className="avatar-header-row">
+          <Upload
+            name="file"
+            action="/api/v1/configs/upload-image"
+            headers={{ Authorization: `Bearer ${accessToken}` }}
+            data={{ prefix: 'avatar' }}
+            accept=".png,.jpg,.jpeg,.webp,.gif"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              if (file.size > 5 * 1024 * 1024) {
+                message.error('头像不能超过 5MB');
+                return Upload.LIST_IGNORE;
+              }
+              return true;
+            }}
+            onChange={(info) => {
+              if (info.file.status === 'done') {
+                const url = info.file.response?.data?.url;
+                if (url) {
+                  form.setFieldValue('avatar', url);
+                  setAvatarUrl(url);
+                  message.success('头像已上传');
+                }
+              } else if (info.file.status === 'error') {
+                message.error(info.file.response?.message || '上传失败');
+              }
+            }}
+          >
+            <div className="avatar-header-inner">
+              <div className="avatar-header-left">
+                <div className="avatar-circle-wrap">
+                  <UserAvatar src={avatarUrl} name={form.getFieldValue('nickname') || form.getFieldValue('username') || '新用户'} size={44} />
+                  <div className="avatar-circle-overlay">
+                    <UploadOutlined style={{ fontSize: 14 }} />
+                  </div>
+                </div>
+                <div className="avatar-header-info">
+                  <div className="avatar-header-name">{form.getFieldValue('nickname') || form.getFieldValue('username') || '新用户'}</div>
+                  <div className="avatar-header-hint">点击上传/更换头像</div>
+                </div>
+              </div>
+              <div className="avatar-header-right">
+                <Button icon={<UploadOutlined />} size="small">
+                  上传头像
+                </Button>
+              </div>
+            </div>
+          </Upload>
+        </div>
+
+        {/* ---- 表单主体：CSS Grid 双列骨架 ---- */}
+        <div className="user-form-container">
+          <Form
+            form={form}
+            layout="vertical"
+            className="user-form-compact"
+            initialValues={{
+              is_active: true,
+              user_type: 'internal',
+            }}
+          >
+            {/* 隐藏字段：注册 avatar 到表单，确保保存时包含头像 URL */}
+            <Form.Item name="avatar" style={{ display: 'none' }}>
+              <input type="hidden" />
+            </Form.Item>
+
+            <div className="form-grid-container">
+              {/* Row 1: 登录账号 | 姓名 */}
               {!editing && (
-                <Form.Item
-                  name="username"
-                  label="登录账号"
-                  rules={[{ required: true, message: '请输入登录账号' }]}
-                  extra="登录账号为唯一标识，创建后不可更改"
-                >
-                  <Input placeholder="字母/数字/点/下划线" />
-                </Form.Item>
+                <div className="grid-cell">
+                  <Form.Item
+                    name="username"
+                    label={
+                      <span>
+                        <span>登录账号</span>
+                        <Tooltip title="登录账号为唯一标识，创建后不可更改" placement="top">
+                          <ExclamationCircleOutlined className="label-tip-icon" />
+                        </Tooltip>
+                      </span>
+                    }
+                    rules={[{ required: true, message: '请输入登录账号' }]}
+                  >
+                    <Input placeholder="字母/数字/点/下划线" />
+                  </Form.Item>
+                </div>
               )}
-              {!editing && (
-                <Form.Item
-                  name="nickname"
-                  label="姓名"
-                  rules={[{ required: true, message: '请输入姓名' }]}
-                >
+              <div className={`grid-cell${editing ? ' grid-cell-full' : ''}`}>
+                <Form.Item name="nickname" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
                   <Input placeholder="请输入姓名" />
                 </Form.Item>
-              )}
-              {editing && (
-                <Form.Item name="nickname" label="姓名">
-                  <Input placeholder="请输入姓名" />
-                </Form.Item>
-              )}
+              </div>
+
+              {/* Row 2: 密码 (flex group) | 手机号码 (flex group) */}
               {!editing && (
-                <Form.Item
-                  name="password"
-                  label="密码"
-                  rules={[{ required: true, min: 8, message: '至少 8 位' }]}
-                >
-                  <Input.Password
-                    placeholder="new password"
-                    addonAfter={
+                <>
+                  <div className="grid-cell">
+                    <div className="password-flex-group">
+                      <Form.Item
+                        name="password"
+                        label="密码"
+                        rules={[{ required: true, min: 8, message: '至少 8 位' }]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Input.Password placeholder="请输入密码" />
+                      </Form.Item>
                       <Button
-                        size="small"
-                        type="primary"
-                        style={{ marginRight: -8 }}
-                        onClick={() =>
-                          form.setFieldValue('password', randomPassword(12))
-                        }
+                        className="gen-btn"
+                        onClick={() => form.setFieldValue('password', randomPassword(12))}
                       >
                         生成
                       </Button>
-                    }
+                    </div>
+                  </div>
+                  <div className="grid-cell grid-cell-spaced">
+                    <Form.Item name="phone" label="手机号码">
+                      <div className="phone-flex-group">
+                        <span className="phone-prefix">+86</span>
+                        <Input placeholder="请输入手机号码" />
+                      </div>
+                    </Form.Item>
+                  </div>
+                </>
+              )}
+
+              {/* Row 3: 电子邮箱 | 所属部门 */}
+              <div className="grid-cell">
+                <Form.Item name="email" label="电子邮箱" rules={[{ required: true, message: '请输入电子邮箱' }]}>
+                  <Input placeholder="请输入电子邮箱" />
+                </Form.Item>
+              </div>
+              <div className="grid-cell">
+                <Form.Item name="department_id" label="所属部门">
+                  <TreeSelect
+                    allowClear
+                    placeholder="选择部门"
+                    treeData={toDeptTreeData(depts)}
+                    treeDefaultExpandAll
+                    showSearch
+                    treeNodeFilterProp="title"
+                    getPopupContainer={() => document.body}
+                    suffixIcon={<span className="custom-select-arrow"></span>}
+                    className="dept-tree-select"
                   />
                 </Form.Item>
-              )}
-              <Form.Item name="phone" label="手机号码">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={10}>
-              <Form.Item name="avatar" label="头像">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <Form.Item
-                    noStyle
-                    shouldUpdate={(p, n) =>
-                      p.avatar !== n.avatar || p.nickname !== n.nickname || p.username !== n.username
-                    }
-                  >
-                    {({ getFieldValue }) => {
-                      const av = (getFieldValue('avatar') as string | undefined) || '';
-                      const nm =
-                        (getFieldValue('nickname') as string | undefined) ||
-                        (getFieldValue('username') as string | undefined) ||
-                        '新用户';
-                      return <UserAvatar src={av} name={nm} size={72} />;
-                    }}
-                  </Form.Item>
-                  <Upload
-                    name="file"
-                    action="/api/v1/configs/upload-image"
-                    headers={{ Authorization: `Bearer ${accessToken}` }}
-                    data={{ prefix: 'avatar' }}
-                    accept=".png,.jpg,.jpeg,.webp,.gif"
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      if (file.size > 5 * 1024 * 1024) {
-                        message.error('头像不能超过 5MB');
-                        return Upload.LIST_IGNORE;
-                      }
-                      return true;
-                    }}
-                    onChange={(info) => {
-                      if (info.file.status === 'done') {
-                        const url = info.file.response?.data?.url;
-                        if (url) {
-                          form.setFieldValue('avatar', url);
-                          message.success('头像已上传');
-                        }
-                      } else if (info.file.status === 'error') {
-                        message.error(info.file.response?.message || '上传失败');
-                      }
-                    }}
-                  >
-                    <Button icon={<UploadOutlined />}>Upload</Button>
-                  </Upload>
+              </div>
+
+              {/* Row 4: 用户类型 | 状态 */}
+              <div className="grid-cell">
+                <Form.Item name="user_type" label="用户类型" rules={[{ required: true }]}>
+                  <Select
+                    options={[
+                      { value: 'internal', label: '内部员工' },
+                      { value: 'external', label: '外部协作' },
+                    ]}
+                    suffixIcon={<span className="custom-select-arrow">▾</span>}
+                    getPopupContainer={() => document.body}
+                  />
+                </Form.Item>
+              </div>
+              <div className="grid-cell">
+                <Form.Item
+                  name="is_active"
+                  label={
+                    <span>
+                      <span>状态</span>
+                      <Tooltip title="禁用后该用户将无法登录系统" placement="top">
+                        <ExclamationCircleOutlined className="label-tip-icon" />
+                      </Tooltip>
+                    </span>
+                  }
+                  valuePropName="checked"
+                  rules={[{ required: true }]}
+                  className="status-switch-item"
+                >
+                  <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+                </Form.Item>
+              </div>
+
+              {/* Row 6: 管理员权限 (full width) */}
+              <div className="grid-cell grid-cell-full">
+                <Form.Item
+                  name="is_admin"
+                  label="管理员权限"
+                  valuePropName="checked"
+                  className="admin-checkbox-item"
+                >
+                  <Checkbox>授予管理员权限</Checkbox>
+                </Form.Item>
+                <div className="admin-checkbox-hint">
+                  勾选后该用户可登录 OneAuth 管理后台；不勾默认为普通用户，仅能访问已授权应用。
                 </div>
-              </Form.Item>
-            </Col>
+              </div>
+            </div>
+          </Form>
+        </div>
 
-            <Col span={12}>
-              <Form.Item name="email" label="电子邮箱">
-                <Input />
-              </Form.Item>
-            </Col>
-
-            <Col span={12}>
-              <Form.Item name="department_id" label="所属部门">
-                <Select
-                  allowClear
-                  placeholder="选择部门"
-                  options={flatDept(depts).map((d) => ({ value: d.id, label: d.label }))}
-                />
-              </Form.Item>
-            </Col>
-
-            <Col span={12}>
-              <Form.Item
-                name="user_type"
-                label="用户类型"
-                rules={[{ required: true }]}
-              >
-                <Select
-                  options={[
-                    { value: 'internal', label: '内部员工' },
-                    { value: 'external', label: '外部协作' },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="is_active"
-                label="状态"
-                valuePropName="checked"
-                rules={[{ required: true }]}
-              >
-                <Switch checkedChildren="活动" unCheckedChildren="禁用" />
-              </Form.Item>
-            </Col>
-
-            <Col span={24}>
-              <Form.Item
-                name="is_admin"
-                label="管理员权限"
-                valuePropName="checked"
-                extra="勾选后该用户可登录 OneAuth 管理后台；不勾默认为普通用户，仅能访问已授权应用。"
-              >
-                <Checkbox>授予管理员权限</Checkbox>
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
+        {/* ---- 固底按钮栏 ---- */}
+        <div className="drawer-footer">
+          <Button onClick={() => setModalOpen(false)}>取消</Button>
+          <Button type="primary" onClick={handleSave}>
+            提交
+          </Button>
+        </div>
       </Drawer>
 
       <Modal

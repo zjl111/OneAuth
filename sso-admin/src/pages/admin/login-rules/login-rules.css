@@ -1,0 +1,98 @@
+/* ============================================================
+   登录规则页面 — 视觉优化（与用户列表风格统一）
+   ============================================================ */
+
+/* ---- 表格 ---- */
+.lr-page .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.lr-page .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+.lr-page .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+.lr-page .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ---- Tag 软色胶囊 ---- */
+.lr-page .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.lr-page .ant-tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lr-page .ant-tag-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.lr-page .ant-tag-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.lr-page .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
+}
+
+/* ---- Card ---- */
+.lr-page.ant-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+}
+
+/* ---- Drawer 表单 ---- */
+.lr-page .ant-drawer .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.lr-page .ant-drawer .ant-input,
+.lr-page .ant-drawer .ant-input-number,
+.lr-page .ant-drawer .ant-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 14px;
+}
+
+.lr-page .ant-drawer .ant-select .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.lr-page .ant-drawer .ant-select .ant-select-selection-item {
+  line-height: 34px !important;
+}
+
+.lr-page .ant-drawer .ant-input-number {
+  display: flex;
+  align-items: center;
+}
+
+/* ---- 分页器 ---- */
+.lr-page .ant-table-pagination {
+  margin-top: 16px !important;
+  margin-bottom: 4px !important;
+}

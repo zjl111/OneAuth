@@ -12,7 +12,7 @@ export default function PageToolbar({ children }: Props) {
   if (!children) return null;
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-      <Space>{children}</Space>
+      <Space size={12}>{children}</Space>
     </div>
   );
 }

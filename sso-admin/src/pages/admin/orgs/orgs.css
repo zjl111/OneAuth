@@ -17,9 +17,59 @@
   }
 }
 
+/* ---- 卡片样式 ---- */
 .dept-tree-card .ant-card-body {
   padding: 16px;
 }
+.dept-members-card .ant-card-body {
+  padding: 16px 20px;
+}
+
+/* ---- 表格样式 ---- */
+.org-page .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.org-page .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+.org-page .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+.org-page .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ---- 标签样式 ---- */
+.org-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.org-tag--green  { background: #ecfdf5; color: #059669; }
+.org-tag--red    { background: #fef2f2; color: #dc2626; }
+.org-tag--gray   { background: #f5f5f5; color: #9ca3af; }
+.org-tag--blue   { background: #e6f4ff; color: #1677ff; }
+
+/* ---- 部门树节点 ---- */
 .dept-tree-title {
   display: flex;
   justify-content: space-between;
@@ -51,12 +101,40 @@
   opacity: 1;
 }
 
-.dept-members-card .ant-card-body {
-  padding: 16px 20px;
-}
+/* ---- 成员列表标题 ---- */
 .dept-members-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+/* ---- 覆盖 Ant Design Tag 样式，使其更柔和 ---- */
+.org-page .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  border: none;
+}
+
+.org-page .ant-tag-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.org-page .ant-tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.org-page .ant-tag-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.org-page .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
 }

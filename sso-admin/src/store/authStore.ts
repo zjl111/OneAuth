@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authApi, type UserInfo } from '@/api/auth';
+import { isTokenExpired } from '@/utils/token';
+import { redirectToLogin } from '@/utils/redirect';
 
 // 持久化策略：固定用 sessionStorage —— 关浏览器/标签页即清。
 // 不再支持"记住我"长会话，避免登录态被无限续命。
@@ -113,6 +115,25 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // token 已过期 → 清除登录态，跳转登录页
+          if (isTokenExpired(state.accessToken)) {
+            state.accessToken = null;
+            state.refreshToken = null;
+            state.user = null;
+            state.permissions = [];
+            state.isAuthenticated = false;
+            // 不在公共页时才跳转，避免循环
+            const onPublicPage =
+              location.pathname === '/' ||
+              location.pathname.startsWith('/oauth/login') ||
+              location.pathname.startsWith('/oauth/forgot-password') ||
+              location.pathname.startsWith('/oauth/reset-password') ||
+              location.pathname.startsWith('/status');
+            if (!onPublicPage) {
+              redirectToLogin(location.pathname + location.search);
+            }
+            return;
+          }
           state.isAuthenticated = authed(state);
         }
       },

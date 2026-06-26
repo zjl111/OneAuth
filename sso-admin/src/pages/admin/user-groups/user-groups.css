@@ -1,0 +1,86 @@
+/* ============================================================
+   用户组页面 — 视觉优化（与用户列表风格统一）
+   ============================================================ */
+
+/* ---- 表格 ---- */
+.ug-page .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.ug-page .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+.ug-page .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+.ug-page .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ---- Tag 软色胶囊 ---- */
+.ug-page .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.ug-page .ant-tag-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.ug-page .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
+}
+
+/* ---- Card ---- */
+.ug-page.ant-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+}
+
+/* ---- Modal 表单 ---- */
+.ug-page .ant-modal .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.ug-page .ant-modal .ant-input {
+  height: 36px;
+  font-size: 14px;
+}
+
+.ug-page .ant-modal textarea.ant-input {
+  height: auto;
+}
+
+/* ---- Drawer Transfer 穿梭框美化 ---- */
+.ug-page .ant-drawer .ant-transfer {
+  margin-top: 8px;
+}
+
+.ug-page .ant-drawer .ant-transfer-list-header {
+  font-weight: 600;
+  color: #374151;
+}
+
+/* ---- 分页器 ---- */
+.ug-page .ant-table-pagination {
+  margin-top: 16px !important;
+  margin-bottom: 4px !important;
+}

@@ -1,0 +1,580 @@
+/* ============================================================
+   用户管理列表页 — 视觉优化
+   作用域：.user-table 包裹的 Ant Design Table
+   ============================================================ */
+
+/* ---- 1. 行高与内边距：增加纵向呼吸感 ---- */
+.user-table .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.user-table .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+/* ---- 5. 悬浮高亮 ---- */
+.user-table .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+/* 去掉固定列的阴影，改为淡线 */
+.user-table .ant-table-cell-fix-right-first::after,
+.user-table .ant-table-cell-fix-right-last::after {
+  box-shadow: none !important;
+  border-left: 1px solid #f0f0f0;
+}
+
+/* 表格底部边框也弱化 */
+.user-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ---- 浅色胶囊标签基础样式 ---- */
+.user-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.user-tag--green  { background: #ecfdf5; color: #059669; }
+.user-tag--red    { background: #fef2f2; color: #dc2626; }
+.user-tag--gray   { background: #f5f5f5; color: #9ca3af; }
+
+/* 管理员指示点 */
+.user-admin-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.user-admin-dot::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.user-admin-no {
+  color: #c0c4cc;
+  font-size: 13px;
+}
+
+/* ---- 操作列更多菜单按钮 ---- */
+.user-more-btn {
+  color: #9ca3af !important;
+  transition: color 0.2s;
+}
+.user-more-btn:hover {
+  color: #4b5563 !important;
+}
+
+/* ---- 6. 高度自适应：卡片紧贴内容，不撑满整屏 ---- */
+.user-card {
+  flex: none !important;
+  height: auto !important;
+}
+
+/* 防止 Ant Design Table 的 scroll.x 容器撑高 */
+.user-card .ant-table-wrapper,
+.user-card .ant-table-container {
+  height: auto !important;
+}
+
+/* 表格内容区域自适应 */
+.user-card .ant-table {
+  height: auto !important;
+}
+
+/* 分页器紧贴数据，上方适度留白 */
+.user-card .ant-table-pagination {
+  margin-top: 16px !important;
+  margin-bottom: 4px !important;
+}
+
+/* ============================================================
+   抽屉表单 — CSS Grid + Flex 骨架（商用级对齐）
+   ============================================================ */
+
+/* ---- Drawer 整体 ---- */
+.user-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* 关闭按钮强制最右侧 */
+.user-drawer .ant-drawer-header {
+  position: relative;
+}
+
+.user-drawer .ant-drawer-close {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  z-index: 1;
+}
+
+/* ============================================================
+   头像头部 — 横向布局
+   ============================================================ */
+
+.avatar-header-row {
+  background: #f5f8ff;
+  border-bottom: 1px solid #e8ecf4;
+  padding: 12px 20px;
+  flex-shrink: 0;
+}
+
+.avatar-header-row .ant-upload {
+  display: block;
+}
+
+.avatar-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.avatar-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-circle-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar-circle-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.avatar-circle-wrap:hover .avatar-circle-overlay {
+  opacity: 1;
+}
+
+.avatar-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.avatar-header-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.avatar-header-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.avatar-header-right {
+  flex-shrink: 0;
+}
+
+.avatar-header-right .ant-btn {
+  font-size: 13px;
+}
+
+/* ============================================================
+   表单容器 — max-width 保护 + 居中
+   ============================================================ */
+
+.user-form-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px 20px 16px;
+}
+
+.user-form-container .ant-form {
+  width: 100%;
+  max-width: 720px;
+}
+
+/* ============================================================
+   CSS Grid 单列骨架 — 每排一个输入框
+   ============================================================ */
+
+.form-grid-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  row-gap: 0;
+  width: 100%;
+}
+
+/* 单个网格单元 */
+.grid-cell {
+  min-width: 0; /* 防止内容撑破网格 */
+  width: 100%;
+}
+
+/* 跨列（单列模式下无意义，保留兼容） */
+.grid-cell-full {
+  grid-column: span 1;
+}
+
+/* 增加顶部间距，用于视觉分组 */
+.grid-cell-spaced {
+  margin-top: 8px;
+}
+
+/* 同一行内的 grid-cell 内容顶部对齐 */
+.form-grid-container > .grid-cell {
+  align-self: start;
+}
+
+/* ============================================================
+   Form.Item 基础样式
+   ============================================================ */
+
+.user-form-compact .ant-form-item {
+  margin-bottom: 10px !important;
+}
+
+.user-form-compact .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  padding-bottom: 4px !important;
+  height: auto !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Label 旁的感叹号 Tooltip 图标 */
+.label-tip-icon {
+  font-size: 14px;
+  color: #c0c4cc;
+  cursor: help;
+  transition: color 0.2s;
+  vertical-align: middle;
+}
+
+.label-tip-icon:hover {
+  color: #1677ff;
+}
+
+/* 必填星号红色 */
+.user-form-compact .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ef4444 !important;
+}
+
+/* extra 说明文字 */
+.user-form-compact .ant-form-item-extra {
+  font-size: 12px !important;
+  color: #9ca3af !important;
+  margin-top: 3px !important;
+  line-height: 1.4 !important;
+}
+
+.user-form-compact .ant-form-item-explain {
+  min-height: 0 !important;
+}
+
+/* ============================================================
+   输入控件统一高度 36px
+   ============================================================ */
+
+.user-form-compact .ant-input {
+  height: 36px !important;
+  padding: 7px 11px !important;
+  font-size: 14px;
+  line-height: 20px !important;
+}
+
+.user-form-compact .ant-input-password {
+  height: 36px !important;
+  display: flex;
+  align-items: center;
+}
+
+.user-form-compact .ant-input-password .ant-input {
+  height: auto !important;
+  padding: 0 11px !important;
+  line-height: 34px !important;
+  font-size: 14px;
+}
+
+.user-form-compact .ant-select .ant-select-selector,
+.user-form-compact .ant-tree-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+  font-size: 14px;
+}
+
+.user-form-compact .ant-select .ant-select-selector .ant-select-selection-search-input,
+.user-form-compact .ant-tree-select .ant-select-selector .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.user-form-compact .ant-select .ant-select-selection-item,
+.user-form-compact .ant-tree-select .ant-select-selection-item {
+  line-height: 34px !important;
+}
+
+/* 自定义 Select 下拉箭头 */
+.custom-select-arrow {
+  font-size: 12px;
+  color: #bfbfbf;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ============================================================
+   所属部门 TreeSelect — 独立悬浮浮层
+   ============================================================ */
+
+/* 触发器外观与普通 Select 一致 */
+.dept-tree-select .ant-select-selector {
+  cursor: pointer;
+}
+
+/* 浮层下拉菜单：独立于表单流，不撑开布局 */
+.ant-tree-select-dropdown {
+  z-index: 1050;
+}
+
+.ant-tree-select-dropdown .ant-select-tree-treenode {
+  padding: 4px 8px;
+  font-size: 14px;
+}
+
+.ant-tree-select-dropdown .ant-select-tree-switcher {
+  color: #bfbfbf;
+}
+
+.ant-tree-select-dropdown .ant-select-tree-node-content-wrapper:hover {
+  background: #f5f5f5;
+}
+
+.ant-tree-select-dropdown .ant-select-tree-node-selected {
+  background: #e6f4ff !important;
+  color: #1677ff;
+}
+
+/* TreeSelect 搜索框 */
+.ant-tree-select-dropdown .ant-select-tree-list-search {
+  padding: 8px;
+}
+
+/* ============================================================
+   密码 Flex 组合包 — 输入框 + 生成按钮
+   ============================================================ */
+
+.password-flex-group {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.password-flex-group .ant-form-item {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0 !important;
+}
+
+.password-flex-group .gen-btn {
+  height: 36px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 14px;
+  padding: 0 14px;
+  margin-bottom: 0;
+  color: #fff;
+  background: #1677ff;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.password-flex-group .gen-btn:hover {
+  color: #fff;
+  background: #4096ff;
+}
+
+/* ============================================================
+   手机号 Flex 组合包 — +86 前缀 + 输入框
+   ============================================================ */
+
+.phone-flex-group {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+
+.phone-flex-group:focus-within {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+.phone-flex-group .phone-prefix {
+  flex-shrink: 0;
+  padding: 0 10px;
+  font-size: 14px;
+  color: #6b7280;
+  background: #f9fafb;
+  border-right: 1px solid #d9d9d9;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  user-select: none;
+}
+
+.phone-flex-group .ant-input {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  flex: 1;
+  min-width: 0;
+}
+
+.phone-flex-group .ant-input:focus {
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   状态 Switch — 行内布局（与 Select 同行对齐）
+   ============================================================ */
+
+.status-switch-item {
+  margin-bottom: 10px !important;
+  text-align: left !important;
+}
+
+.status-switch-item .ant-form-item-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+}
+
+.status-switch-item .ant-form-item-control {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  width: 100% !important;
+}
+
+.status-switch-item .ant-form-item-control-input {
+  text-align: left !important;
+  width: 100% !important;
+}
+
+.status-switch-item .ant-form-item-control-input-content {
+  text-align: left !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+}
+
+/* 直接强制 Switch 贴左 */
+.status-switch-item .ant-switch {
+  margin-right: auto !important;
+}
+
+.status-switch-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   管理员权限 Checkbox
+   ============================================================ */
+
+.admin-checkbox-item {
+  margin-bottom: 4px !important;
+}
+
+.admin-checkbox-item .ant-form-item-control {
+  line-height: 1.6;
+}
+
+.admin-checkbox-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.5;
+  padding-left: 22px;
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   固底按钮栏 — Sticky Footer
+   ============================================================ */
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 36px;
+  font-size: 14px;
+}

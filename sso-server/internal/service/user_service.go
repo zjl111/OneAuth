@@ -29,6 +29,8 @@ var staffRoleCodes = map[string]bool{
 	"super_admin": true,
 }
 
+var ErrUserProtected = errors.New("管理员用户不可删除")
+
 // deriveIsStaff 根据 roleIDs 查询角色 code，命中 staffRoleCodes 则返回 true。
 func (s *UserService) deriveIsStaff(roleIDs []uuid.UUID) bool {
 	if len(roleIDs) == 0 {
@@ -215,7 +217,16 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 	return s.repo.GetByID(u.ID)
 }
 
-func (s *UserService) Delete(id uuid.UUID) error { return s.repo.Delete(id) }
+func (s *UserService) Delete(id uuid.UUID) error {
+	u, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if u.IsStaff {
+		return ErrUserProtected
+	}
+	return s.repo.Delete(id)
+}
 
 func (s *UserService) GetByID(id uuid.UUID) (*model.User, error) { return s.repo.GetByID(id) }
 

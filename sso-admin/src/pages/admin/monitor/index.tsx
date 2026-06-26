@@ -4,6 +4,7 @@ import { ReloadOutlined, ThunderboltOutlined, DeleteOutlined } from '@ant-design
 import dayjs from 'dayjs';
 import { monitorApi } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
+import './monitor.css';
 
 const statusMap: Record<string, { color: string; label: string }> = {
   up: { color: 'green', label: '正常' },
@@ -77,7 +78,7 @@ export default function MonitorPage() {
           刷新
         </Button>
       </PageToolbar>
-      <Card>
+      <Card className="monitor-page">
       <Table
         rowKey="client_id"
         loading={loading}

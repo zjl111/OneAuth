@@ -1,0 +1,157 @@
+/* ============================================================
+   应用中心页面 — 视觉优化（与用户列表风格统一）
+   ============================================================ */
+
+/* ---- 表格 ---- */
+.app-page .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.app-page .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+.app-page .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+.app-page .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* 固定列阴影弱化 */
+.app-page .ant-table-cell-fix-right-first::after,
+.app-page .ant-table-cell-fix-right-last::after {
+  box-shadow: none !important;
+  border-left: 1px solid #f0f0f0;
+}
+
+/* ---- Tag 软色胶囊 ---- */
+.app-page .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.app-page .ant-tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.app-page .ant-tag-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.app-page .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
+}
+
+.app-page .ant-tag-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.app-page .ant-tag-purple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.app-page .ant-tag-volcano {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.app-page .ant-tag-gold {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+/* ---- Card 圆角 ---- */
+.app-page.ant-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+}
+
+/* ---- 分页器 ---- */
+.app-page .ant-table-pagination {
+  margin-top: 16px !important;
+  margin-bottom: 4px !important;
+}
+
+/* ---- 协议选择抽屉 ---- */
+.protocol-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.protocol-drawer-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #eef0f5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.protocol-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d2c5b;
+  line-height: 1.2;
+}
+
+.protocol-drawer-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.protocol-drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px 8px;
+}
+
+.protocol-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #eef0f5;
+  padding: 8px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.protocol-drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.drawer-close-btn {
+  padding-inline: 8px !important;
+  height: 32px;
+  color: #6b7280;
+}
+
+.drawer-close-btn:hover {
+  color: #1677ff !important;
+  background: #f5f8ff !important;
+}

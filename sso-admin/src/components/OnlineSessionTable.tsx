@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Button, Space, Popconfirm, App as AntdApp } from 'antd';
+import { Table, Tag, Button, Popconfirm, App as AntdApp } from 'antd';
 import { ReloadOutlined, LogoutOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { sessionsApi, type OnlineSession } from '@/api/misc';
@@ -42,12 +42,12 @@ export default function OnlineSessionTable() {
 
   return (
     <>
-      <Space style={{ marginBottom: 12 }}>
+      <div className="session-toolbar">
         <Tag color="blue">当前在线 {data.length}</Tag>
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button size="small" icon={<ReloadOutlined />} onClick={load}>
           刷新
         </Button>
-      </Space>
+      </div>
       <Table<OnlineSession>
         rowKey="sid"
         loading={loading}

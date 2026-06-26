@@ -11,6 +11,7 @@ import SecurityPanel from './panels/Security';
 import SmtpPanel from './panels/Smtp';
 import LdapPanel from './panels/Ldap';
 import WecomPanel from './panels/Wecom';
+import './settings.css';
 
 const NUMERIC_SECURITY_KEYS = new Set([
   'session_timeout',
@@ -153,14 +154,14 @@ export default function SettingsPage() {
 
   if (loading && data.length === 0) {
     return (
-      <Card>
+      <Card className="settings-page">
         <Skeleton active paragraph={{ rows: 8 }} />
       </Card>
     );
   }
 
   return (
-    <Card>
+    <Card className="settings-page">
       <Form form={form} layout="vertical">
         <Tabs
           activeKey={activeTab}
