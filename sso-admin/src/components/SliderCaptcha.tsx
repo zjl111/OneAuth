@@ -204,7 +204,7 @@ export default function SliderCaptcha({ open, onCancel, onSuccess }: Props) {
           onTouchStart={onMouseDown}
           style={{
             position: 'absolute', left: x, top: 0, width: 36, height: 36,
-            background: error ? '#ef4444' : verifying ? '#10b981' : '#1677ff',
+            background: error ? '#ef4444' : verifying ? '#10b981' : 'var(--primary-color)',
             color: '#fff', cursor: verifying ? 'default' : 'grab',
             display: 'grid', placeItems: 'center', borderRadius: 4,
             boxShadow: '0 2px 4px rgba(0,0,0,0.15)',

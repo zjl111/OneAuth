@@ -50,6 +50,7 @@ type OAuthConfig struct {
 	AccessTokenTTL  int    `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL int    `mapstructure:"refresh_token_ttl"`
 	AuthCodeTTL     int    `mapstructure:"auth_code_ttl"`
+	SessionTTL      int    `mapstructure:"session_ttl"`
 	KeysDir         string `mapstructure:"keys_dir"`
 	FrontendURL     string `mapstructure:"frontend_url"`
 }

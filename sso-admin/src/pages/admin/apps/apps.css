@@ -61,7 +61,7 @@
 
 .app-page .ant-tag-blue {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 .app-page .ant-tag-purple {
@@ -152,6 +152,28 @@
 }
 
 .drawer-close-btn:hover {
-  color: #1677ff !important;
+  color: var(--primary-color) !important;
   background: #f5f8ff !important;
+}
+
+/* ---- 第三方对接信息底部按钮栏 ---- */
+.app-handoff-footer {
+  flex-shrink: 0;
+  background: #fff;
+  border-top: 1px solid #eef0f5;
+  padding: 10px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.app-handoff-footer .ant-btn {
+  min-width: 110px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.app-handoff-footer .ant-btn-primary {
+  background: var(--primary-color);
 }

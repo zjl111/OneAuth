@@ -1,0 +1,40 @@
+app:
+  # secret_key 由 .env 的 SECRET_KEY 通过环境变量覆盖，此处仅为兜底默认值
+  secret_key: "change-me-in-production"
+  environment: "production"
+  host: "0.0.0.0"
+  port: 8080
+  driver: "sqlite"
+
+database:
+  sqlite_path: "/app/data/sso.db"
+  max_open_conns: 25
+  max_idle_conns: 10
+
+redis:
+  enabled: false
+
+oauth:
+  # issuer 由 .env 的 SSO_ISSUER 通过环境变量覆盖
+  issuer: "http://localhost"
+  access_token_ttl: 3600        # 1 小时
+  refresh_token_ttl: 604800     # 7 天
+  auth_code_ttl: 300            # 5 分钟
+  session_ttl: 28800            # 8 小时
+  keys_dir: "/app/keys"
+  frontend_url: ""
+
+cors:
+  allowed_origins:
+    - "*"
+  allow_credentials: false
+
+monitor:
+  enabled: true
+  interval_seconds: 30
+  default_timeout_ms: 10000
+  default_degraded_ms: 2000
+  retention_days: 30
+
+status:
+  public: true

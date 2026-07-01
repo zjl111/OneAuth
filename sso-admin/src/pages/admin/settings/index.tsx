@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton, Space } from 'antd';
+import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton, Space, Switch } from 'antd';
 import { configApi, type SystemConfig } from '@/api/misc';
 import { invalidateSiteCache } from '@/hooks/useSite';
 import { useAuthStore } from '@/store/authStore';
@@ -70,7 +70,8 @@ export default function SettingsPage() {
         (c.category === 'smtp' && c.key === 'enabled') ||
         (c.category === 'ldap' && (c.key === 'enabled' || c.key === 'start_tls')) ||
         (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user')) ||
-        (c.category === 'security' && BOOL_SECURITY_KEYS.has(c.key));
+        (c.category === 'security' && BOOL_SECURITY_KEYS.has(c.key)) ||
+        c.value === 'true' || c.value === 'false';
       if (isPasswordField) {
         obj[`${c.category}.${c.key}`] = '';
       } else if (isBoolSwitch) {
@@ -124,8 +125,6 @@ export default function SettingsPage() {
     load();
   };
 
-  const logoValue = (Form.useWatch('platform.logo', form) as string | undefined) || '';
-
   const testSMTP = () => {
     let to = '';
     modal.confirm({
@@ -176,8 +175,6 @@ export default function SettingsPage() {
                     items={items}
                     form={form}
                     accessToken={accessToken}
-                    onLogoUrl={(u) => form.setFieldValue('platform.logo', u)}
-                    logoValue={logoValue}
                     message={message}
                   />
                 )}
@@ -189,13 +186,18 @@ export default function SettingsPage() {
                 {cat === 'ldap' && <LdapPanel />}
                 {cat === 'wecom' && <WecomPanel />}
                 {/* 其余分组（如未来新增）走兜底渲染 */}
-                {!['platform', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => (
-                  <Form.Item key={c.id} label={c.description || c.key} name={`${c.category}.${c.key}`}>
-                    {isNumeric(c.category, c.key)
-                      ? <InputNumber min={0} style={{ width: '100%' }} />
-                      : <Input />}
-                  </Form.Item>
-                ))}
+                {!['platform', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => {
+                  const isBool = c.value === 'true' || c.value === 'false';
+                  return (
+                    <Form.Item key={c.id} label={c.description || c.key} name={`${c.category}.${c.key}`} valuePropName={isBool ? 'checked' : undefined}>
+                      {isBool
+                        ? <Switch />
+                        : isNumeric(c.category, c.key)
+                          ? <InputNumber min={0} style={{ width: '100%' }} />
+                          : <Input />}
+                    </Form.Item>
+                  );
+                })}
               </>
             ),
           }))}

@@ -119,7 +119,7 @@ export default function AdminLayout() {
 
   return (
     <Layout className="admin-shell" style={{ height: '100vh' }}>
-      <Sider collapsed={collapsed} width={220} className="admin-sider" theme="light">
+      <Sider collapsed={collapsed} width={240} className="admin-sider" theme="light">
         <div className="admin-logo">
           <SiteLogo size={32} />
           {!collapsed && <span>{site.name}</span>}

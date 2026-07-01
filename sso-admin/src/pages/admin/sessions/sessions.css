@@ -39,7 +39,7 @@
 
 .session-page .ant-tag-blue {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 .session-page .ant-tag-purple {

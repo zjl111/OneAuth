@@ -30,11 +30,20 @@ export interface ImportRowError {
   reason: string;
 }
 
+export interface ImportExisting {
+  row: number;
+  username: string;
+  nickname: string;
+  email: string;
+  phone: string;
+}
+
 export interface ImportUsersResult {
   total: number;
   success: number;
   failed: number;
   errors: ImportRowError[];
+  existing?: ImportExisting[];
 }
 
 export const usersApi = {
@@ -60,6 +69,9 @@ export const usersApi = {
     });
     return r.data.data;
   },
+  // 批量更新已存在的用户
+  updateExisting: (users: ImportExisting[]) =>
+    post<{ updated: number; failed: number; errors: ImportRowError[] }>('/users/import/update-existing', { users }),
   // 模板下载地址（公开端点，浏览器直接 a[href] 即可下载）
   templateURL: (format: 'xlsx' | 'csv' = 'xlsx') =>
     `/api/v1/users/import/template${format === 'csv' ? '?format=csv' : ''}`,

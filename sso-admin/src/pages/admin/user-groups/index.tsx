@@ -152,7 +152,7 @@ export default function UserGroupsPage() {
               dataIndex: 'name',
               render: (v) => (
                 <Space>
-                  <TeamOutlined style={{ color: '#1677ff' }} />
+                  <TeamOutlined style={{ color: 'var(--primary-color)' }} />
                   <span style={{ fontWeight: 500 }}>{v}</span>
                 </Space>
               ),
@@ -168,33 +168,31 @@ export default function UserGroupsPage() {
             { title: '创建时间', dataIndex: 'created_at', width: 180, render: (v: string) => new Date(v).toLocaleString('zh-CN') },
             {
               title: '操作',
-              width: 240,
+              width: 220,
               render: (_, r) => (
-                <Space size={4}>
-                  <Button type="link" size="small" icon={<UserAddOutlined />} onClick={() => openMembers(r)}>
-                    管理成员
-                  </Button>
-                  <Button type="link" size="small" onClick={() => openEdit(r)}>
-                    编辑
-                  </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
+                  <span className="act-link" onClick={() => openMembers(r)}>管理成员</span>
+                  <span className="act-sep" />
+                  <span className="act-link" onClick={() => openEdit(r)}>编辑</span>
+                  <span className="act-sep" />
                   <Popconfirm title={`确认删除「${r.name}」？`} okType="danger" onConfirm={() => handleDelete(r)}>
-                    <Button type="link" size="small" danger>
-                      删除
-                    </Button>
+                    <span className="act-link" style={{ color: '#ef4444' }}>删除</span>
                   </Popconfirm>
-                </Space>
+                </div>
               ),
             },
           ]}
         />
       </Card>
 
-      <Modal
+      <Drawer
         title={editing ? '编辑用户组' : '新建用户组'}
+        className="ug-form-drawer"
         open={open}
-        onCancel={() => setOpen(false)}
-        onOk={handleSave}
+        onClose={() => setOpen(false)}
+        width={760}
         destroyOnClose
+        closable
       >
         <Form form={form} layout="vertical" preserve={false}>
           <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入用户组名称' }]}>
@@ -204,42 +202,53 @@ export default function UserGroupsPage() {
             <Input.TextArea rows={3} placeholder="可选" />
           </Form.Item>
         </Form>
-      </Modal>
+        <div className="drawer-footer">
+          <Button onClick={() => setOpen(false)}>取消</Button>
+          <Button type="primary" onClick={handleSave}>保存</Button>
+        </div>
+      </Drawer>
 
       <Drawer
         title={
           <Space>
-            <TeamOutlined style={{ color: '#1677ff' }} />
+            <TeamOutlined style={{ color: 'var(--primary-color)' }} />
             <span>管理成员 - {memberGroup?.name}</span>
           </Space>
         }
-        width={720}
+        className="ug-member-drawer"
+        width={760}
         open={memberOpen}
         onClose={() => setMemberOpen(false)}
-        extra={
-          <Space>
-            <Button onClick={() => setMemberOpen(false)}>取消</Button>
-            <Button type="primary" loading={savingMembers} onClick={handleSaveMembers}>
-              保存
-            </Button>
-          </Space>
-        }
+        closable
       >
-        <p style={{ color: '#6b7280', marginTop: 0 }}>左侧为可选用户，勾选后移到右侧即为该组成员。</p>
-        <Transfer
-          dataSource={transferData}
-          targetKeys={picked}
-          onChange={(keys) => setPicked(keys as string[])}
-          render={(item) => `${item.title}（${item.description}）`}
-          showSearch
-          listStyle={{ width: 320, height: 480 }}
-          titles={['可选用户', '已选成员']}
-          locale={{
-            itemUnit: '人',
-            itemsUnit: '人',
-            searchPlaceholder: '搜索昵称 / 邮箱',
-          }}
-        />
+        <div className="ug-member-drawer-body">
+          {(() => {
+            const rightCount = picked.length;
+            const leftCount = allUsers.length - rightCount;
+            return (
+              <Transfer
+                dataSource={transferData}
+                targetKeys={picked}
+                onChange={(keys) => setPicked(keys as string[])}
+                render={(item) => `${item.title}（${item.description}）`}
+                showSearch
+                listStyle={{ width: 320, height: 420 }}
+                titles={[`可选用户 (${leftCount})`, `已选用户 (${rightCount})`]}
+                locale={{
+                  itemUnit: '人',
+                  itemsUnit: '人',
+                  searchPlaceholder: '搜索昵称 / 邮箱',
+                }}
+              />
+            );
+          })()}
+        </div>
+        <div className="ug-member-drawer-footer">
+          <Button onClick={() => setMemberOpen(false)}>取消</Button>
+          <Button type="primary" loading={savingMembers} onClick={handleSaveMembers}>
+            保存
+          </Button>
+        </div>
       </Drawer>
     </>
   );

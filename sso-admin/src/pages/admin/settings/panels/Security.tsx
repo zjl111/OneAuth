@@ -8,6 +8,13 @@ export default function SecurityPanel() {
         <SectionHead title="登录与会话" />
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', columnGap: 32 }}>
           <Form.Item
+            label="会话有效期（秒）"
+            name="oauth.session_ttl"
+            extra="用户登录后可保持登录状态的最长时间；0 = 使用默认值 8 小时；修改后需重启后端生效"
+          >
+            <InputNumber min={0} max={31536000} style={{ width: '100%' }} addonAfter="秒" />
+          </Form.Item>
+          <Form.Item
             label="无活动自动登出（秒）"
             name="security.session_timeout"
             extra="超过该秒数没有任何主动操作（点击/表单/搜索）将强制重新登录；0 = 禁用"

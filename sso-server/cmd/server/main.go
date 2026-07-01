@@ -94,7 +94,8 @@ func main() {
 	// 让 token 签发时优先使用 SystemConfig.platform.site_url 作为 issuer
 	tokenService.SetIssuerResolver(func() string { return configRepo.SiteURL() })
 	authCodeStore := oauth.NewAuthCodeStore(store, time.Duration(cfg.OAuth.AuthCodeTTL)*time.Second)
-	sessionMgr := session.New(store, session.DefaultTTL)
+	sessionTTL := time.Duration(cfg.OAuth.SessionTTL) * time.Second
+	sessionMgr := session.New(store, sessionTTL)
 
 	// repositories
 	userRepo := repository.NewUserRepository(db)
@@ -222,7 +223,7 @@ func main() {
 		},
 		User: &handler.UserHandler{
 			Service:       userService,
-			ImportService: service.NewUserImportService(userService, deptRepo, roleRepo),
+			ImportService: service.NewUserImportService(userService, deptRepo, roleRepo, userGroupRepo),
 		},
 		App:  &handler.AppHandler{Service: clientService},
 		Dashboard: &handler.DashboardHandler{

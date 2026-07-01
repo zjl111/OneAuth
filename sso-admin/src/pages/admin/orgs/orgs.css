@@ -67,7 +67,7 @@
 .org-tag--green  { background: #ecfdf5; color: #059669; }
 .org-tag--red    { background: #fef2f2; color: #dc2626; }
 .org-tag--gray   { background: #f5f5f5; color: #9ca3af; }
-.org-tag--blue   { background: #e6f4ff; color: #1677ff; }
+.org-tag--blue   { background: #e6f4ff; color: var(--primary-color); }
 
 /* ---- 部门树节点 ---- */
 .dept-tree-title {
@@ -84,7 +84,7 @@
   gap: 8px;
 }
 .dept-node .dept-icon {
-  color: #1677ff;
+  color: var(--primary-color);
   font-size: 14px;
 }
 .dept-node .dept-name {
@@ -121,7 +121,7 @@
 
 .org-page .ant-tag-blue {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 .org-page .ant-tag-green {
@@ -137,4 +137,24 @@
 .org-page .ant-tag-default {
   background: #f5f5f5;
   color: #9ca3af;
+}
+
+/* ---- Drawer 底部按钮栏 ---- */
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 36px;
+  font-size: 14px;
 }

@@ -181,6 +181,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/users/:id/avatar", h.User.UploadAvatar)
 		// 批量导入：上传 csv/xlsx
 		admin.POST("/users/import", h.User.ImportUsers)
+		admin.POST("/users/import/update-existing", h.User.ImportUpdateExisting)
 
 		// 用户组
 		admin.GET("/user-groups", h.UserGroup.List)

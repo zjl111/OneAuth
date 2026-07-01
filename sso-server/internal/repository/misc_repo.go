@@ -184,6 +184,10 @@ func ApplyOAuthOverrides(r *ConfigRepository, oauthCfg *config.OAuthConfig) {
 			if v, err := strconv.Atoi(c.Value); err == nil && v > 0 {
 				oauthCfg.AuthCodeTTL = v
 			}
+		case "session_ttl":
+			if v, err := strconv.Atoi(c.Value); err == nil && v > 0 {
+				oauthCfg.SessionTTL = v
+			}
 		}
 	}
 }

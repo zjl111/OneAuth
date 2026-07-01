@@ -103,3 +103,10 @@ func (r *UserGroupRepository) SetMembers(id uuid.UUID, userIDs []uuid.UUID) erro
 	}
 	return r.db.Model(group).Association("Members").Replace(&users)
 }
+
+// AddMember 往组里追加一个成员（不覆盖已有的）
+func (r *UserGroupRepository) AddMember(groupID uuid.UUID, userID uuid.UUID) error {
+	user := model.User{ID: userID}
+	group := model.UserGroup{ID: groupID}
+	return r.db.Model(&group).Association("Members").Append(&user)
+}

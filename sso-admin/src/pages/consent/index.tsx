@@ -75,7 +75,7 @@ export default function ConsentPage() {
               height: 64,
               margin: '0 auto 16px',
               borderRadius: 16,
-              background: 'linear-gradient(135deg, #1677ff, #4f8cff)',
+              background: 'linear-gradient(135deg, var(--primary-color), #7a9f5e)',
               color: '#fff',
               display: 'grid',
               placeItems: 'center',

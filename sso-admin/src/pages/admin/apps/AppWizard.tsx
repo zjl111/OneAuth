@@ -37,12 +37,14 @@ export default function AppWizard({
   open,
   family,
   editing,
+  isDuplicate,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   family: ProtoFamily;
   editing: OAuth2Client | null;
+  isDuplicate?: boolean;
   onClose: () => void;
   onSubmit: (values: any) => Promise<OAuth2Client>;
 }) {
@@ -465,10 +467,9 @@ export default function AppWizard({
       </Form>
 
       <div className="app-wizard-footer">
-        <Button style={{ minWidth: 88 }} onClick={onClose}>关闭</Button>
+        <Button onClick={onClose}>关闭</Button>
         {step > 0 && step < 3 && (
           <Button
-            style={{ minWidth: 88 }}
             onClick={() => {
               // link 协议从 step2 退回 step0（跳过 step1）
               if (family === 'link' && step === 2) {
@@ -482,8 +483,8 @@ export default function AppWizard({
           </Button>
         )}
         {step < 3 && (
-          <Button type="primary" style={{ minWidth: 104 }} loading={saving} onClick={handleNext}>
-            {step === 2 ? (editing ? '保存并继续' : '创建并继续') : '下一步'}
+          <Button type="primary" loading={saving} onClick={handleNext}>
+            {step === 2 ? (editing && !isDuplicate ? '保存并继续' : '创建并继续') : '下一步'}
           </Button>
         )}
         {step === 3 && (
@@ -504,7 +505,7 @@ export default function AppWizard({
                 </Button>
               </>
             )}
-            <Button type="primary" style={{ minWidth: 104 }} onClick={handleFinish}>
+            <Button type="primary" onClick={handleFinish}>
               完成
             </Button>
           </>

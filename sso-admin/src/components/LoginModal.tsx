@@ -101,6 +101,16 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
         <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
           <Input.Password prefix={<LockOutlined />} placeholder="密码" />
         </Form.Item>
+        <div className="login-modal-forgot">
+          <a
+            onClick={() => {
+              onClose();
+              navigate('/oauth/forgot-password');
+            }}
+          >
+            忘记密码？
+          </a>
+        </div>
         <Form.Item>
           <Button type="primary" htmlType="submit" block loading={submitting} className="login-modal-submit">
             立即登录
@@ -131,16 +141,6 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
           )}
         </>
       )}
-      <div className="login-modal-foot">
-        <a
-          onClick={() => {
-            onClose();
-            navigate('/oauth/forgot-password');
-          }}
-        >
-          忘记密码？
-        </a>
-      </div>
       <SliderCaptcha
         open={captchaOpen}
         onCancel={() => setCaptchaOpen(false)}

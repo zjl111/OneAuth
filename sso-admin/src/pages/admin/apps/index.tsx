@@ -26,6 +26,10 @@ import {
   DeleteOutlined,
   MoreOutlined,
   InfoCircleOutlined,
+  CloseOutlined,
+  DownloadOutlined,
+  StopOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import { appsApi, type OAuth2Client } from '@/api/apps';
 import PageToolbar from '@/components/PageToolbar';
@@ -74,6 +78,7 @@ export default function AppListPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<OAuth2Client | null>(null);
+  const [isDuplicate, setIsDuplicate] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [handoffClient, setHandoffClient] = useState<OAuth2Client | null>(null);
@@ -113,10 +118,12 @@ export default function AppListPage() {
   const handleProtocolNext = () => {
     setProtocolOpen(false);
     setEditing(null);
+    setIsDuplicate(false);
     setDrawerOpen(true);
   };
 
   const openEdit = async (c: OAuth2Client) => {
+    setIsDuplicate(false);
     setPickedFamily(((c.protocol as Proto) || 'oidc') as ProtoFamily);
     // 拉详情拿到 grants 列表（列表接口不带 grants）
     try {
@@ -147,6 +154,60 @@ export default function AppListPage() {
     };
   };
 
+  const buildHandoffJson = (client: OAuth2Client, family: ProtoFamily) => {
+    const origin = window.location.origin;
+    const base: Record<string, any> = {
+      client_name: client.client_name,
+      protocol: client.protocol,
+    };
+    if (family === 'oidc' || family === 'oauth2') {
+      base.client_id = client.client_id;
+      base.redirect_uris = client.redirect_uris;
+      base.scope = client.scope;
+      base.grant_types = client.grant_types;
+      base.response_types = client.response_types;
+      base.subject_type = client.subject_type;
+      base.require_pkce = client.require_pkce;
+      base.access_token_ttl = client.access_token_ttl;
+      base.refresh_token_ttl = client.refresh_token_ttl;
+      base.issue_refresh_token = client.issue_refresh_token;
+      if (family === 'oidc') {
+        base.id_token_ttl = client.id_token_ttl;
+        base.oidc_id_token_signing_alg = client.oidc_id_token_signing_alg || 'RS256';
+      }
+      base.endpoints = buildDiscovery(family);
+    }
+    if (family === 'saml') {
+      base.saml_entity_id = client.saml_entity_id;
+      base.saml_acs_url = client.saml_acs_url;
+      base.saml_audience = client.saml_audience;
+      base.saml_issuer = client.saml_issuer;
+      base.saml_binding = client.saml_binding;
+      base.saml_nameid_format = client.saml_nameid_format;
+      base.saml_nameid_convert = client.saml_nameid_convert;
+      base.saml_signature_algorithm = client.saml_signature_algorithm;
+      base.saml_digest_algorithm = client.saml_digest_algorithm;
+      base.saml_encrypted = client.saml_encrypted;
+      base.saml_validity_seconds = client.saml_validity_seconds;
+      base.idp_metadata_url = origin + '/saml/metadata';
+      base.idp_entity_id = origin;
+      base.sso_url = origin + '/saml/sso';
+      base.slo_url = origin + '/saml/slo';
+    }
+    if (family === 'cas') {
+      base.cas_user_attribute = client.cas_user_attribute;
+      base.cas_expires_seconds = client.cas_expires_seconds;
+      base.cas_return_attributes = client.cas_return_attributes;
+      base.cas_server_url = origin + '/cas';
+      base.cas_login_url = origin + '/cas/login';
+      base.cas_logout_url = origin + '/cas/logout';
+      base.cas_service_validate_v2 = origin + '/cas/serviceValidate';
+      base.cas_service_validate_v3 = origin + '/cas/p3/serviceValidate';
+      base.cas_proxy_validate = origin + '/cas/proxyValidate';
+    }
+    return base;
+  };
+
   const openHandoffInfo = async (c: OAuth2Client) => {
     setHandoffOpen(true);
     setHandoffLoading(true);
@@ -174,13 +235,15 @@ export default function AppListPage() {
   };
 
   const handleWizardSubmit = async (values: any): Promise<OAuth2Client> => {
-    if (editing) {
+    if (editing && !isDuplicate) {
       const r = await appsApi.update(editing.id, values);
       message.success('已更新');
       load();
       return r;
     }
     const r = await appsApi.create(values);
+    message.success(isDuplicate ? '已复制并创建' : '已创建');
+    setIsDuplicate(false);
     load();
     return r;
   };
@@ -215,6 +278,33 @@ export default function AppListPage() {
     load();
   };
 
+  const handleDuplicate = async (r: OAuth2Client) => {
+    try {
+      const detail: any = await appsApi.detail(r.id);
+      const src = detail?.client || r;
+      const grants = detail?.grants || [];
+      const copy: any = {
+        ...src,
+        id: '',
+        client_id: '',
+        client_secret: undefined,
+        client_name: src.client_name + ' - 副本',
+        is_active: false,
+        grants,
+        access_policy: src.access_policy || 'all',
+        visible_in_portal: src.visible_in_portal !== false,
+        allow_idp_initiated: src.allow_idp_initiated !== false,
+        allow_sp_initiated: src.allow_sp_initiated !== false,
+      };
+      setPickedFamily(((src.protocol as Proto) || 'oidc') as ProtoFamily);
+      setEditing(copy);
+      setIsDuplicate(true);
+      setDrawerOpen(true);
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '复制失败');
+    }
+  };
+
   const buildActionMenu = (r: OAuth2Client): MenuProps['items'] => ([
     {
       key: 'handoff',
@@ -232,12 +322,14 @@ export default function AppListPage() {
     {
       key: 'toggle',
       label: r.is_active ? '禁用' : '启用',
+      icon: r.is_active ? <StopOutlined /> : <PlayCircleOutlined />,
       onClick: () => handleToggle(r),
     },
     { type: 'divider' },
     {
       key: 'delete',
       label: '删除',
+      icon: <DeleteOutlined />,
       danger: true,
       disabled: r.is_builtin,
       onClick: () => {
@@ -407,48 +499,59 @@ export default function AppListPage() {
           {
             title: '操作',
             fixed: 'right',
-            width: 280,
+            width: 220,
             render: (_, r) => (
-              <Space size="small">
-                <Button type="link" size="small" onClick={() => openEdit(r)}>
-                  编辑
-                </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
+                <span className="act-link" onClick={() => openEdit(r)}>编辑</span>
+                <span className="act-sep" />
+                <span className="act-link" onClick={() => handleDuplicate(r)}>复制</span>
+                <span className="act-sep" />
                 <Dropdown trigger={['click']} menu={{ items: buildActionMenu(r) }}>
-                  <Button type="link" size="small" icon={<MoreOutlined />}>
-                    更多
-                  </Button>
+                  <span className="act-link">···</span>
                 </Dropdown>
-              </Space>
+              </div>
             ),
           },
         ]}
       />
 
       <Drawer
-        title={editing ? `编辑应用 - ${editing.client_name}` : '新建应用'}
+        title={null}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => { setDrawerOpen(false); setIsDuplicate(false); setEditing(null); }}
+        closeIcon={null}
         width={1100}
         destroyOnClose
         className="app-drawer"
       >
+        <div className="app-drawer-header">
+          <div className="app-drawer-title">{isDuplicate ? `复制应用 - ${editing?.client_name}` : editing ? `编辑应用 - ${editing.client_name}` : '新建应用'}</div>
+          <Button type="text" icon={<CloseOutlined />} onClick={() => setDrawerOpen(false)} className="drawer-close-btn" />
+        </div>
         <AppWizard
           open={drawerOpen}
           family={pickedFamily}
           editing={editing}
+          isDuplicate={isDuplicate}
           onClose={() => setDrawerOpen(false)}
           onSubmit={handleWizardSubmit}
         />
       </Drawer>
 
       <Drawer
-        title={handoffClient ? `${handoffClient.client_name} - 第三方对接信息` : '第三方对接信息'}
+        title={null}
         open={handoffOpen}
         onClose={() => setHandoffOpen(false)}
+        closeIcon={null}
         width={1120}
         destroyOnClose
         className="app-handoff-drawer"
       >
+        <div className="app-drawer-header">
+          <div className="app-drawer-title">{handoffClient ? `${handoffClient.client_name} - 第三方对接信息` : '第三方对接信息'}</div>
+          <Button type="text" icon={<CloseOutlined />} onClick={() => setHandoffOpen(false)} className="drawer-close-btn" />
+        </div>
+        <div className="app-handoff-body">
         {handoffLoading ? (
           <div style={{ padding: 24, color: '#64748b' }}>正在加载对接信息...</div>
         ) : (
@@ -463,11 +566,43 @@ export default function AppListPage() {
             />
           )
         )}
+        </div>
+        {handoffClient && !handoffLoading && (
+          <div className="app-handoff-footer">
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => {
+                const json = buildHandoffJson(handoffClient, ((handoffClient.protocol as Proto) || 'oidc') as ProtoFamily);
+                navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+                message.success('已复制 JSON');
+              }}
+            >
+              复制 JSON
+            </Button>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                const json = buildHandoffJson(handoffClient, ((handoffClient.protocol as Proto) || 'oidc') as ProtoFamily);
+                const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${handoffClient.client_name || 'handoff'}-config.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                message.success('已下载 JSON');
+              }}
+            >
+              下载 JSON
+            </Button>
+          </div>
+        )}
       </Drawer>
 
       {/* 协议选择 */}
       <Drawer
-        title="创建应用"
+        title={null}
         open={protocolOpen}
         onClose={() => setProtocolOpen(false)}
         closeIcon={null}
@@ -476,13 +611,8 @@ export default function AppListPage() {
         className="protocol-drawer"
       >
         <div className="protocol-drawer-header">
-          <div>
-            <div className="protocol-drawer-title">创建应用</div>
-            <div className="protocol-drawer-subtitle">请选择应用接入方式</div>
-          </div>
-          <Button type="text" onClick={() => setProtocolOpen(false)} className="drawer-close-btn">
-            关闭
-          </Button>
+          <div className="protocol-drawer-title">创建应用</div>
+          <Button type="text" icon={<CloseOutlined />} onClick={() => setProtocolOpen(false)} className="drawer-close-btn" />
         </div>
         <div className="protocol-drawer-body">
           <ProtocolPicker value={pickedFamily} onChange={setPickedFamily} />
@@ -526,8 +656,8 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
     {
       key: 'oidc', title: 'OIDC',
       short: '适用于现代 Web、移动端应用的单点登录',
-      accent: '#1677ff', iconBg: '#fff', iconColor: '#1677ff',
-      tag: '推荐', tagBg: '#dbeafe', tagColor: '#1677ff',
+      accent: 'var(--primary-color)', iconBg: '#fff', iconColor: 'var(--primary-color)',
+      tag: '推荐', tagBg: '#dbeafe', tagColor: 'var(--primary-color)',
       icon: logoImg('/protocols/oidc.png', 'OIDC'),
     },
     {
@@ -547,7 +677,7 @@ function ProtocolPicker({ value, onChange }: { value: ProtoFamily; onChange: (v:
     {
       key: 'cas', title: 'CAS',
       short: '适用于传统单点登录',
-      accent: '#1677ff', iconBg: '#fff', iconColor: '#1677ff',
+      accent: 'var(--primary-color)', iconBg: '#fff', iconColor: 'var(--primary-color)',
       tag: '企业常用', tagBg: '#dbeafe', tagColor: '#1d4ed8',
       icon: logoImg('/protocols/cas.png', 'CAS'),
     },

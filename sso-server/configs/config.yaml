@@ -29,6 +29,7 @@ oauth:
   access_token_ttl: 3600
   refresh_token_ttl: 604800   # 7 天；refresh 每次使用会 rotate，活跃用户自然续期
   auth_code_ttl: 300
+  session_ttl: 28800          # 服务端会话有效期（秒），默认 8 小时；0 = 使用内置默认值
   keys_dir: "./keys"
   # 开发环境下前端 SPA 的地址（用于 302 跳转到登录/同意页）
   # 空字符串表示与 issuer 同域（生产 Nginx 反代模式）

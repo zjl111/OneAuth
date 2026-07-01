@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Input, Button, Space, Select, type TableColumnsType } from 'antd';
+import { Card, Tabs, Table, Tag, Input, Button, Select, type TableColumnsType } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { logApi, type LoginLog, type OperationLog, type AccessLog } from '@/api/misc';
@@ -28,12 +28,12 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   const [data, setData] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [filterVals, setFilterVals] = useState<Record<string, string>>({});
 
   const load = () => {
     setLoading(true);
-    fetcher({ page, page_size: 20, ...filterVals })
+    fetcher({ page: pagination.current, page_size: pagination.pageSize, ...filterVals })
       .then((d) => {
         setData(d.items || []);
         setTotal(d.total);
@@ -44,12 +44,12 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [pagination.current, pagination.pageSize]);
 
   return (
     <>
       {filters.length > 0 && (
-        <Space className="log-filter-bar" style={{ marginBottom: 12, flexWrap: 'wrap', rowGap: 8 }}>
+        <div className="log-filter-bar" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {filters.map((f) =>
             f.type === 'select' ? (
               <Select
@@ -77,17 +77,23 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
               />
             ),
           )}
-          <Button onClick={load} icon={<ReloadOutlined />}>
-            查询
+          <Button onClick={load} icon={<ReloadOutlined />} style={{ marginLeft: 'auto' }}>
+            刷新
           </Button>
-        </Space>
+        </div>
       )}
       <Table<T>
         rowKey="id"
         loading={loading}
         dataSource={data}
         columns={columns}
-        pagination={{ current: page, total, pageSize: 20, onChange: setPage }}
+        pagination={{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          total,
+          showSizeChanger: true,
+          onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+        }}
       />
     </>
   );
@@ -114,8 +120,8 @@ const loginColumns: TableColumnsType<LoginLog> = [
     width: 90,
     render: (v) => (v === 'success' ? <Tag color="green">成功</Tag> : <Tag color="red">失败</Tag>),
   },
-  { title: '消息', dataIndex: 'message', ellipsis: true },
-  { title: 'User-Agent', dataIndex: 'user_agent', ellipsis: true },
+  { title: '消息', dataIndex: 'message', width: 160, ellipsis: true },
+  { title: 'User-Agent', dataIndex: 'user_agent', ellipsis: true, render: (v: string) => v || '—' },
   { title: '时间', dataIndex: 'created_at', width: 170, render: fmtTime },
 ];
 
@@ -213,55 +219,57 @@ const accessColumns: TableColumnsType<AccessLog> = [
 
 export default function LogsPage() {
   return (
-    <Card className="log-page">
-      <Tabs
-        items={[
-          {
-            key: 'login',
-            label: '登录日志',
-            children: (
-              <LogTable<LoginLog>
-                fetcher={logApi.login}
-                columns={loginColumns}
-                filters={[{ key: 'username', placeholder: '用户名' }]}
-              />
-            ),
-          },
-          {
-            key: 'op',
-            label: '操作日志',
-            children: (
-              <LogTable<OperationLog>
-                fetcher={logApi.operation}
-                columns={operationColumns}
-                filters={[
-                  { key: 'username', placeholder: '用户' },
-                  {
-                    key: 'resource',
-                    placeholder: '资源类型',
-                    type: 'select',
-                    options: Object.entries(RESOURCE_LABEL).map(([value, label]) => ({ value, label })),
-                  },
-                ]}
-              />
-            ),
-          },
-          {
-            key: 'access',
-            label: '应用访问日志',
-            children: (
-              <LogTable<AccessLog>
-                fetcher={logApi.access}
-                columns={accessColumns}
-                filters={[
-                  { key: 'username', placeholder: '用户' },
-                  { key: 'client_id', placeholder: 'Client ID' },
-                ]}
-              />
-            ),
-          },
-        ]}
-      />
-    </Card>
+    <>
+      <Card className="log-page">
+        <Tabs
+          items={[
+            {
+              key: 'login',
+              label: '登录日志',
+              children: (
+                <LogTable<LoginLog>
+                  fetcher={logApi.login}
+                  columns={loginColumns}
+                  filters={[{ key: 'username', placeholder: '用户名' }]}
+                />
+              ),
+            },
+            {
+              key: 'op',
+              label: '操作日志',
+              children: (
+                <LogTable<OperationLog>
+                  fetcher={logApi.operation}
+                  columns={operationColumns}
+                  filters={[
+                    { key: 'username', placeholder: '用户' },
+                    {
+                      key: 'resource',
+                      placeholder: '资源类型',
+                      type: 'select',
+                      options: Object.entries(RESOURCE_LABEL).map(([value, label]) => ({ value, label })),
+                    },
+                  ]}
+                />
+              ),
+            },
+            {
+              key: 'access',
+              label: '应用访问日志',
+              children: (
+                <LogTable<AccessLog>
+                  fetcher={logApi.access}
+                  columns={accessColumns}
+                  filters={[
+                    { key: 'username', placeholder: '用户' },
+                    { key: 'client_id', placeholder: 'Client ID' },
+                  ]}
+                />
+              ),
+            },
+          ]}
+        />
+      </Card>
+    </>
   );
 }

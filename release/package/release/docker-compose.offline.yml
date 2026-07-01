@@ -1,0 +1,29 @@
+services:
+  backend:
+    image: oneauth/backend:offline-amd64
+    environment:
+      SSO_APP_DRIVER: "sqlite"
+      SSO_APP_ENVIRONMENT: "production"
+      SSO_APP_SECRET_KEY: ${SECRET_KEY}
+      SSO_DATABASE_SQLITE_PATH: /app/data/sso.db
+      SSO_REDIS_ENABLED: "false"
+      SSO_OAUTH_ISSUER: ${SSO_ISSUER}
+      SSO_OAUTH_FRONTEND_URL: ""
+    volumes:
+      - oneauth_keys:/app/keys
+      - oneauth_data:/app/data
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  gateway:
+    image: oneauth/gateway:offline-amd64
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  oneauth_keys:
+  oneauth_data:

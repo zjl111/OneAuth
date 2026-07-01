@@ -49,7 +49,7 @@
 
 .lr-page .ant-tag-blue {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 .lr-page .ant-tag-default {
@@ -64,31 +64,134 @@
 }
 
 /* ---- Drawer 表单 ---- */
-.lr-page .ant-drawer .ant-form-item-label > label {
+.lr-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* 关闭按钮强制最右侧 */
+.lr-drawer .ant-drawer-header {
+  position: relative;
+}
+
+.lr-drawer .ant-drawer-close {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  z-index: 1;
+}
+
+.lr-form-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px 20px 16px;
+}
+
+.lr-form-container .ant-form {
+  width: 100%;
+  max-width: 720px;
+}
+
+.lr-drawer .ant-form-item {
+  margin-bottom: 10px !important;
+}
+
+.lr-drawer .ant-form-item-label > label {
   font-size: 14px;
   font-weight: 500;
   color: #374151;
+  padding-bottom: 4px !important;
+  height: auto !important;
 }
 
-.lr-page .ant-drawer .ant-input,
-.lr-page .ant-drawer .ant-input-number,
-.lr-page .ant-drawer .ant-select .ant-select-selector {
+/* 必填星号红色 */
+.lr-drawer .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ef4444 !important;
+}
+
+.lr-drawer .ant-input,
+.lr-drawer .ant-input-number,
+.lr-drawer .ant-select .ant-select-selector {
   height: 36px !important;
   min-height: 36px !important;
   font-size: 14px;
 }
 
-.lr-page .ant-drawer .ant-select .ant-select-selection-search-input {
+.lr-drawer .ant-select .ant-select-selection-search-input {
   height: 34px !important;
 }
 
-.lr-page .ant-drawer .ant-select .ant-select-selection-item {
+.lr-drawer .ant-select .ant-select-selection-item {
   line-height: 34px !important;
 }
 
-.lr-page .ant-drawer .ant-input-number {
+.lr-drawer .ant-input-number {
   display: flex;
   align-items: center;
+}
+
+.lr-drawer textarea.ant-input {
+  height: auto !important;
+  min-height: 80px !important;
+}
+
+/* ---- Section 分组标题 ---- */
+.lr-rule-section {
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px dashed #eef0f5;
+}
+
+.lr-rule-section:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.lr-rule-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d2c5b;
+}
+
+.lr-rule-section-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: var(--primary-color);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ---- 固底按钮栏 ---- */
+.lr-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.lr-drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 36px;
+  font-size: 14px;
+  border-radius: 6px;
 }
 
 /* ---- 分页器 ---- */

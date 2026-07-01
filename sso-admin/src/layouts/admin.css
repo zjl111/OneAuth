@@ -24,7 +24,7 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1677ff, #4f8cff);
+  background: linear-gradient(135deg, var(--primary-color), #7a9f5e);
   color: #fff;
   display: grid;
   place-items: center;
@@ -35,7 +35,34 @@
 .admin-sider .ant-menu-item {
   height: 44px !important;
   line-height: 44px !important;
-  font-size: 15px;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: var(--text-secondary) !important;
+}
+
+.admin-sider .ant-menu-item:hover {
+  color: var(--text-main) !important;
+}
+
+/* 二级子菜单 */
+.admin-sider .ant-menu-submenu .ant-menu-item {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  padding-left: 24px !important;
+}
+
+.admin-sider .ant-menu-submenu .ant-menu-item-selected {
+  font-weight: 500 !important;
+  color: var(--primary-color) !important;
+}
+
+/* 菜单分组标题 */
+.admin-sider .ant-menu-item-group-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--text-placeholder) !important;
+  letter-spacing: 0.5px !important;
+  padding: 8px 16px !important;
 }
 
 /* 侧边栏分组分隔线（菜单 type=divider） */
@@ -57,7 +84,7 @@
 }
 .header-left { display: flex; align-items: center; gap: 18px; }
 .collapse-btn { cursor: pointer; font-size: 20px; color: #6b7280; }
-.collapse-btn:hover { color: #1677ff; }
+.collapse-btn:hover { color: var(--primary-color); }
 .header-right { display: flex; align-items: center; gap: 18px; }
 .header-time { font-size: 14px; color: #94a3b8; }
 .header-user {

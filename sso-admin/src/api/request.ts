@@ -1,7 +1,7 @@
 import axios, { type AxiosResponse } from 'axios';
 import { message } from 'antd';
 import { useAuthStore } from '@/store/authStore';
-import { redirectToLogin } from '@/utils/redirect';
+import { loginPath } from '@/utils/redirect';
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -26,6 +26,28 @@ request.interceptors.request.use((config) => {
 
 let refreshing: Promise<string | null> | null = null;
 
+/** 判断当前是否在公共页（登录/找回密码等），公共页不需要跳转 */
+function isOnPublicPage(): boolean {
+  return (
+    location.pathname === '/' ||
+    location.pathname.startsWith('/oauth/login') ||
+    location.pathname.startsWith('/oauth/forgot-password') ||
+    location.pathname.startsWith('/oauth/reset-password') ||
+    location.pathname.startsWith('/status')
+  );
+}
+
+/** 清除登录态并强制跳转到登录页 */
+function bounceToLogin() {
+  useAuthStore.getState().clear();
+  if (isOnPublicPage()) return;
+  // 一次性闸门：防止并发 401 反复触发跳转
+  if ((window as any).__authBouncing) return;
+  (window as any).__authBouncing = true;
+  // 用硬跳转确保 SPA 路由不会拦截
+  window.location.href = loginPath(location.pathname + location.search);
+}
+
 request.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -35,26 +57,14 @@ request.interceptors.response.use(
     if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       const rt = useAuthStore.getState().refreshToken;
-      const bounce = () => {
-        useAuthStore.getState().clear();
-        // 已经在公共页 → 不重定向，避免循环
-        const onPublicPage =
-          location.pathname === '/' ||
-          location.pathname.startsWith('/oauth/login') ||
-          location.pathname.startsWith('/oauth/forgot-password') ||
-          location.pathname.startsWith('/oauth/reset-password');
-        if (onPublicPage) return;
-        // 防止并发 401 反复触发跳转（一次性闸门，每个 SPA 实例只允许跳一次）
-        if ((window as any).__authBouncing) return;
-        (window as any).__authBouncing = true;
-        // CAS / OAuth logout 之后回跳门户但 session 已失效会导致死循环，
-        // 这里只回首页（带 return_to），首页 useEffect 判定 isAuthenticated=false 后会弹登录框
-        redirectToLogin(location.pathname + location.search);
-      };
+
+      // 没有 refresh token → 直接跳转登录
       if (!rt) {
-        bounce();
+        bounceToLogin();
         return Promise.reject(error);
       }
+
+      // 有 refresh token → 尝试刷新
       if (!refreshing) {
         refreshing = useAuthStore
           .getState()
@@ -66,9 +76,11 @@ request.interceptors.response.use(
       }
       const newToken = await refreshing;
       if (!newToken) {
-        bounce();
+        // 刷新失败（refresh token 也过期了）→ 跳转登录
+        bounceToLogin();
         return Promise.reject(error);
       }
+      // 刷新成功 → 重试原请求
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return request(originalRequest);
     }

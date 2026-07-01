@@ -39,7 +39,7 @@
 
 .ug-page .ant-tag-blue {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 .ug-page .ant-tag-default {
@@ -69,18 +69,211 @@
   height: auto;
 }
 
-/* ---- Drawer Transfer 穿梭框美化 ---- */
-.ug-page .ant-drawer .ant-transfer {
-  margin-top: 8px;
+/* ---- Drawer 管理成员 ---- */
+.ug-member-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
-.ug-page .ant-drawer .ant-transfer-list-header {
+.ug-member-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 左右面板：白底卡片、强制等高 */
+.ug-member-drawer-body .ant-transfer-list {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  min-height: 420px;
+}
+
+/* ---- Transfer 整体 ---- */
+.ug-member-drawer-body .ant-transfer {
+  width: 100%;
+  max-width: 780px;
+}
+
+/* 隐藏 Ant Design 默认的 header 右侧人数折叠（"3人"/"0人"） */
+.ug-member-drawer-body .ant-transfer-list-header .ant-transfer-list-header-selected {
+  display: none !important;
+}
+
+/* Header 栏样式 */
+.ug-member-drawer-body .ant-transfer-list-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafbfc;
   font-weight: 600;
+  font-size: 13px;
   color: #374151;
+  min-height: 40px;
+}
+
+/* Header 标题中的人数统计小字 */
+.ug-member-drawer-body .transfer-count {
+  font-weight: 400;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+
+/* 搜索框区域 —— 让搜索框与下方 checkbox 对齐 */
+.ug-member-drawer-body .ant-transfer-list-body-search-wrapper {
+  padding: 8px 12px;
+}
+
+.ug-member-drawer-body .ant-transfer-list-body .ant-input-affix-wrapper,
+.ug-member-drawer-body .ant-transfer-list-body .ant-input {
+  border-radius: 6px;
+}
+
+/* 列表项 */
+.ug-member-drawer-body .ant-transfer-list-content-item {
+  padding: 6px 16px;
+  border-radius: 6px;
+  margin: 1px 8px;
+  transition: background 0.15s;
+}
+
+.ug-member-drawer-body .ant-transfer-list-content-item:hover {
+  background: #f5f7fa;
+}
+
+/* ---- 中间穿梭按钮 ---- */
+.ug-member-drawer-body .ant-transfer-operation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 56px;
+  align-self: stretch;
+}
+
+.ug-member-drawer-body .ant-transfer-operation .ant-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #9ca3af;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: all 0.25s ease;
+  padding: 0;
+  font-size: 14px;
+}
+
+.ug-member-drawer-body .ant-transfer-operation .ant-btn:hover:not(.ant-btn-disabled):not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 激活态（有勾选项时）—— 品牌主色调 */
+.ug-member-drawer-body .ant-transfer-operation .ant-btn:not(.ant-btn-disabled):not(:disabled) {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(22, 119, 255, 0.25);
+}
+
+.ug-member-drawer-body .ant-transfer-operation .ant-btn:not(.ant-btn-disabled):not(:disabled):hover {
+  opacity: 0.85;
+  box-shadow: 0 4px 14px rgba(22, 119, 255, 0.35);
+}
+
+/* 禁用态 */
+.ug-member-drawer-body .ant-transfer-operation .ant-btn.ant-btn-disabled,
+.ug-member-drawer-body .ant-transfer-operation .ant-btn:disabled {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #d1d5db;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.ug-member-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ug-member-drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 6px;
 }
 
 /* ---- 分页器 ---- */
 .ug-page .ant-table-pagination {
   margin-top: 16px !important;
   margin-bottom: 4px !important;
+}
+
+/* ---- Drawer 底部按钮栏 ---- */
+.ug-form-drawer .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 0;
+}
+
+.ug-form-drawer .ant-drawer-body .ant-form {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+  margin: 16px -24px 0;
+}
+
+.drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 36px;
+  font-size: 14px;
+}
+
+/* ---- 关闭按钮强制最右侧 ---- */
+.ug-form-drawer .ant-drawer-header,
+.dept-drawer .ant-drawer-header,
+.ug-member-drawer .ant-drawer-header {
+  position: relative;
+}
+
+.ug-form-drawer .ant-drawer-close,
+.dept-drawer .ant-drawer-close,
+.ug-member-drawer .ant-drawer-close {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  z-index: 1;
 }

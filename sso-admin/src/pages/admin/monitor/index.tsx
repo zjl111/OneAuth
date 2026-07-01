@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Card, Table, Button, Tag, Space, Switch, Modal, Form, Input, InputNumber, App as AntdApp, Popconfirm } from 'antd';
-import { ReloadOutlined, ThunderboltOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Tag, Space, Switch, Modal, Form, Input, InputNumber, App as AntdApp, Popconfirm, Drawer, Dropdown } from 'antd';
+import { ReloadOutlined, ThunderboltOutlined, DeleteOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { monitorApi } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
@@ -143,67 +143,48 @@ export default function MonitorPage() {
           {
             title: '操作',
             key: 'actions',
-            width: 280,
+            width: 180,
             fixed: 'right',
             render: (_, r) => (
-              <Space size={4}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<ThunderboltOutlined />}
-                  onClick={async () => {
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
+                <span className="act-link" onClick={() => { setEditing(r); form.setFieldsValue(r); }}>配置</span>
+                <span className="act-sep" />
+                <span className="act-link" onClick={async () => {
+                  await monitorApi.setMaintenance(r.client_id, !r.maintenance, '');
+                  message.success(r.maintenance ? '已结束维护' : '已开启维护');
+                  load();
+                }}>{r.maintenance ? '结束维护' : '维护'}</span>
+                <span className="act-sep" />
+                <Dropdown trigger={['click']} menu={{ items: [
+                  { key: 'probe', label: '立即探测', onClick: async () => {
                     await monitorApi.probe(r.client_id);
                     message.success('已触发探测');
                     setTimeout(load, 2000);
-                  }}
-                >
-                  立即探测
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={() => {
-                    setEditing(r);
-                    form.setFieldsValue(r);
-                  }}
-                >
-                  配置
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={async () => {
-                    await monitorApi.setMaintenance(r.client_id, !r.maintenance, '');
-                    message.success(r.maintenance ? '已结束维护' : '已开启维护');
-                    load();
-                  }}
-                >
-                  {r.maintenance ? '结束维护' : '维护'}
-                </Button>
-                <Popconfirm
-                  title={`确认删除 ${r.client_id} 的监控？`}
-                  description="历史探测数据将被清空"
-                  okType="danger"
-                  onConfirm={() => handleDelete(r.client_id)}
-                >
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
-                </Popconfirm>
-              </Space>
+                  }},
+                  { type: 'divider' },
+                  { key: 'delete', label: '删除', danger: true, onClick: () => handleDelete(r.client_id) },
+                ]}}>
+                  <span className="act-link">···</span>
+                </Dropdown>
+              </div>
             ),
           },
         ]}
       />
 
-      <Modal
-        title={`配置监控 - ${editing?.client_id}`}
+      <Drawer
+        className="monitor-config-drawer"
+        title={null}
+        closable={false}
         open={!!editing}
-        onCancel={() => setEditing(null)}
-        onOk={handleSave}
-        destroyOnClose
+        onClose={() => setEditing(null)}
+        width={760}
       >
-        <Form form={form} layout="vertical" preserve={false}>
+        <div className="app-drawer-header">
+          <span className="app-drawer-title">配置监控 - {editing?.client_name || editing?.client_id}</span>
+          <Button type="text" icon={<CloseOutlined />} onClick={() => setEditing(null)} className="drawer-close-btn" />
+        </div>
+        <Form form={form} layout="vertical" style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '16px 24px' }}>
           <Form.Item name="health_check_url" label="健康检查 URL">
             <Input placeholder="https://app.example.com/health" />
           </Form.Item>
@@ -217,7 +198,11 @@ export default function MonitorPage() {
             <Switch />
           </Form.Item>
         </Form>
-      </Modal>
+        <div className="drawer-footer">
+          <Button onClick={() => setEditing(null)}>取消</Button>
+          <Button type="primary" onClick={handleSave}>保存</Button>
+        </div>
+      </Drawer>
       </Card>
     </>
   );

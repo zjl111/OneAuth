@@ -15,6 +15,8 @@ import {
   Dropdown,
   Popconfirm,
   Select,
+  Drawer,
+  Transfer,
 } from 'antd';
 import {
   PlusOutlined,
@@ -30,6 +32,7 @@ import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import { usersApi, type User } from '@/api/users';
 import UserAvatar from '@/components/UserAvatar';
 import './orgs.css';
+import '../user-groups/user-groups.css';
 
 type DeptTreeNode = {
   key: string;
@@ -84,10 +87,10 @@ export default function OrgPage() {
   const [memberKeyword, setMemberKeyword] = useState('');
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
-  // 添加成员 Modal
+  // 添加成员 Drawer
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [candidateUsers, setCandidateUsers] = useState<User[]>([]);
-  const [pickedUserId, setPickedUserId] = useState<string | undefined>();
+  const [pickedUserIds, setPickedUserIds] = useState<string[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
 
   // 移动部门 Modal
@@ -196,21 +199,37 @@ export default function OrgPage() {
     loadTree();
   };
 
-  // 添加成员：从未分配 / 其他部门的用户里挑
+  // 添加成员：从其他部门的用户里挑选
   const openAddMember = async () => {
     if (!selectedDept) return;
-    const all = await usersApi.list({ page: 1, page_size: 200 });
+    const all = await usersApi.list({ page: 1, page_size: 1000 });
     setCandidateUsers((all.items || []).filter((u) => u.department_id !== selectedDept.id));
-    setPickedUserId(undefined);
+    setPickedUserIds([]);
     setAddMemberOpen(true);
   };
   const handleAddMember = async () => {
-    if (!pickedUserId || !selectedDept) return;
-    await usersApi.update(pickedUserId, { department_id: selectedDept.id });
-    message.success('已添加');
+    if (pickedUserIds.length === 0 || !selectedDept) return;
+    let success = 0;
+    for (const uid of pickedUserIds) {
+      try {
+        await usersApi.update(uid, { department_id: selectedDept.id });
+        success++;
+      } catch {}
+    }
+    message.success(`已添加 ${success} 位成员`);
     setAddMemberOpen(false);
     loadMembers(selectedDept.id);
   };
+
+  const transferData = useMemo(
+    () =>
+      candidateUsers.map((u) => ({
+        key: u.id,
+        title: u.nickname || u.username,
+        description: u.email || u.username,
+      })),
+    [candidateUsers]
+  );
 
   const handleRemoveMember = async (u: User) => {
     await usersApi.update(u.id, { department_id: null as any });
@@ -397,40 +416,39 @@ export default function OrgPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 180,
+              width: 160,
               render: (_, r) => (
-                <Space size={4}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
                   <Popconfirm
                     title={`将 ${r.nickname || r.username} 移出本部门？`}
                     onConfirm={() => handleRemoveMember(r)}
                   >
-                    <Button type="link" size="small">
-                      移出部门
-                    </Button>
+                    <span className="act-link">移出部门</span>
                   </Popconfirm>
+                  <span className="act-sep" />
                   <Popconfirm
                     title={`删除用户 ${r.nickname || r.username}？`}
                     okType="danger"
                     onConfirm={() => handleDeleteMember(r)}
                   >
-                    <Button type="link" size="small" danger>
-                      删除
-                    </Button>
+                    <span className="act-link" style={{ color: '#ef4444' }}>删除</span>
                   </Popconfirm>
-                </Space>
+                </div>
               ),
             },
           ]}
         />
       </Card>
 
-      {/* 部门 Modal */}
-      <Modal
+      {/* 部门 Drawer */}
+      <Drawer
         title={editingDept ? '编辑部门' : `新建部门${deptParent ? ' (父级: ' + deptParent.name + ')' : ''}`}
+        className="dept-drawer"
         open={deptOpen}
-        onCancel={() => setDeptOpen(false)}
-        onOk={handleDeptSave}
+        onClose={() => setDeptOpen(false)}
+        width={760}
         destroyOnClose
+        closable
       >
         <Form form={deptForm} layout="vertical" preserve={false}>
           <Form.Item name="name" label="部门名称" rules={[{ required: true }]}>
@@ -443,16 +461,20 @@ export default function OrgPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
-      </Modal>
+        <div className="drawer-footer">
+          <Button onClick={() => setDeptOpen(false)}>取消</Button>
+          <Button type="primary" onClick={handleDeptSave}>保存</Button>
+        </div>
+      </Drawer>
 
-      {/* 移动部门 Modal */}
-      <Modal
+      {/* 移动部门 Drawer */}
+      <Drawer
         title={movingDept ? `移动部门「${movingDept.name}」` : '移动部门'}
         open={moveOpen}
-        onCancel={() => setMoveOpen(false)}
-        onOk={handleDeptMove}
-        okText="确认移动"
+        onClose={() => setMoveOpen(false)}
+        width={760}
         destroyOnClose
+        closable
       >
         <div style={{ marginBottom: 12, color: '#475569', fontSize: 13 }}>
           选择新的上级部门：选"根部门"将变成顶级部门；不能选择自身或自身的子部门。
@@ -481,33 +503,51 @@ export default function OrgPage() {
             return flat;
           })()}
         />
-      </Modal>
+        <div className="drawer-footer">
+          <Button onClick={() => setMoveOpen(false)}>取消</Button>
+          <Button type="primary" onClick={handleDeptMove}>确认移动</Button>
+        </div>
+      </Drawer>
 
-      {/* 添加成员 Modal */}
-      <Modal
-        title={selectedDept ? `添加成员到「${selectedDept.name}」` : '添加成员'}
-        open={addMemberOpen}
-        onCancel={() => setAddMemberOpen(false)}
-        onOk={handleAddMember}
-        okButtonProps={{ disabled: !pickedUserId }}
-        destroyOnClose
-      >
-        <p style={{ color: '#6b7280', marginTop: 0 }}>
-          从其他部门或未分配部门的用户中选一位添加到当前部门：
-        </p>
-        <Select
-          showSearch
-          style={{ width: '100%' }}
-          placeholder="搜索并选择用户"
-          optionFilterProp="label"
-          value={pickedUserId}
-          onChange={setPickedUserId}
-          options={candidateUsers.map((u) => ({
-            value: u.id,
-            label: `${u.nickname || u.username} (${u.email || u.username})`,
-          }))}
-        />
-      </Modal>
+      {/* 添加成员 Drawer */}
+      {(() => {
+        const rightCount = pickedUserIds.length;
+        const leftCount = candidateUsers.length - rightCount;
+        return (
+          <Drawer
+            title={selectedDept ? `添加成员到「${selectedDept.name}」` : '添加成员'}
+            className="ug-member-drawer"
+            open={addMemberOpen}
+            onClose={() => setAddMemberOpen(false)}
+            width={760}
+            destroyOnClose
+            closable
+          >
+            <div className="ug-member-drawer-body">
+              <Transfer
+                dataSource={transferData}
+                targetKeys={pickedUserIds}
+                onChange={(keys) => setPickedUserIds(keys as string[])}
+                render={(item) => `${item.title}（${item.description}）`}
+                showSearch
+                listStyle={{ width: 290, height: 420 }}
+                titles={[`可选用户 (${leftCount})`, `已选成员 (${rightCount})`]}
+                locale={{
+                  itemUnit: '人',
+                  itemsUnit: '人',
+                  searchPlaceholder: '搜索昵称 / 邮箱',
+                }}
+              />
+            </div>
+            <div className="ug-member-drawer-footer">
+              <Button onClick={() => setAddMemberOpen(false)}>取消</Button>
+              <Button type="primary" onClick={handleAddMember} disabled={pickedUserIds.length === 0}>
+                确认添加
+              </Button>
+            </div>
+          </Drawer>
+        );
+      })()}
     </div>
   );
 }

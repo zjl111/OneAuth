@@ -45,10 +45,10 @@
   background: #e6f0ff;
 }
 .tmp-on {
-  background: #1677ff;
+  background: var(--primary-color);
 }
 .tmp-on:hover {
-  background: #1677ff;
+  background: var(--primary-color);
   opacity: 0.85;
 }
 

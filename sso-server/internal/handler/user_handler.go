@@ -308,17 +308,77 @@ func (h *UserHandler) ImportUsers(c *gin.Context) {
 	response.OK(c, res)
 }
 
+// ImportUpdateExisting 批量更新已存在的用户（从导入结果中选择更新）
+//
+//	POST /api/v1/users/import/update-existing
+func (h *UserHandler) ImportUpdateExisting(c *gin.Context) {
+	var req struct {
+		Users []struct {
+			Username string `json:"username"`
+			Nickname string `json:"nickname"`
+			Email    string `json:"email"`
+			Phone    string `json:"phone"`
+		} `json:"users"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请求参数错误")
+		return
+	}
+
+	updated := 0
+	failed := 0
+	var errs []service.ImportRowError
+
+	for i, u := range req.Users {
+		// 查找用户
+		user, err := h.Service.GetByUsername(u.Username)
+		if err != nil {
+			failed++
+			errs = append(errs, service.ImportRowError{
+				Row:      i + 1,
+				Username: u.Username,
+				Reason:   "用户不存在",
+			})
+			continue
+		}
+
+		// 更新用户信息
+		updateInput := service.UpdateUserInput{
+			Nickname: &u.Nickname,
+			Email:    &u.Email,
+			Phone:    &u.Phone,
+		}
+		_, err = h.Service.Update(user.ID, updateInput)
+		if err != nil {
+			failed++
+			errs = append(errs, service.ImportRowError{
+				Row:      i + 1,
+				Username: u.Username,
+				Reason:   err.Error(),
+			})
+			continue
+		}
+		updated++
+	}
+
+	response.OK(c, gin.H{
+		"updated": updated,
+		"failed":  failed,
+		"errors":  errs,
+	})
+}
+
 // ImportTemplate 下载导入模板。?format=csv 返回 utf-8 BOM csv，否则返回 xlsx。
 //
 //	GET /api/v1/users/import/template
 func (h *UserHandler) ImportTemplate(c *gin.Context) {
 	headers := []string{
 		"登录账号*", "姓名*", "密码*",
-		"邮箱", "手机号", "部门", "用户类型", "管理员",
+		"邮箱", "手机号", "部门", "用户类型", "管理员", "用户组",
 	}
 	example := []string{
-		"jdoe", "张三", "Init@123456",
-		"jdoe@example.com", "13800000000", "总公司", "internal", "否",
+		"jdoe", "张三", "",
+		"jdoe@example.com", "13800000000", "总公司", "internal", "否", "研发组,测试组",
 	}
 	if c.Query("format") == "csv" {
 		c.Header("Content-Type", "text/csv; charset=utf-8")
@@ -349,9 +409,9 @@ func (h *UserHandler) ImportTemplate(c *gin.Context) {
 		Font: &excelize.Font{Bold: true},
 		Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#F1F5F9"}},
 	})
-	_ = f.SetCellStyle(sheet, "A1", "H1", headerStyle)
+	_ = f.SetCellStyle(sheet, "A1", "I1", headerStyle)
 	// 列宽
-	for i, w := range []float64{14, 14, 18, 24, 16, 16, 12, 10} {
+	for i, w := range []float64{14, 14, 18, 24, 16, 16, 12, 10, 20} {
 		col, _ := excelize.ColumnNumberToName(i + 1)
 		_ = f.SetColWidth(sheet, col, col, w)
 	}

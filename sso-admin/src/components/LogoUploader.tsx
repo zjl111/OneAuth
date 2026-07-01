@@ -87,7 +87,8 @@ export default function LogoUploader({
             justifyContent: 'center',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLDivElement).style.borderColor = '#1677ff';
+            const c = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#1677ff';
+            (e.currentTarget as HTMLDivElement).style.borderColor = c;
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLDivElement).style.borderColor = '#c7d2fe';

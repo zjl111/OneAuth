@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Table,
   Card,
@@ -16,6 +16,7 @@ import {
   Dropdown,
   Tooltip,
   App as AntdApp,
+  Tag,
 } from 'antd';
 import {
   PlusOutlined,
@@ -30,9 +31,13 @@ import {
   DeleteOutlined,
   EditOutlined,
   ExclamationCircleOutlined,
+  CloseOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
+import * as XLSX from 'xlsx';
 import './users.css';
-import { usersApi, type User, type ImportUsersResult } from '@/api/users';
+import { usersApi, type User, type ImportUsersResult, type ImportExisting } from '@/api/users';
 import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
 import UserAvatar from '@/components/UserAvatar';
@@ -53,6 +58,23 @@ function randomPassword(length = 12): string {
     .join('');
 }
 
+/** 前端预览表格中的一行 */
+interface ImportPreviewRow {
+  row: number;
+  username: string;
+  nickname: string;
+  password: string;
+  email: string;
+  phone: string;
+  department: string;
+  userType: string;
+  admin: string;
+  groups: string;
+  status: 'pending' | 'existing' | 'error' | 'success';
+  error?: string;
+  errorDetail?: string;
+}
+
 export default function UserListPage() {
   const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<User[]>([]);
@@ -64,8 +86,15 @@ export default function UserListPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importResult, setImportResult] = useState<ImportUsersResult | null>(null);
+  const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importResult, setImportResult] = useState<ImportUsersResult | null>(null);
+  const [existingSelected, setExistingSelected] = useState<number[]>([]);
+  const [updatingExisting, setUpdatingExisting] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{ updated: number; failed: number; errors: { row: number; username: string; reason: string }[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [form] = Form.useForm();
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -155,7 +184,7 @@ export default function UserListPage() {
   };
 
   const handleDelete = async (u: User) => {
-    if (u.is_staff) {
+    if (u.username === 'admin') {
       message.warning('管理员用户不允许删除');
       return;
     }
@@ -166,7 +195,7 @@ export default function UserListPage() {
 
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) return;
-    const protectedCount = data.filter((u) => selectedRowKeys.includes(u.id) && u.is_staff).length;
+    const protectedCount = data.filter((u) => selectedRowKeys.includes(u.id) && u.username === 'admin').length;
     if (protectedCount > 0) {
       message.warning('已选中管理员用户，不允许删除，请先取消选择');
       return;
@@ -219,6 +248,202 @@ export default function UserListPage() {
     });
   };
 
+  const handleUpdateExisting = async () => {
+    if (!importResult || existingSelected.length === 0) return;
+    const selectedUsers = (importResult.existing || []).filter((_, idx) => existingSelected.includes(idx));
+    setUpdatingExisting(true);
+    try {
+      const res = await usersApi.updateExisting(selectedUsers);
+      setUpdateResult(res);
+      if (res.updated > 0) {
+        message.success(`已更新 ${res.updated} 个用户`);
+      }
+      if (res.failed > 0) {
+        message.warning(`更新完成：成功 ${res.updated}，失败 ${res.failed}`);
+      }
+      load();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '更新失败');
+    } finally {
+      setUpdatingExisting(false);
+    }
+  };
+
+  // ---- 前端文件解析 ----
+  const parseCSVText = (text: string): string[][] => {
+    // 去 BOM
+    const clean = text.startsWith('\uFEFF') ? text.slice(1) : text;
+    const lines: string[][] = [];
+    let cur: string[] = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < clean.length; i++) {
+      const ch = clean[i];
+      if (inQuotes) {
+        if (ch === '"' && clean[i + 1] === '"') { field += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { field += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { cur.push(field.trim()); field = ''; }
+        else if (ch === '\n' || ch === '\r') {
+          if (ch === '\r' && clean[i + 1] === '\n') i++;
+          cur.push(field.trim());
+          if (cur.some((c) => c !== '')) lines.push(cur);
+          cur = []; field = '';
+        } else { field += ch; }
+      }
+    }
+    if (field || cur.length > 0) { cur.push(field.trim()); lines.push(cur); }
+    return lines;
+  };
+
+  const parseImportFile = async (file: File): Promise<ImportPreviewRow[]> => {
+    const lower = file.name.toLowerCase();
+    let rows: string[][] = [];
+
+    if (lower.endsWith('.csv')) {
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
+    } else {
+      throw new Error('仅支持 .csv / .xlsx 文件');
+    }
+
+    if (rows.length < 2) throw new Error('文件为空或只有表头');
+
+    // 解析表头
+    const header = rows[0].map((c) => String(c).trim().replace(/\*$/, '').trim());
+    const colIdx: Record<string, number> = {};
+    header.forEach((h, i) => { if (h) colIdx[h] = i; });
+
+    // 检查必填列
+    for (const c of ['登录账号', '姓名', '密码']) {
+      if (!(c in colIdx)) throw new Error(`缺少必填列：${c}`);
+    }
+
+    const getCell = (row: string[], key: string) => {
+      const i = colIdx[key];
+      if (i === undefined || i >= row.length) return '';
+      return String(row[i]).trim();
+    };
+
+    // 已有用户名集合
+    const existingUsernames = new Set(data.map((u) => u.username));
+
+    const previewRows: ImportPreviewRow[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const username = getCell(row, '登录账号');
+      const nickname = getCell(row, '姓名');
+      const password = getCell(row, '密码');
+      const email = getCell(row, '邮箱');
+      const phone = getCell(row, '手机号');
+      const department = getCell(row, '部门');
+      const userType = getCell(row, '用户类型');
+      const admin = getCell(row, '管理员');
+      const groups = getCell(row, '用户组');
+
+      // 全空行跳过
+      if (!username && !nickname && !password && !email && !phone && !department && !groups) continue;
+
+      let status: ImportPreviewRow['status'] = 'pending';
+      let error: string | undefined;
+
+      if (!username) { status = 'error'; error = '登录账号不能为空'; }
+      else if (!nickname) { status = 'error'; error = '姓名不能为空'; }
+      else if (!password) { status = 'error'; error = '密码不能为空'; }
+      else if (existingUsernames.has(username)) { status = 'existing'; }
+
+      previewRows.push({
+        row: i + 1, username, nickname, password, email, phone,
+        department, userType, admin, groups, status, error,
+      });
+    }
+    return previewRows;
+  };
+
+  const handleFileSelect = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('文件超过 5MB');
+      return false;
+    }
+    setImporting(true);
+    setImportResult(null);
+    setUpdateResult(null);
+    setExistingSelected([]);
+    try {
+      const rows = await parseImportFile(file);
+      setPreviewRows(rows);
+      setImportFile(file);
+    } catch (e: any) {
+      message.error(e?.message || '文件解析失败');
+    } finally {
+      setImporting(false);
+    }
+    return false;
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportProgress(0);
+
+    // 模拟进度动画
+    const progressTimer = setInterval(() => {
+      setImportProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + Math.random() * 15;
+      });
+    }, 200);
+
+    try {
+      const r = await usersApi.importFile(importFile);
+      clearInterval(progressTimer);
+      setImportProgress(100);
+      setImportResult(r);
+
+      // 在原表格上更新每行状态
+      const errorMap = new Map<string, string>();
+      (r.errors || []).forEach((e) => errorMap.set(e.username, e.reason));
+      const existingSet = new Set((r.existing || []).map((e) => e.username));
+
+      setPreviewRows((prev) =>
+        prev.map((row) => {
+          if (row.status === 'error') return row; // 前端校验失败的保持不变
+          if (errorMap.has(row.username)) {
+            return { ...row, status: 'error' as const, error: '导入失败', errorDetail: errorMap.get(row.username) };
+          }
+          if (existingSet.has(row.username)) {
+            return { ...row, status: 'existing' as const, error: '已存在' };
+          }
+          return { ...row, status: 'success' as const };
+        }),
+      );
+      load();
+    } catch (e: any) {
+      clearInterval(progressTimer);
+      setImportProgress(0);
+      message.error(e?.response?.data?.message || '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetImportDrawer = () => {
+    setImportOpen(false);
+    setPreviewRows([]);
+    setImportFile(null);
+    setImportResult(null);
+    setImportProgress(0);
+    setExistingSelected([]);
+    setUpdateResult(null);
+  };
+
   return (
     <>
       <PageToolbar>
@@ -234,8 +459,8 @@ export default function UserListPage() {
         <Button icon={<ReloadOutlined />} onClick={load} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
           刷新
         </Button>
-        <Button icon={<ImportOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
-          批量导入
+        <Button icon={<ImportOutlined />} onClick={() => { resetImportDrawer(); setImportOpen(true); }} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
+          导入
         </Button>
         <Button
           danger
@@ -313,13 +538,12 @@ export default function UserListPage() {
           },
           {
             title: '操作',
-            width: 140,
+            width: 120,
             fixed: 'right',
             render: (_, r) => (
-              <Space size={4}>
-                <Tooltip title="编辑">
-                  <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ color: '#6b7280' }} />
-                </Tooltip>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
+                <span className="act-link" onClick={() => openEdit(r)}>编辑</span>
+                <span className="act-sep" />
                 <Dropdown
                   trigger={['click']}
                   menu={{
@@ -339,12 +563,12 @@ export default function UserListPage() {
                       { type: 'divider' },
                       {
                         key: 'delete',
-                        label: r.is_staff ? '管理员不可删除' : '删除',
+                        label: '删除',
                         icon: <DeleteOutlined />,
                         danger: true,
-                        disabled: r.is_staff,
+                        disabled: r.username === 'admin',
                         onClick: () => {
-                          if (r.is_staff) return;
+                          if (r.username === 'admin') return;
                           modal.confirm({
                             title: `确认删除 ${r.username}？`,
                             content: '删除后不可恢复。',
@@ -356,9 +580,9 @@ export default function UserListPage() {
                     ],
                   }}
                 >
-                  <Button type="text" size="small" icon={<MoreOutlined />} className="user-more-btn" />
+                  <span className="act-link">···</span>
                 </Dropdown>
-              </Space>
+              </div>
             ),
           },
         ]}
@@ -579,111 +803,254 @@ export default function UserListPage() {
         </div>
       </Drawer>
 
-      <Modal
-        title="批量导入用户"
+      <Drawer
+        title={null}
+        closable={false}
         open={importOpen}
-        onCancel={() => { setImportOpen(false); setImportResult(null); }}
-        footer={null}
-        width={640}
+        onClose={resetImportDrawer}
+        width={900}
         destroyOnClose
+        className="import-drawer"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7 }}>
-              先下载模板填好再上传，**带 <span style={{ color: '#ef4444' }}>*</span> 的列必填**：
-              <br />
-              · 登录账号<span style={{ color: '#ef4444' }}>*</span> · 姓名<span style={{ color: '#ef4444' }}>*</span> · 密码<span style={{ color: '#ef4444' }}>*</span> · 邮箱 · 手机号 · 部门 · 用户类型 · 管理员
-              <br />
-              · 部门按"名称"匹配（与系统中的部门同名）；用户类型 internal/external；管理员是/否
-              <br />
-              · 文件 ≤ 5MB，支持 .csv 和 .xlsx
-            </div>
-            <Space style={{ marginTop: 10 }}>
-              <Button
-                size="small"
-                icon={<DownloadOutlined />}
-                href={usersApi.templateURL('xlsx')}
-                target="_blank"
-                rel="noopener"
-              >
-                下载 XLSX 模板
-              </Button>
-              <Button
-                size="small"
-                icon={<DownloadOutlined />}
-                href={usersApi.templateURL('csv')}
-                target="_blank"
-                rel="noopener"
-              >
-                下载 CSV 模板
-              </Button>
-            </Space>
-          </div>
+        <div className="app-drawer-header">
+          <span className="app-drawer-title">导入 & 创建</span>
+          <Button type="text" icon={<CloseOutlined />} onClick={resetImportDrawer} className="drawer-close-btn" />
+        </div>
+        <div className="import-drawer-body">
+          {/* ---- 阶段一：上传文件 ---- */}
+          {!importFile && !importResult && (
+            <>
+              <div className="import-rules-panel">
+                <div className="import-rules-title">
+                  先下载模板填好再上传，<span style={{ color: '#f54a45' }}>*</span> 的列必填：
+                </div>
+                <ul className="import-rules-list">
+                  <li>登录账号<span style={{ color: '#f54a45' }}>*</span>、姓名<span style={{ color: '#f54a45' }}>*</span>、密码<span style={{ color: '#f54a45' }}>*</span>、邮箱、手机号、部门、用户类型、管理员、用户组</li>
+                  <li>部门按"名称"匹配（与系统中的部门同名）；用户类型 internal/external；管理员是/否</li>
+                  <li>用户组按名称匹配，多个用逗号分隔（如"研发组,测试组"）；不存在的组会跳过并记录警告</li>
+                  <li>文件 ≤ 5MB，支持 .csv 和 .xlsx</li>
+                </ul>
+                <div className="import-template-btns">
+                  <Button size="small" icon={<DownloadOutlined />} href={usersApi.templateURL('xlsx')}>
+                    下载 XLSX 模板
+                  </Button>
+                  <Button size="small" icon={<DownloadOutlined />} href={usersApi.templateURL('csv')}>
+                    下载 CSV 模板
+                  </Button>
+                </div>
+              </div>
 
-          <Upload.Dragger
-            multiple={false}
-            showUploadList={false}
-            accept=".csv,.xlsx"
-            beforeUpload={(file) => {
-              if (file.size > 5 * 1024 * 1024) {
-                message.error('文件超过 5MB');
-                return Upload.LIST_IGNORE;
-              }
-              setImporting(true);
-              setImportResult(null);
-              usersApi
-                .importFile(file)
-                .then((r) => {
-                  setImportResult(r);
-                  if (r.failed === 0) {
-                    message.success(`已导入 ${r.success} 个用户`);
-                  } else {
-                    message.warning(`导入完成：成功 ${r.success}，失败 ${r.failed}`);
-                  }
-                  load();
-                })
-                .catch((e) => {
-                  message.error(e?.response?.data?.message || '导入失败');
-                })
-                .finally(() => setImporting(false));
-              return false; // 拦截默认上传
-            }}
-            disabled={importing}
-          >
-            <p style={{ margin: 0, fontSize: 32, color: '#1677ff' }}>
-              <UploadOutlined />
-            </p>
-            <p style={{ margin: '8px 0 4px', fontSize: 14 }}>
-              {importing ? '正在导入…' : '点击或拖拽文件到这里上传'}
-            </p>
-            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>仅支持 .csv / .xlsx</p>
-          </Upload.Dragger>
+              <Upload.Dragger
+                multiple={false}
+                showUploadList={false}
+                accept=".csv,.xlsx"
+                className="import-upload-dragger"
+                beforeUpload={handleFileSelect}
+                disabled={importing}
+              >
+                <p className="upload-icon-text">
+                  <UploadOutlined style={{ fontSize: 24, color: 'var(--primary-color)' }} />
+                </p>
+                <p className="upload-main-text">
+                  点击或将文件拖拽到这里<span>上传</span>
+                </p>
+                <p className="upload-hint-text">仅支持 .csv / .xlsx</p>
+              </Upload.Dragger>
+            </>
+          )}
 
-          {importResult && (
-            <div>
-              <Space size="large" style={{ marginBottom: 8 }}>
-                <span>共 <b>{importResult.total}</b> 行</span>
-                <span style={{ color: '#10b981' }}>成功 <b>{importResult.success}</b></span>
-                <span style={{ color: '#ef4444' }}>失败 <b>{importResult.failed}</b></span>
-              </Space>
-              {importResult.errors.length > 0 && (
-                <Table
-                  size="small"
-                  rowKey={(r) => `${r.row}-${r.username}`}
-                  dataSource={importResult.errors}
-                  pagination={false}
-                  scroll={{ y: 200 }}
-                  columns={[
-                    { title: '行号', dataIndex: 'row', width: 60 },
-                    { title: '账号', dataIndex: 'username', width: 140 },
-                    { title: '失败原因', dataIndex: 'reason' },
-                  ]}
-                />
+          {/* ---- 阶段二：预览表格 + 导入结果（统一展示） ---- */}
+          {importFile && (
+            <div className="import-preview-section">
+              {/* 统计栏 */}
+              <div className="import-stats-bar">
+                <span className="stat-total">总共: {previewRows.length}</span>
+                <span className="stat-success">成功: {previewRows.filter((r) => r.status === 'success').length}</span>
+                <span className="stat-error">失败: {previewRows.filter((r) => r.status === 'error').length}</span>
+                <span className="stat-pending">待处理: {previewRows.filter((r) => r.status === 'pending' || r.status === 'existing').length}</span>
+              </div>
+
+              {/* 进度条 */}
+              {importing && (
+                <div className="import-progress-wrap">
+                  <div className="import-progress-bar">
+                    <div className="import-progress-fill" style={{ width: `${Math.min(importProgress, 100)}%` }} />
+                  </div>
+                  <span className="import-progress-text">{Math.min(Math.round(importProgress), 100)}%</span>
+                </div>
+              )}
+
+              {/* 数据表格 */}
+              <div className="import-preview-table-wrap">
+                <table className="import-preview-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 60 }}>状态</th>
+                      <th>*名称</th>
+                      <th>*用户名</th>
+                      <th>*邮箱</th>
+                      <th>手机</th>
+                      <th>部门</th>
+                      <th>用户类型</th>
+                      <th>管理员</th>
+                      <th>用户组</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row) => (
+                      <tr key={row.row} className={row.status === 'error' ? 'row-error' : row.status === 'existing' ? 'row-existing' : row.status === 'success' ? 'row-success' : ''}>
+                        <td>
+                          {row.status === 'error' ? (
+                            <Tooltip title={row.errorDetail || row.error}><WarningOutlined style={{ color: '#f54a45' }} /></Tooltip>
+                          ) : row.status === 'existing' ? (
+                            <Tooltip title="账号已存在"><ExclamationCircleOutlined style={{ color: '#faad14' }} /></Tooltip>
+                          ) : row.status === 'success' ? (
+                            <CheckCircleOutlined style={{ color: '#64894d' }} />
+                          ) : (
+                            <CheckCircleOutlined style={{ color: '#64894d', opacity: 0.5 }} />
+                          )}
+                        </td>
+                        <td>{row.nickname}</td>
+                        <td className="col-account">{row.username}</td>
+                        <td>{row.email || '-'}</td>
+                        <td>{row.phone || '-'}</td>
+                        <td>{row.department || '-'}</td>
+                        <td>{row.userType || 'internal'}</td>
+                        <td>{row.admin || '否'}</td>
+                        <td>{row.groups || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 已存在用户处理 */}
+              {importResult && (importResult.existing?.length ?? 0) > 0 && !updateResult && (
+                <div className="import-existing-section">
+                  <div className="import-existing-header">
+                    <ExclamationCircleOutlined className="existing-icon" />
+                    <span className="existing-title">以下账号已存在，是否更新信息？</span>
+                  </div>
+                  <table className="import-existing-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}>
+                          <Checkbox
+                            checked={existingSelected.length === (importResult.existing?.length ?? 0)}
+                            indeterminate={existingSelected.length > 0 && existingSelected.length < (importResult.existing?.length ?? 0)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setExistingSelected((importResult.existing || []).map((_, idx) => idx));
+                              } else {
+                                setExistingSelected([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th style={{ width: 60 }}>行号</th>
+                        <th>账号</th>
+                        <th>姓名</th>
+                        <th>邮箱</th>
+                        <th>手机号</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(importResult.existing || []).map((item, idx) => (
+                        <tr key={`${item.row}-${item.username}`}>
+                          <td>
+                            <Checkbox
+                              checked={existingSelected.includes(idx)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setExistingSelected([...existingSelected, idx]);
+                                } else {
+                                  setExistingSelected(existingSelected.filter((i) => i !== idx));
+                                }
+                              }}
+                            />
+                          </td>
+                          <td>{item.row}</td>
+                          <td className="col-account">{item.username}</td>
+                          <td>{item.nickname}</td>
+                          <td>{item.email || '-'}</td>
+                          <td>{item.phone || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="import-existing-actions">
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setImportResult({ ...importResult, existing: [] });
+                        setExistingSelected([]);
+                      }}
+                    >
+                      全部跳过
+                    </Button>
+                    <Button
+                      type="primary"
+                      size="small"
+                      loading={updatingExisting}
+                      disabled={existingSelected.length === 0}
+                      onClick={handleUpdateExisting}
+                    >
+                      更新选中{existingSelected.length > 0 ? `（${existingSelected.length}）` : ''}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* 更新结果 */}
+              {updateResult && (
+                <div className="import-existing-section">
+                  <div className="import-existing-header">
+                    <span className="existing-title">更新完成：成功 <strong style={{ color: '#64894d' }}>{updateResult.updated}</strong> 个</span>
+                    {updateResult.failed > 0 && (
+                      <span style={{ color: '#f54a45', marginLeft: 16 }}>失败 <strong>{updateResult.failed}</strong> 个</span>
+                    )}
+                  </div>
+                  {updateResult.errors.length > 0 && (
+                    <table className="import-result-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 60 }}>行号</th>
+                          <th style={{ width: 120 }}>账号</th>
+                          <th>失败原因</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {updateResult.errors.map((err) => (
+                          <tr key={`update-${err.row}-${err.username}`}>
+                            <td>{err.row}</td>
+                            <td className="col-account">{err.username}</td>
+                            <td className="col-reason">{err.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               )}
             </div>
           )}
         </div>
-      </Modal>
+        <div className="drawer-footer">
+          <Button onClick={resetImportDrawer}>取消</Button>
+          {!importResult && (
+            <Button
+              type="primary"
+              loading={importing}
+              onClick={handleImportConfirm}
+            >
+              导入
+            </Button>
+          )}
+          {importResult && (
+            <Button type="primary" onClick={resetImportDrawer}>继续</Button>
+          )}
+        </div>
+      </Drawer>
 
       </Card>
     </>

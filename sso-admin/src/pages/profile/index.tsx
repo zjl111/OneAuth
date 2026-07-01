@@ -117,7 +117,7 @@ export default function ProfilePage() {
                   <Form.Item name="nickname" label="昵称" rules={[{ required: true, message: '请输入昵称' }]}>
                     <Input />
                   </Form.Item>
-                  <Form.Item name="email" label="邮箱">
+                  <Form.Item name="email" label="邮箱" rules={[{ required: true, message: '请输入邮箱' }]}>
                     <Input />
                   </Form.Item>
                   <Form.Item name="phone" label="手机号">

@@ -297,7 +297,7 @@
 }
 
 .label-tip-icon:hover {
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 /* 必填星号红色 */
@@ -396,7 +396,7 @@
 
 .ant-tree-select-dropdown .ant-select-tree-node-selected {
   background: #e6f4ff !important;
-  color: #1677ff;
+  color: var(--primary-color);
 }
 
 /* TreeSelect 搜索框 */
@@ -429,7 +429,7 @@
   padding: 0 14px;
   margin-bottom: 0;
   color: #fff;
-  background: #1677ff;
+  background: var(--primary-color);
   border: none;
   border-radius: 6px;
   box-shadow: none;
@@ -458,7 +458,7 @@
 }
 
 .phone-flex-group:focus-within {
-  border-color: #1677ff;
+  border-color: var(--primary-color);
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
 }
 
@@ -577,4 +577,396 @@
   min-width: 72px;
   height: 36px;
   font-size: 14px;
+}
+
+/* ---- 批量导入抽屉布局 ---- */
+.import-drawer .ant-drawer-header {
+  display: none;
+}
+
+.import-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.import-drawer .app-drawer-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #eaeefb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.import-drawer .app-drawer-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.import-drawer-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 规则说明面板 */
+.import-rules-panel {
+  background: #ffffff;
+  border: 1px solid #dee0e3;
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-rules-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+  line-height: 1.6;
+}
+
+.import-rules-list {
+  font-size: 13px;
+  color: #646a73;
+  line-height: 1.6;
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.import-rules-list li::before {
+  content: "· ";
+  font-weight: bold;
+  color: #bbbfc4;
+}
+
+.import-rules-list li {
+  margin-bottom: 6px;
+}
+
+.import-template-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.import-template-btns .ant-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #dee0e3;
+  background: #ffffff;
+  color: #646a73;
+  font-size: 12px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.import-template-btns .ant-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+/* 上传区域 */
+.import-upload-dragger.ant-upload-drag {
+  height: 110px;
+  border: 1px dashed #dee0e3;
+  border-radius: 6px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-upload-dragger.ant-upload-drag:hover {
+  border-color: var(--primary-color);
+  background: rgba(44, 106, 165, 0.04);
+}
+
+.upload-icon-text {
+  margin: 0;
+  font-size: 20px;
+}
+
+.upload-main-text {
+  margin: 0;
+  font-size: 13px;
+  color: #1f2329;
+}
+
+.upload-main-text span {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.upload-hint-text {
+  margin: 0;
+  font-size: 12px;
+  color: #bbbfc4;
+}
+
+/* 导入结果 */
+.import-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.import-result-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.import-result-summary .stat-success {
+  color: #64894d;
+}
+
+.import-result-summary .stat-error {
+  color: #f54a45;
+}
+
+.import-result-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.import-result-table th {
+  background: #f5f7fa;
+  color: #1f2329;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eaeefb;
+}
+
+.import-result-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #646a73;
+  line-height: 1.4;
+}
+
+.import-result-table .col-account {
+  width: 120px;
+  color: #1f2329 !important;
+}
+
+.import-result-table .col-reason {
+  color: #f54a45;
+}
+
+/* 导入结果摘要中的警告色 */
+.import-result-summary .stat-warning {
+  color: #fa8c16;
+}
+
+/* ---- 统计栏 ---- */
+.import-stats-bar {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+}
+
+.import-stats-bar span {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #646a73;
+  background: #f0f2f5;
+  border: 1px solid #e8e8e8;
+  border-right: none;
+  line-height: 1.4;
+}
+
+.import-stats-bar span:first-child {
+  border-radius: 4px 0 0 4px;
+  background: #64894d;
+  color: #fff;
+  border-color: #64894d;
+}
+
+.import-stats-bar span:last-child {
+  border-right: 1px solid #e8e8e8;
+  border-radius: 0 4px 4px 0;
+}
+
+.import-stats-bar .stat-success { color: #64894d; }
+.import-stats-bar .stat-error { color: #f54a45; }
+.import-stats-bar .stat-pending { color: #faad14; }
+
+/* ---- 预览表格 ---- */
+.import-preview-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.import-preview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.import-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.import-preview-table th {
+  background: #fafafa;
+  color: #1f2329;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e8e8e8;
+  white-space: nowrap;
+}
+
+.import-preview-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #646a73;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.import-preview-table .col-account {
+  color: #1f2329 !important;
+  font-weight: 500;
+}
+
+.import-preview-table tr.row-error {
+  background: #fff2f0;
+}
+
+.import-preview-table tr.row-error td {
+  color: #f54a45;
+}
+
+.import-preview-table tr.row-existing {
+  background: #fffbe6;
+}
+
+.import-preview-table tr.row-success {
+  background: #f6ffed;
+}
+
+/* ---- 进度条 ---- */
+.import-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.import-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.import-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #64894d, #7a9f5e);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.import-progress-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64894d;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ---- 已存在用户提示区域 ---- */
+.import-existing-section {
+  margin-top: 16px;
+  border: 1px solid #faad14;
+  border-radius: 6px;
+  background: #fffbe6;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-existing-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-existing-header .existing-icon {
+  color: #faad14;
+  font-size: 16px;
+}
+
+.import-existing-header .existing-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.import-existing-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.import-existing-table th {
+  background: #f5f7fa;
+  color: #1f2329;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eaeefb;
+}
+
+.import-existing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #646a73;
+  line-height: 1.4;
+}
+
+.import-existing-table .col-account {
+  color: #1f2329 !important;
+  font-weight: 500;
+}
+
+.import-existing-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.import-existing-actions .ant-btn {
+  min-width: 80px;
 }

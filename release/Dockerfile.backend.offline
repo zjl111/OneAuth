@@ -1,0 +1,8 @@
+FROM scratch
+WORKDIR /app
+COPY release/build/backend/sso-server /app/sso-server
+COPY sso-server/configs /app/configs
+COPY sso-server/data/ip2region.xdb /app/data/ip2region.xdb
+COPY release/build/base/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+EXPOSE 8080
+CMD ["/app/sso-server", "--config", "/app/configs/config.yaml"]

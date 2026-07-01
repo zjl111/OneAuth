@@ -22,6 +22,7 @@ type SiteInfo struct {
 	HeroTitle       string `json:"hero_title"`
 	HeroSubtitle    string `json:"hero_subtitle"`
 	HeroDescription string `json:"hero_description"`
+	LoginStyle      string `json:"login_style"`
 	SMTPEnabled     bool   `json:"smtp_enabled"`
 }
 
@@ -33,6 +34,7 @@ func (h *SiteHandler) Info(c *gin.Context) {
 		HeroTitle:       "OneAuth",
 		HeroSubtitle:    "一键登录所有应用",
 		HeroDescription: "OneAuth 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。",
+		LoginStyle:      "modal",
 	}
 	items, err := h.ConfigRepo.GetByCategory("platform")
 	if err == nil {
@@ -59,6 +61,10 @@ func (h *SiteHandler) Info(c *gin.Context) {
 			case "hero_description":
 				if it.Value != "" {
 					info.HeroDescription = it.Value
+				}
+			case "login_style":
+				if it.Value != "" {
+					info.LoginStyle = it.Value
 				}
 			}
 		}

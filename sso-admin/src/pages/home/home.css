@@ -58,52 +58,53 @@
   align-items: center;
   gap: 12px;
   font-size: 26px;
-  font-weight: 800;
-  color: #1d2c5b;
+  font-weight: 600;
+  color: #1f2329;
   letter-spacing: 0.5px;
 }
-.home-brand .brand-suffix { color: #1677ff; }
+.home-brand .brand-suffix { color: var(--primary-color); }
 
 /* Hero —— 整页减去顶部 brand 高度，纵向居中文案 */
 .home-hero {
   position: relative;
   z-index: 1;
-  min-height: calc(100vh - 100px);
+  height: calc(100vh - 90px);
   display: flex;
   align-items: center;
   padding: 0 56px;
   max-width: 1480px;
   margin: 0 auto;
 }
+
+/* 嵌入式登录模式：标题在顶部，登录框在 home-hero-text 内居中 */
+.home-hero.home-hero-inline {
+  align-items: flex-start;
+  padding-top: 60px;
+}
+
 .home-hero-text {
   max-width: 620px;
   margin-left: clamp(0px, 4vw, 56px);
 }
-.home-hero-title {
+.home-hero-subtitle {
   margin: 0;
-  font-size: clamp(56px, 6.4vw, 96px);
-  line-height: 1.05;
-  font-weight: 800;
-  color: #1d2c5b;
-  letter-spacing: -1.5px;
-}
-.home-hero-title .accent {
-  color: #1677ff;
+  font-size: 56px !important;
+  font-weight: 600 !important;
+  color: #1f2329;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
 }
 
-.home-hero-subtitle {
-  margin: 18px 0 0;
-  font-size: clamp(32px, 3.6vw, 52px);
-  font-weight: 700;
-  color: #1d2c5b;
-  letter-spacing: 2px;
-  line-height: 1.15;
+/* 嵌入式模式下，登录框在 home-hero-text 内靠左对齐 */
+.home-hero-inline-form {
+  margin-top: 32px;
 }
 .home-hero-desc {
   margin: 28px 0 0;
   font-size: 15px;
-  color: #4b5563;
-  line-height: 1.85;
+  font-weight: 400;
+  color: #646a73;
+  line-height: 1.6;
   max-width: 460px;
 }
 
@@ -118,7 +119,9 @@
   border-radius: 10px;
   background: #1d4ed8;
   border-color: #1d4ed8;
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
   letter-spacing: 1px;
   box-shadow: 0 10px 24px rgba(29, 78, 216, 0.28);
 }
@@ -138,12 +141,68 @@
 }
 .home-cta-secondary:hover {
   background: #fff !important;
-  border-color: #1677ff !important;
-  color: #1677ff !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
 }
 
 @media (max-width: 880px) {
   .home-header { padding: 16px 20px; }
   .home-hero { padding: 24px 20px 0; }
   .home-hero-text { max-width: 100%; }
+}
+
+/* ---- 嵌入式登录卡片 ---- */
+.inline-login-card {
+  width: 400px;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.18);
+  margin-top: 40px;
+}
+
+.inline-login-head {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.inline-login-head h2 {
+  margin: 0;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: #1f2329;
+  letter-spacing: 0.5px;
+}
+.inline-login-head h2 .brand {
+  color: var(--primary-color);
+  margin-left: 4px;
+}
+.inline-login-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: #646a73;
+  line-height: 1.6;
+}
+
+.inline-login-card .ant-input-affix-wrapper,
+.inline-login-card .ant-input-password {
+  background: #f5f7fb;
+  border-color: transparent;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.inline-login-card .ant-input-affix-wrapper:hover,
+.inline-login-card .ant-input-affix-wrapper-focused {
+  background: #fff;
+  border-color: var(--primary-color);
+}
+.inline-login-card .ant-input-affix-wrapper .ant-input { background: transparent; }
+.inline-login-card .ant-input-prefix { color: #94a3b8; margin-right: 10px; }
+
+@media (max-width: 880px) {
+  .inline-login-card {
+    width: 100%;
+    margin-top: 32px;
+  }
 }

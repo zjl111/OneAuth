@@ -36,7 +36,7 @@ const TONE_BG: Record<StatCard['tone'], string> = {
   orange: 'linear-gradient(135deg, #ffedd5, #fff7ed)',
 };
 const TONE_FG: Record<StatCard['tone'], string> = {
-  blue: '#1677ff',
+  blue: 'var(--primary-color)',
   green: '#10b981',
   purple: '#8b5cf6',
   red: '#ef4444',
@@ -130,7 +130,7 @@ export default function DashboardPage() {
         style={{ marginTop: 16 }}
         title={
           <Space>
-            <EnvironmentOutlined style={{ color: '#1677ff' }} />
+            <EnvironmentOutlined style={{ color: 'var(--primary-color)' }} />
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>30 日 TOP10 访问统计</span>
           </Space>
         }
@@ -171,7 +171,7 @@ export default function DashboardPage() {
             className="dash-card"
             title={
               <Space>
-                <ClockCircleOutlined style={{ color: '#1677ff' }} />
+                <ClockCircleOutlined style={{ color: 'var(--primary-color)' }} />
                 <span>近 30 天登录趋势</span>
               </Space>
             }
@@ -182,6 +182,13 @@ export default function DashboardPage() {
               xField="date"
               legend={false}
               height={300}
+              tooltip={{
+                title: (d: any) => d.date,
+                content: (items: any[]) => {
+                  const count = items[0]?.value ?? 0;
+                  return `<div style="font-size:13px;color:#333">登录次数：<strong>${count}</strong></div>`;
+                },
+              }}
               children={[
                 {
                   type: 'interval',

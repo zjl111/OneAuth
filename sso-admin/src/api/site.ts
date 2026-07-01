@@ -9,6 +9,7 @@ export interface SiteInfo {
   hero_title?: string;
   hero_subtitle?: string;
   hero_description?: string;
+  login_style?: 'modal' | 'inline';
   smtp_enabled?: boolean;
 }
 

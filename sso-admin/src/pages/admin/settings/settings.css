@@ -16,7 +16,7 @@
 }
 
 .settings-page .ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: #1677ff;
+  color: var(--primary-color);
   font-weight: 600;
 }
 
@@ -74,4 +74,10 @@
 /* ---- 保存按钮区域 ---- */
 .settings-page .ant-space {
   margin-top: 8px;
+}
+
+/* ---- 登录页预览卡片 ---- */
+.login-preview-card {
+  position: sticky;
+  top: 16px;
 }

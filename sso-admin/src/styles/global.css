@@ -1,3 +1,9 @@
+:root {
+  --text-main: #1f2329;
+  --text-secondary: #646a73;
+  --text-placeholder: #bbbfc4;
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;
@@ -36,3 +42,93 @@ a { text-decoration: none; }
 
 .text-muted { color: #6b7280; }
 .text-small { font-size: 12px; }
+
+/* ---- 操作列文字链接风格 ---- */
+.act-link {
+  color: var(--primary-color);
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  display: inline-block;
+  line-height: 1.4;
+}
+.act-link:hover {
+  opacity: 0.75;
+}
+.act-sep {
+  width: 1px;
+  height: 14px;
+  background: #e5e7eb;
+  margin: 0 4px;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ---- 全局表格样式规范 ---- */
+.ant-table-thead > tr > th {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--text-main) !important;
+  background: #f5f7fa !important;
+}
+
+.ant-table-tbody > tr > td {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ---- 按钮样式规范 ---- */
+.ant-btn {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+
+.ant-btn-primary {
+  font-weight: 500 !important;
+}
+
+/* ---- 表单输入框样式规范 ---- */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+
+.ant-input::placeholder,
+.ant-input-affix-wrapper .ant-input::placeholder,
+.ant-select-selection-placeholder,
+.ant-picker-input > input::placeholder {
+  font-size: 13px !important;
+  color: var(--text-placeholder) !important;
+}
+
+/* ---- 全局标题层级 ---- */
+h1, .page-title {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: var(--text-main) !important;
+}
+
+h2, .section-title {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: var(--text-main) !important;
+}
+
+/* ---- 抽屉标题统一 16px ---- */
+.ant-drawer-title,
+.app-drawer-title,
+.protocol-drawer-title {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: var(--text-main) !important;
+}

@@ -9,18 +9,21 @@
 }
 .login-modal-head h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: #1d2c5b;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: #1f2329;
+  letter-spacing: 0.5px;
 }
 .login-modal-head h2 .brand {
-  color: #1677ff;
+  color: var(--primary-color);
   margin-left: 4px;
 }
 .login-modal-head p {
   margin: 6px 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  font-weight: 400;
+  color: #646a73;
+  line-height: 1.6;
 }
 
 .login-modal .ant-input-affix-wrapper,
@@ -33,7 +36,7 @@
 .login-modal .ant-input-affix-wrapper:hover,
 .login-modal .ant-input-affix-wrapper-focused {
   background: #fff;
-  border-color: #1677ff;
+  border-color: var(--primary-color);
 }
 .login-modal .ant-input-affix-wrapper .ant-input { background: transparent; }
 .login-modal .ant-input-prefix { color: #94a3b8; margin-right: 10px; }
@@ -41,19 +44,26 @@
 .login-modal-submit {
   height: 46px;
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
-  background: linear-gradient(135deg, #1677ff, #4f8cff);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--primary-color), #7a9f5e);
   border: none;
   letter-spacing: 2px;
 }
 .login-modal-submit:hover {
-  background: linear-gradient(135deg, #4f8cff, #1677ff) !important;
+  background: linear-gradient(135deg, #7a9f5e, var(--primary-color)) !important;
 }
 
-.login-modal-foot {
-  text-align: center;
-  margin-top: 4px;
-  font-size: 13.5px;
+.login-modal-forgot {
+  text-align: right;
+  margin: -8px 0 8px;
+  font-size: 13px;
 }
-.login-modal-foot a { color: #1677ff; }
+.login-modal-forgot a {
+  color: var(--primary-color);
+  cursor: pointer;
+}
+.login-modal-forgot a:hover {
+  opacity: 0.75;
+}

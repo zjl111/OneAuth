@@ -67,12 +67,10 @@ export default function OnlineSessionTable() {
           { title: '过期时间', dataIndex: 'expires_at', width: 170, render: fmtTime },
           {
             title: '操作',
-            width: 120,
+            width: 100,
             render: (_, r) => (
               <Popconfirm title={`强制 ${r.username} 下线？`} okType="danger" onConfirm={() => handleKick(r)}>
-                <Button type="link" size="small" danger icon={<LogoutOutlined />}>
-                  强制下线
-                </Button>
+                <span className="act-link" style={{ color: '#ef4444' }}>强制下线</span>
               </Popconfirm>
             ),
           },

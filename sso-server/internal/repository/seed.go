@@ -294,6 +294,7 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "platform", Key: "hero_title", Value: "OneAuth", Description: "首页主标题（一般等于平台名）"},
 		{Category: "platform", Key: "hero_subtitle", Value: "一键登录所有应用", Description: "首页副标题"},
 		{Category: "platform", Key: "hero_description", Value: "OneAuth 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。", Description: "首页描述"},
+		{Category: "platform", Key: "login_style", Value: "modal", Description: "登录方式（modal=弹框登录, inline=嵌入登录）"},
 		{Category: "security", Key: "session_timeout", Value: "7200", Description: "无活动自动登出（秒），0 = 禁用"},
 		{Category: "security", Key: "password_min_length", Value: "8", Description: "密码最小长度"},
 		{Category: "security", Key: "login_lockout_threshold", Value: "10", Description: "登录失败锁定阈值"},

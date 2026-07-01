@@ -6,13 +6,15 @@ import { useAuthStore } from '@/store/authStore';
 import { useSite } from '@/hooks/useSite';
 import SiteLogo from '@/components/SiteLogo';
 import LoginModal from '@/components/LoginModal';
+import InlineLoginForm from '@/components/InlineLoginForm';
 import './home.css';
 
 /**
  * 首页落地页：
- * - 未登录显示"立即登录"按钮 → 打开 LoginModal
- * - 已登录显示"进入应用门户"按钮
- * - 兼容 OAuth 流程：?return_to=/oauth/authorize?... 时自动弹出登录框，登录后回跳
+ * - 已登录自动跳转应用门户（/portal），不展示落地页
+ * - login_style === 'inline' 时，标题下方直接显示登录表单
+ * - 否则（默认 modal），点击"立即登录"按钮弹出 LoginModal
+ * - 兼容 OAuth 流程：?return_to=/oauth/authorize?... 时自动登录/回跳
  */
 export default function HomePage() {
   const navigate = useNavigate();
@@ -22,11 +24,16 @@ export default function HomePage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [loginOpen, setLoginOpen] = useState(false);
 
+  const isInline = site.login_style === 'inline' && !isAuthenticated;
+
+  // 已登录且没有 return_to → 直接进门户
+  useEffect(() => {
+    if (isAuthenticated && !returnTo) {
+      navigate('/portal', { replace: true });
+    }
+  }, [isAuthenticated, returnTo, navigate]);
+
   // 携带 return_to 落地时：已登录直接回跳；未登录自动弹出登录框
-  // 防回环：access_token 在 localStorage 但 sso_session cookie 已失效时，
-  //   后端协议入口 (/cas/* /saml/* /oauth/authorize) 又会 302 回 "/?return_to=同一个URL"，
-  //   useEffect 又跳过去，循环。用 sessionStorage 记录"最近 5 秒内是否已经因这个 returnTo
-  //   被弹回来过一次"，命中就放弃自动跳转，弹登录框让用户重新登录。
   useEffect(() => {
     if (!returnTo) return;
     if (isAuthenticated) {
@@ -38,35 +45,29 @@ export default function HomePage() {
         const key = '__protoRedirect:' + returnTo;
         const last = Number(sessionStorage.getItem(key) || 0);
         if (last && Date.now() - last < 5000) {
-          // 5 秒内第二次回到首页 → 协议端点持续要求登录 = sso_session 失效
-          // 清掉本地 token, 弹登录框让用户重新登录
           sessionStorage.removeItem(key);
           useAuthStore.getState().clear();
           setLoginOpen(true);
           return;
         }
         sessionStorage.setItem(key, String(Date.now()));
-        // /oauth/authorize、/cas/、/saml/ 都是后端路由，必须 full reload 以便后端读到 cookie
         window.location.replace(returnTo);
       } else {
         navigate(returnTo, { replace: true });
       }
     } else {
-      setLoginOpen(true);
+      // inline 模式不需要自动弹框
+      if (!isInline) {
+        setLoginOpen(true);
+      }
     }
-  }, [returnTo, isAuthenticated, navigate]);
+  }, [returnTo, isAuthenticated, navigate, isInline]);
 
-  // 主标题如果未自定义，回落到 site.name
-  const title = site.hero_title || site.name || 'OneAuth';
-  const subtitle = site.hero_subtitle || '一键登录所有应用';
+  // 标题如果未自定义，回落到默认文案
+  const title = site.hero_title || '一键登录所有应用';
   const description =
     site.hero_description ||
-    `${title} 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。`;
-
-  // 把标题前后 1/2 分两段着色（设计图风格）
-  const mid = Math.ceil(title.length / 2);
-  const headPart = title.slice(0, mid);
-  const tailPart = title.slice(mid);
+    `${site.name || 'OneAuth'} 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。`;
 
   return (
     <div className="home-page">
@@ -78,53 +79,52 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* 主体：左文案 右插画（插画直接由背景图承载） */}
-      <section className="home-hero">
+      {/* 主体 */}
+      <section className={`home-hero ${isInline ? 'home-hero-inline' : ''}`}>
         <div className="home-hero-text">
-          <h1 className="home-hero-title">
-            {headPart}
-            <span className="accent">{tailPart}</span>
-          </h1>
-          <h2 className="home-hero-subtitle">{subtitle}</h2>
+          <h2 className="home-hero-subtitle">{title}</h2>
           <p className="home-hero-desc">{description}</p>
-          <div className="home-hero-cta">
-            {isAuthenticated ? (
-              <Button
-                type="primary"
-                size="large"
-                icon={<ArrowRightOutlined />}
-                iconPosition="end"
-                className="home-cta-primary"
-                onClick={() => navigate('/portal')}
-              >
-                进入应用门户
-              </Button>
-            ) : (
-              <Button
-                type="primary"
-                size="large"
-                icon={<ArrowRightOutlined />}
-                iconPosition="end"
-                className="home-cta-primary"
-                onClick={() => setLoginOpen(true)}
-              >
-                立即登录
-              </Button>
-            )}
-            <Button
-              size="large"
-              className="home-cta-secondary"
-              icon={<ArrowRightOutlined />}
-              iconPosition="end"
-              href="#"
-            >
-              了解更多
-            </Button>
-          </div>
+          {!isInline && (
+            <div className="home-hero-cta">
+              {isAuthenticated ? (
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<ArrowRightOutlined />}
+                  iconPosition="end"
+                  className="home-cta-primary"
+                  onClick={() => navigate('/portal')}
+                >
+                  进入应用门户
+                </Button>
+              ) : (
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<ArrowRightOutlined />}
+                  iconPosition="end"
+                  className="home-cta-primary"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  立即登录
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* 嵌入式登录表单 */}
+          {isInline && (
+            <div className="home-hero-inline-form">
+              <InlineLoginForm returnTo={returnTo} />
+            </div>
+          )}
         </div>
       </section>
 
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} returnTo={returnTo} />
+      {/* 弹框登录（modal 模式） */}
+      {!isInline && (
+        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} returnTo={returnTo} />
+      )}
     </div>
   );
 }

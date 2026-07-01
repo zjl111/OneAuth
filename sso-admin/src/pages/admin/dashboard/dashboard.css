@@ -40,7 +40,7 @@
 }
 .dash-card .ant-card-head { border-bottom: 1px solid #f3f4f6; }
 .dash-card .ant-card-head-title { font-weight: 600; color: #1d2c5b; }
-.dash-card .ant-card-extra a { font-size: 13px; color: #1677ff; }
+.dash-card .ant-card-extra a { font-size: 13px; color: var(--primary-color); }
 .dash-card .ant-card-body {
   padding: 18px 22px;
   flex: 1;
@@ -110,7 +110,7 @@
   height: 32px;
   border-radius: 10px;
   background: linear-gradient(135deg, #eaf2ff, #f4f7ff);
-  color: #1677ff;
+  color: var(--primary-color);
   display: grid;
   place-items: center;
   font-size: 14px;
@@ -216,7 +216,7 @@
   display: inline-block;
   margin-left: 6px;
   font-size: 11.5px;
-  color: #1677ff;
+  color: var(--primary-color);
   background: rgba(22, 119, 255, 0.08);
   padding: 1px 6px;
   border-radius: 999px;
@@ -239,6 +239,6 @@
 }
 .region-bars .rb-bar > span {
   display: block; height: 100%;
-  background: linear-gradient(90deg, #60a5fa, #1677ff);
+  background: linear-gradient(90deg, #60a5fa, var(--primary-color));
 }
 .region-bars .rb-count { width: 60px; text-align: right; color: #1d2c5b; font-size: 13px; }

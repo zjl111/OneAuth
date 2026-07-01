@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input, Dropdown, Empty, Spin, Segmented, App as AntdApp } from 'antd';
+import { Input, Dropdown, Empty, Spin, Segmented, App as AntdApp, Tooltip } from 'antd';
 import {
   SearchOutlined,
   AppstoreOutlined,
@@ -67,6 +67,7 @@ export default function PortalPage() {
   const [keyword, setKeyword] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent'>('all');
+  const [failedLogos, setFailedLogos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -133,9 +134,15 @@ export default function PortalPage() {
   };
 
   const renderLogo = (app: PortalApp) => {
-    if (!app.logo_url) return <SafetyCertificateOutlined />;
+    if (failedLogos.has(app.id) || !app.logo_url) return <SafetyCertificateOutlined />;
     if (app.logo_url.length <= 4) return <span className="emoji-logo">{app.logo_url}</span>;
-    return <img src={app.logo_url} alt={app.name} />;
+    return (
+      <img
+        src={app.logo_url}
+        alt=""
+        onError={() => setFailedLogos((prev) => new Set(prev).add(app.id))}
+      />
+    );
   };
 
   return (
@@ -190,13 +197,12 @@ export default function PortalPage() {
         ) : view === 'grid' ? (
           <div className="portal-grid">
             {filtered.map((app) => (
-              <div
-                key={app.id}
-                className="app-tile"
-                data-tone={toneOf(app.client_id)}
-                onClick={() => handleEnter(app)}
-                title={app.description || app.name}
-              >
+              <Tooltip key={app.id} title={app.description || undefined} mouseEnterDelay={0.3} placement="bottom">
+                <div
+                  className="app-tile"
+                  data-tone={toneOf(app.client_id)}
+                  onClick={() => handleEnter(app)}
+                >
                 <div className="app-tile-logo" style={{ position: 'relative' }}>
                   {renderLogo(app)}
                   {app.protocol === 'link' && (
@@ -224,6 +230,7 @@ export default function PortalPage() {
                 </div>
                 <div className="app-tile-name">{app.name}</div>
               </div>
+              </Tooltip>
             ))}
           </div>
         ) : (
@@ -231,12 +238,16 @@ export default function PortalPage() {
             {filtered.map((app) => (
               <div key={app.id} className="app-list-item" onClick={() => handleEnter(app)}>
                 <div className="list-logo" style={{ position: 'relative' }}>
-                  {app.logo_url && app.logo_url.length <= 4 ? (
-                    app.logo_url
-                  ) : app.logo_url ? (
-                    <img src={app.logo_url} alt={app.name} />
-                  ) : (
+                  {failedLogos.has(app.id) || !app.logo_url ? (
                     <SafetyCertificateOutlined />
+                  ) : app.logo_url.length <= 4 ? (
+                    app.logo_url
+                  ) : (
+                    <img
+                      src={app.logo_url}
+                      alt=""
+                      onError={() => setFailedLogos((prev) => new Set(prev).add(app.id))}
+                    />
                   )}
                   {app.protocol === 'link' && (
                     <span

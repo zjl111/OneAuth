@@ -20,7 +20,7 @@ export function SectionHead({ title, sub }: { title: string; sub?: string }) {
           color: '#1d2c5b',
         }}
       >
-        <span style={{ width: 3, height: 16, background: '#1677ff', borderRadius: 2 }} />
+        <span style={{ width: 3, height: 16, background: 'var(--primary-color)', borderRadius: 2 }} />
         {title}
       </div>
       {sub && <div style={{ color: '#94a3b8', marginTop: 6, fontSize: 13, paddingLeft: 11 }}>{sub}</div>}

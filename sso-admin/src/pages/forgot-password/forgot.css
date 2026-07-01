@@ -59,4 +59,4 @@
   color: #6b7280;
   margin-top: 8px;
 }
-.forgot-back:hover { color: #1677ff; }
+.forgot-back:hover { color: var(--primary-color); }

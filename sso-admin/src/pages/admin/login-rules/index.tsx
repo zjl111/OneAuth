@@ -203,18 +203,15 @@ export default function LoginRulesPage() {
           },
           {
             title: '操作',
-            width: 140,
+            width: 120,
             render: (_, r) => (
-              <Space size={4}>
-                <Button type="link" size="small" onClick={() => openEdit(r)}>
-                  编辑
-                </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
+                <span className="act-link" onClick={() => openEdit(r)}>编辑</span>
+                <span className="act-sep" />
                 <Popconfirm title={`删除规则「${r.name}」？`} okType="danger" onConfirm={() => handleDelete(r)}>
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
+                  <span className="act-link" style={{ color: '#ef4444' }}>删除</span>
                 </Popconfirm>
-              </Space>
+              </div>
             ),
           },
         ]}
@@ -222,101 +219,100 @@ export default function LoginRulesPage() {
 
       <Drawer
         title={editing ? '编辑用户登录控制' : '创建用户登录控制'}
-        width={840}
+        className="lr-drawer"
+        width={760}
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose
-        extra={
-          <Space>
-            <Button onClick={() => setOpen(false)}>取消</Button>
-            <Button type="primary" loading={saving} onClick={handleSave}>
-              保存
-            </Button>
-          </Space>
-        }
+        closable
       >
-        <Form
-          form={form}
-          labelCol={{ flex: '110px' }}
-          labelAlign="right"
-          colon={false}
-          preserve={false}
-          style={{ paddingRight: 12 }}
-        >
-          <RuleSection title="基本设置">
-            <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入规则名称' }]}>
-              <Input placeholder="名称" />
-            </Form.Item>
-            <Form.Item
-              name="priority"
-              label="优先级"
-              tooltip="数字越小越优先匹配；多条规则同优先级时按创建顺序"
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={1} max={1000} style={{ width: '100%' }} />
-            </Form.Item>
-          </RuleSection>
+        <div className="lr-form-container">
+          <Form
+            form={form}
+            layout="vertical"
+            preserve={false}
+          >
+            <RuleSection title="基本设置">
+              <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入规则名称' }]}>
+                <Input placeholder="名称" />
+              </Form.Item>
+              <Form.Item
+                name="priority"
+                label="优先级"
+                tooltip="数字越小越优先匹配；多条规则同优先级时按创建顺序"
+                rules={[{ required: true }]}
+              >
+                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </RuleSection>
 
-          <RuleSection title="用户">
-            <Form.Item name="user_scope" label="用户" rules={[{ required: true }]}>
-              <Radio.Group>
-                <Radio value="all">全部用户</Radio>
-                <Radio value="specific">指定用户</Radio>
-              </Radio.Group>
-            </Form.Item>
-            {userScope === 'specific' && (
-              <Form.Item name="user_ids" label=" ">
+            <RuleSection title="用户">
+              <Form.Item name="user_scope" label="用户" rules={[{ required: true }]}>
+                <Radio.Group>
+                  <Radio value="all">全部用户</Radio>
+                  <Radio value="specific">指定用户</Radio>
+                </Radio.Group>
+              </Form.Item>
+              {userScope === 'specific' && (
+                <Form.Item name="user_ids" label=" ">
+                  <Select
+                    mode="multiple"
+                    showSearch
+                    placeholder="选择用户"
+                    optionFilterProp="label"
+                    options={users.map((u) => ({
+                      value: u.id,
+                      label: `${u.nickname || u.username} (${u.email || u.username})`,
+                    }))}
+                  />
+                </Form.Item>
+              )}
+            </RuleSection>
+
+            <RuleSection title="规则">
+              <Form.Item
+                name="ips"
+                label="IP"
+                tooltip="* 表示匹配所有；支持单个 IP、CIDR (如 10.0.0.0/8)、IP 区间 (如 1.1.1.1-1.1.1.10)"
+                extra={
+                  <span style={{ color: '#94a3b8' }}>
+                    * 表示匹配所有。例如: 192.168.10.1, 192.168.1.0/24, 10.1.1.1-10.1.1.20, 2001:db8:2de::e13,
+                    2001:db8:1a:1110::/64
+                  </span>
+                }
+              >
                 <Select
-                  mode="multiple"
-                  showSearch
-                  placeholder="选择用户"
-                  optionFilterProp="label"
-                  options={users.map((u) => ({
-                    value: u.id,
-                    label: `${u.nickname || u.username} (${u.email || u.username})`,
-                  }))}
+                  mode="tags"
+                  placeholder="IP (按下 Enter 继续输入)"
+                  tokenSeparators={[',', ' ']}
+                  options={[{ value: '*', label: '* (全部)' }]}
                 />
               </Form.Item>
-            )}
-          </RuleSection>
+              <Form.Item name="time_mask" label="时段">
+                <TimeMaskWrapper />
+              </Form.Item>
+            </RuleSection>
 
-          <RuleSection title="规则">
-            <Form.Item
-              name="ips"
-              label="IP"
-              tooltip="* 表示匹配所有；支持单个 IP、CIDR (如 10.0.0.0/8)、IP 区间 (如 1.1.1.1-1.1.1.10)"
-              extra={
-                <span style={{ color: '#94a3b8' }}>
-                  * 表示匹配所有。例如: 192.168.10.1, 192.168.1.0/24, 10.1.1.1-10.1.1.20, 2001:db8:2de::e13,
-                  2001:db8:1a:1110::/64
-                </span>
-              }
-            >
-              <Select
-                mode="tags"
-                placeholder="IP (按下 Enter 继续输入)"
-                tokenSeparators={[',', ' ']}
-                options={[{ value: '*', label: '* (全部)' }]}
-              />
-            </Form.Item>
-            <Form.Item name="time_mask" label="时段">
-              <TimeMaskWrapper />
-            </Form.Item>
-          </RuleSection>
-
-          <RuleSection title="动作" last>
-            <Form.Item name="action" label="动作" rules={[{ required: true }]}>
-              <Radio.Group>
-                <Radio value="deny">
-                  <span style={{ color: '#ef4444', fontWeight: 500 }}>● 拒绝</span>
-                </Radio>
-                <Radio value="accept">
-                  <span style={{ color: '#10b981', fontWeight: 500 }}>● 接受</span>
-                </Radio>
-              </Radio.Group>
-            </Form.Item>
-          </RuleSection>
-        </Form>
+            <RuleSection title="动作">
+              <Form.Item name="action" label="动作" rules={[{ required: true }]}>
+                <Radio.Group>
+                  <Radio value="deny">
+                    <span style={{ color: '#ef4444', fontWeight: 500 }}>● 拒绝</span>
+                  </Radio>
+                  <Radio value="accept">
+                    <span style={{ color: '#10b981', fontWeight: 500 }}>● 接受</span>
+                  </Radio>
+                </Radio.Group>
+              </Form.Item>
+            </RuleSection>
+          </Form>
+        </div>
+        <div className="lr-drawer-footer">
+          <Button onClick={() => setOpen(false)}>取消</Button>
+          <Button type="primary" loading={saving} onClick={handleSave}>
+            保存
+          </Button>
+        </div>
       </Drawer>
 
       {/* 调试：隐藏 userMap 引用，避免 TS 提示未用变量 */}
@@ -330,29 +326,17 @@ function TimeMaskWrapper({ value, onChange }: { value?: string; onChange?: (v: s
   return <TimeMaskPicker value={value} onChange={onChange} />;
 }
 
-// 分组 section：左侧粗体标题（带向下小箭头视觉），下方淡灰分隔线
+// 分组 section：左侧彩色竖条 + 粗体标题，下方虚线分隔
 function RuleSection({
   title,
   children,
-  last,
 }: {
   title: string;
   children: React.ReactNode;
-  last?: boolean;
 }) {
   return (
-    <div style={{ paddingBottom: last ? 0 : 16, marginBottom: last ? 0 : 20, borderBottom: last ? 'none' : '1px dashed #eef0f5' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 16,
-        }}
-      >
-        <span style={{ fontSize: 16, fontWeight: 600, color: '#1d2c5b' }}>{title}</span>
-        <span style={{ color: '#cbd5e1', fontSize: 12 }}>▾</span>
-      </div>
+    <div className="lr-rule-section">
+      <div className="lr-rule-section-title">{title}</div>
       <div>{children}</div>
     </div>
   );

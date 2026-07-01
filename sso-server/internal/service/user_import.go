@@ -2,7 +2,7 @@
 //
 // 支持 CSV / XLSX。解析时表头允许以下别名（前端模板下载用规范表头，但后端
 // 容忍稍微变动一下）：
-//   登录账号 / 姓名 / 密码 / 邮箱 / 手机号 / 部门 / 用户类型 / 管理员
+//   登录账号 / 姓名 / 密码 / 邮箱 / 手机号 / 部门 / 用户类型 / 管理员 / 用户组
 // 表头行带 * 后缀的视为必填的"提示"，不影响解析（去除星号后取列名）。
 //
 // 行级语义：
@@ -10,6 +10,7 @@
 //   - 部门按 name 查（树里找一个匹配的；找不到则 fail）
 //   - 用户类型为空时默认 internal；其它合法值 internal/external
 //   - 管理员列为空/否/no/false → 普通；是/yes/true → 加 super_admin 角色
+//   - 用户组按名称匹配，多个用逗号/分号分隔；找不到则该行 fail
 package service
 
 import (
@@ -28,10 +29,11 @@ import (
 
 // ImportUsersResult 导入结果汇总
 type ImportUsersResult struct {
-	Total   int               `json:"total"`
-	Success int               `json:"success"`
-	Failed  int               `json:"failed"`
-	Errors  []ImportRowError  `json:"errors"` // 失败行明细
+	Total    int               `json:"total"`
+	Success  int               `json:"success"`
+	Failed   int               `json:"failed"`
+	Errors   []ImportRowError  `json:"errors"`    // 失败行明细
+	Existing []ImportExisting  `json:"existing"`  // 已存在的用户
 }
 
 type ImportRowError struct {
@@ -40,15 +42,24 @@ type ImportRowError struct {
 	Reason   string `json:"reason"`
 }
 
-// UserImportService 包了 UserService + 部门/角色查找
-type UserImportService struct {
-	UserSvc  *UserService
-	DeptRepo *repository.DepartmentRepository
-	RoleRepo *repository.RoleRepository
+type ImportExisting struct {
+	Row      int    `json:"row"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
 }
 
-func NewUserImportService(u *UserService, d *repository.DepartmentRepository, r *repository.RoleRepository) *UserImportService {
-	return &UserImportService{UserSvc: u, DeptRepo: d, RoleRepo: r}
+// UserImportService 包了 UserService + 部门/角色/用户组查找
+type UserImportService struct {
+	UserSvc   *UserService
+	DeptRepo  *repository.DepartmentRepository
+	RoleRepo  *repository.RoleRepository
+	GroupRepo *repository.UserGroupRepository
+}
+
+func NewUserImportService(u *UserService, d *repository.DepartmentRepository, r *repository.RoleRepository, g *repository.UserGroupRepository) *UserImportService {
+	return &UserImportService{UserSvc: u, DeptRepo: d, RoleRepo: r, GroupRepo: g}
 }
 
 // 表头列规范名 → 数据 key
@@ -61,6 +72,7 @@ const (
 	colDept     = "部门"
 	colType     = "用户类型"
 	colAdmin    = "管理员"
+	colGroup    = "用户组"
 )
 
 // ImportFromBytes 自动按文件后缀分发到 csv / xlsx 解析。
@@ -95,6 +107,13 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte) (*Impo
 		}
 	}
 
+	// 预查用户组 name → id
+	groups, _ := s.GroupRepo.List()
+	groupByName := make(map[string]uuid.UUID, len(groups))
+	for _, g := range groups {
+		groupByName[g.Name] = g.ID
+	}
+
 	out := &ImportUsersResult{Total: len(rows) - 1}
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
@@ -106,9 +125,10 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte) (*Impo
 		deptName := getCell(row, colIdx, colDept)
 		userType := strings.ToLower(getCell(row, colIdx, colType))
 		adminFlag := parseBool(getCell(row, colIdx, colAdmin))
+		groupNames := getCell(row, colIdx, colGroup)
 
 		// 全空行（粘贴时常见）跳过，不算 total 也不算 failed
-		if username == "" && nickname == "" && password == "" && email == "" && phone == "" && deptName == "" {
+		if username == "" && nickname == "" && password == "" && email == "" && phone == "" && deptName == "" && groupNames == "" {
 			out.Total--
 			continue
 		}
@@ -167,10 +187,46 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte) (*Impo
 			}
 		}
 
-		if _, err := s.UserSvc.Create(in); err != nil {
+		// 检查用户是否已存在
+		existingUser, _ := s.UserSvc.GetByUsername(username)
+		if existingUser != nil {
+			out.Existing = append(out.Existing, ImportExisting{
+				Row:      i + 1,
+				Username: username,
+				Nickname: nickname,
+				Email:    email,
+				Phone:    phone,
+			})
+			continue
+		}
+
+		created, err := s.UserSvc.Create(in)
+		if err != nil {
 			fail(err.Error())
 			continue
 		}
+
+		// 用户组：按逗号/分号分隔，逐个匹配并加入
+		if groupNames != "" {
+			parts := strings.FieldsFunc(groupNames, func(r rune) bool {
+				return r == ',' || r == ';' || r == '，' || r == '；'
+			})
+			for _, gn := range parts {
+				gn = strings.TrimSpace(gn)
+				if gn == "" {
+					continue
+				}
+				gid, ok := groupByName[gn]
+				if !ok {
+					out.Errors = append(out.Errors, ImportRowError{
+						Row: i + 1, Username: username, Reason: fmt.Sprintf("用户组 %q 不存在，已跳过", gn),
+					})
+					continue
+				}
+				_ = s.GroupRepo.AddMember(gid, created.ID)
+			}
+		}
+
 		out.Success++
 	}
 	return out, nil

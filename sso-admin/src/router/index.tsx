@@ -18,6 +18,7 @@ import SettingsPage from '@/pages/admin/settings';
 import LogsPage from '@/pages/admin/logs';
 import MonitorPage from '@/pages/admin/monitor';
 import ProfilePage from '@/pages/profile';
+import PortalProfileLayout from '@/pages/profile/PortalProfileLayout';
 import NotFoundPage from '@/pages/NotFound';
 
 export const router = createBrowserRouter([
@@ -46,9 +47,7 @@ export const router = createBrowserRouter([
     path: '/portal/profile',
     element: (
       <AuthGuard>
-        <div style={{ padding: 24, background: '#f5f7fb', minHeight: '100vh' }}>
-          <ProfilePage />
-        </div>
+        <PortalProfileLayout />
       </AuthGuard>
     ),
   },
