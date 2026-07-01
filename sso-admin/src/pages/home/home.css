@@ -117,17 +117,17 @@
   height: 48px;
   padding: 0 32px;
   border-radius: 10px;
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: var(--primary-color);
+  border-color: var(--primary-color);
   font-size: 13px;
   font-weight: 500;
   color: #ffffff;
   letter-spacing: 1px;
-  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.28);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--primary-color) 28%, transparent);
 }
 .home-cta-primary:hover {
-  background: #1e40af !important;
-  border-color: #1e40af !important;
+  background: color-mix(in srgb, var(--primary-color) 85%, #000) !important;
+  border-color: color-mix(in srgb, var(--primary-color) 85%, #000) !important;
 }
 .home-cta-secondary {
   height: 48px;

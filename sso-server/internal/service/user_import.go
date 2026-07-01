@@ -76,7 +76,8 @@ const (
 )
 
 // ImportFromBytes 自动按文件后缀分发到 csv / xlsx 解析。
-func (s *UserImportService) ImportFromBytes(filename string, data []byte) (*ImportUsersResult, error) {
+// updateExisting=true 时，用户名已存在则直接更新；否则返回 Existing 供前端决定是否更新。
+func (s *UserImportService) ImportFromBytes(filename string, data []byte, updateExisting bool) (*ImportUsersResult, error) {
 	rows, err := parseRows(filename, data)
 	if err != nil {
 		return nil, err
@@ -190,6 +191,51 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte) (*Impo
 		// 检查用户是否已存在
 		existingUser, _ := s.UserSvc.GetByUsername(username)
 		if existingUser != nil {
+			if updateExisting {
+				updateInput := UpdateUserInput{
+					Nickname: &nickname,
+				}
+				if email != "" {
+					updateInput.Email = &email
+				}
+				if phone != "" {
+					updateInput.Phone = &phone
+				}
+				if deptName != "" {
+					id, ok := deptByName[deptName]
+					if !ok {
+						fail(fmt.Sprintf("部门 %q 不存在", deptName))
+						continue
+					}
+					if parsed, err := uuid.Parse(id); err == nil {
+						updateInput.DepartmentID = &parsed
+					}
+				}
+				if userType == "external" || userType == "外部" || userType == "外部协作" {
+					v := "external"
+					updateInput.UserType = &v
+				} else {
+					v := "internal"
+					updateInput.UserType = &v
+				}
+				if adminFlag {
+					if superAdminRoleID == "" {
+						fail("super_admin 角色未初始化")
+						continue
+					}
+					if parsed, err := uuid.Parse(superAdminRoleID); err == nil {
+						updateInput.RoleIDs = []uuid.UUID{parsed}
+					}
+				} else {
+					updateInput.RoleIDs = []uuid.UUID{}
+				}
+				if _, err := s.UserSvc.Update(existingUser.ID, updateInput); err != nil {
+					fail(err.Error())
+					continue
+				}
+				out.Success++
+				continue
+			}
 			out.Existing = append(out.Existing, ImportExisting{
 				Row:      i + 1,
 				Username: username,

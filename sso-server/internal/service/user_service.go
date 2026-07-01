@@ -222,7 +222,7 @@ func (s *UserService) Delete(id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	if u.IsStaff {
+	if u.Username == "admin" {
 		return ErrUserProtected
 	}
 	return s.repo.Delete(id)

@@ -32,7 +32,9 @@ import {
   EditOutlined,
   ExclamationCircleOutlined,
   CloseOutlined,
+  CloseCircleOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
@@ -91,6 +93,7 @@ export default function UserListPage() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<ImportUsersResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [existingSelected, setExistingSelected] = useState<number[]>([]);
   const [updatingExisting, setUpdatingExisting] = useState(false);
   const [updateResult, setUpdateResult] = useState<{ updated: number; failed: number; errors: { row: number; username: string; reason: string }[] } | null>(null);
@@ -195,22 +198,28 @@ export default function UserListPage() {
 
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) return;
-    const protectedCount = data.filter((u) => selectedRowKeys.includes(u.id) && u.username === 'admin').length;
-    if (protectedCount > 0) {
-      message.warning('已选中管理员用户，不允许删除，请先取消选择');
-      return;
-    }
+    const protectedIds = data
+      .filter((u) => selectedRowKeys.includes(u.id) && u.username === 'admin')
+      .map((u) => u.id);
+    const deletableIds = selectedRowKeys.filter((id) => !protectedIds.includes(id));
     modal.confirm({
-      title: `确认删除选中的 ${selectedRowKeys.length} 个用户？`,
+      title: `确认删除选中的 ${deletableIds.length} 个用户？`,
       content: '删除后不可恢复，关联角色与会话也会一并清理。',
       okType: 'danger',
       onOk: async () => {
         try {
-          const r = await usersApi.batchDelete(selectedRowKeys);
+          if (deletableIds.length === 0) {
+            message.warning('已选择的都是受保护账号，未执行删除');
+            return;
+          }
+          const r = await usersApi.batchDelete(deletableIds);
           if (r.failed.length === 0) {
             message.success(`已删除 ${r.deleted} 个用户`);
           } else {
             message.warning(`删除 ${r.deleted} 成功，${r.failed.length} 失败`);
+          }
+          if (protectedIds.length > 0) {
+            message.info('已跳过 admin 账号');
           }
           setSelectedRowKeys([]);
           load();
@@ -298,7 +307,7 @@ export default function UserListPage() {
     return lines;
   };
 
-  const parseImportFile = async (file: File): Promise<ImportPreviewRow[]> => {
+  const parseImportFile = async (file: File, mode: 'create' | 'update'): Promise<ImportPreviewRow[]> => {
     const lower = file.name.toLowerCase();
     let rows: string[][] = [];
 
@@ -322,7 +331,7 @@ export default function UserListPage() {
     header.forEach((h, i) => { if (h) colIdx[h] = i; });
 
     // 检查必填列
-    for (const c of ['登录账号', '姓名', '密码']) {
+    for (const c of ['登录账号', '姓名', '密码', '邮箱']) {
       if (!(c in colIdx)) throw new Error(`缺少必填列：${c}`);
     }
 
@@ -357,7 +366,8 @@ export default function UserListPage() {
       if (!username) { status = 'error'; error = '登录账号不能为空'; }
       else if (!nickname) { status = 'error'; error = '姓名不能为空'; }
       else if (!password) { status = 'error'; error = '密码不能为空'; }
-      else if (existingUsernames.has(username)) { status = 'existing'; }
+      else if (!email) { status = 'error'; error = '邮箱不能为空'; }
+      else if (mode === 'create' && existingUsernames.has(username)) { status = 'existing'; }
 
       previewRows.push({
         row: i + 1, username, nickname, password, email, phone,
@@ -367,17 +377,18 @@ export default function UserListPage() {
     return previewRows;
   };
 
-  const handleFileSelect = async (file: File) => {
+  const loadImportPreview = async (file: File, mode: 'create' | 'update') => {
     if (file.size > 5 * 1024 * 1024) {
       message.error('文件超过 5MB');
       return false;
     }
     setImporting(true);
     setImportResult(null);
+    setImportError(null);
     setUpdateResult(null);
     setExistingSelected([]);
     try {
-      const rows = await parseImportFile(file);
+      const rows = await parseImportFile(file, mode);
       setPreviewRows(rows);
       setImportFile(file);
     } catch (e: any) {
@@ -388,10 +399,13 @@ export default function UserListPage() {
     return false;
   };
 
+  const handleFileSelect = async (file: File) => loadImportPreview(file, 'create');
+
   const handleImportConfirm = async () => {
     if (!importFile) return;
     setImporting(true);
     setImportProgress(0);
+    setImportError(null);
 
     // 模拟进度动画
     const progressTimer = setInterval(() => {
@@ -402,18 +416,24 @@ export default function UserListPage() {
     }, 200);
 
     try {
-      const r = await usersApi.importFile(importFile);
+      const r = await usersApi.importFile(importFile, 'create');
       clearInterval(progressTimer);
       setImportProgress(100);
       setImportResult(r);
+      setImportError(null);
+
+      console.log('[Import] API response:', r);
+      console.log('[Import] total:', r?.total, 'success:', r?.success, 'failed:', r?.failed);
 
       // 在原表格上更新每行状态
       const errorMap = new Map<string, string>();
       (r.errors || []).forEach((e) => errorMap.set(e.username, e.reason));
       const existingSet = new Set((r.existing || []).map((e) => e.username));
 
-      setPreviewRows((prev) =>
-        prev.map((row) => {
+      console.log('[Import] errors:', r.errors?.length, 'existing:', r.existing?.length);
+
+      setPreviewRows((prev) => {
+        const updated = prev.map((row) => {
           if (row.status === 'error') return row; // 前端校验失败的保持不变
           if (errorMap.has(row.username)) {
             return { ...row, status: 'error' as const, error: '导入失败', errorDetail: errorMap.get(row.username) };
@@ -422,13 +442,16 @@ export default function UserListPage() {
             return { ...row, status: 'existing' as const, error: '已存在' };
           }
           return { ...row, status: 'success' as const };
-        }),
-      );
+        });
+        console.log('[Import] Updated rows - success:', updated.filter(r => r.status === 'success').length, 'pending:', updated.filter(r => r.status === 'pending').length);
+        return updated;
+      });
       load();
     } catch (e: any) {
       clearInterval(progressTimer);
       setImportProgress(0);
-      message.error(e?.response?.data?.message || '导入失败');
+      setImportResult(null);
+      setImportError(e?.response?.data?.message || e?.message || '导入失败');
     } finally {
       setImporting(false);
     }
@@ -442,6 +465,18 @@ export default function UserListPage() {
     setImportProgress(0);
     setExistingSelected([]);
     setUpdateResult(null);
+    setImportError(null);
+  };
+
+  const backToImportStart = () => {
+    if (importing) return;
+    setPreviewRows([]);
+    setImportFile(null);
+    setImportResult(null);
+    setImportProgress(0);
+    setExistingSelected([]);
+    setUpdateResult(null);
+    setImportError(null);
   };
 
   return (
@@ -507,7 +542,7 @@ export default function UserListPage() {
             render: (_, r) => r.department?.name || '-',
           },
           {
-            title: '管理员',
+            title: '用户角色',
             dataIndex: 'is_staff',
             width: 90,
             render: (v) =>
@@ -690,7 +725,7 @@ export default function UserListPage() {
                 </Form.Item>
               </div>
 
-              {/* Row 2: 密码 (flex group) | 手机号码 (flex group) */}
+              {/* Row 2: 密码 (flex group) | 电子邮箱 */}
               {!editing && (
                 <>
                   <div className="grid-cell">
@@ -712,21 +747,27 @@ export default function UserListPage() {
                     </div>
                   </div>
                   <div className="grid-cell grid-cell-spaced">
-                    <Form.Item name="phone" label="手机号码">
-                      <div className="phone-flex-group">
-                        <span className="phone-prefix">+86</span>
-                        <Input placeholder="请输入手机号码" />
-                      </div>
+                    <Form.Item name="email" label="电子邮箱" rules={[{ required: true, message: '请输入电子邮箱' }]}>
+                      <Input placeholder="请输入电子邮箱" />
                     </Form.Item>
                   </div>
                 </>
               )}
 
-              {/* Row 3: 电子邮箱 | 所属部门 */}
+              {/* Row 3: 手机号码 | 所属部门 */}
               <div className="grid-cell">
-                <Form.Item name="email" label="电子邮箱" rules={[{ required: true, message: '请输入电子邮箱' }]}>
-                  <Input placeholder="请输入电子邮箱" />
-                </Form.Item>
+                {!editing ? (
+                  <Form.Item name="phone" label="手机号码">
+                    <div className="phone-flex-group">
+                      <span className="phone-prefix">+86</span>
+                      <Input placeholder="请输入手机号码" />
+                    </div>
+                  </Form.Item>
+                ) : (
+                  <Form.Item name="email" label="电子邮箱" rules={[{ required: true, message: '请输入电子邮箱' }]}>
+                    <Input placeholder="请输入电子邮箱" />
+                  </Form.Item>
+                )}
               </div>
               <div className="grid-cell">
                 <Form.Item name="department_id" label="所属部门">
@@ -825,7 +866,7 @@ export default function UserListPage() {
                   先下载模板填好再上传，<span style={{ color: '#f54a45' }}>*</span> 的列必填：
                 </div>
                 <ul className="import-rules-list">
-                  <li>登录账号<span style={{ color: '#f54a45' }}>*</span>、姓名<span style={{ color: '#f54a45' }}>*</span>、密码<span style={{ color: '#f54a45' }}>*</span>、邮箱、手机号、部门、用户类型、管理员、用户组</li>
+                  <li>登录账号<span style={{ color: '#f54a45' }}>*</span>、姓名<span style={{ color: '#f54a45' }}>*</span>、密码<span style={{ color: '#f54a45' }}>*</span>、邮箱<span style={{ color: '#f54a45' }}>*</span>、手机号、部门、用户类型、管理员、用户组</li>
                   <li>部门按"名称"匹配（与系统中的部门同名）；用户类型 internal/external；管理员是/否</li>
                   <li>用户组按名称匹配，多个用逗号分隔（如"研发组,测试组"）；不存在的组会跳过并记录警告</li>
                   <li>文件 ≤ 5MB，支持 .csv 和 .xlsx</li>
@@ -859,15 +900,39 @@ export default function UserListPage() {
             </>
           )}
 
+          {/* ---- 导入失败：居中展示 ---- */}
+          {importError && importFile && !importing && (
+            <div className="import-error-state">
+              <WarningOutlined className="import-error-icon" />
+              <div className="import-error-title">导入失败</div>
+              <div className="import-error-desc">{importError}</div>
+              <div className="import-error-actions">
+                <Button onClick={backToImportStart}>返回上传</Button>
+                <Button type="primary" onClick={handleImportConfirm} disabled={!importFile}>
+                  重试导入
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* ---- 阶段二：预览表格 + 导入结果（统一展示） ---- */}
-          {importFile && (
+          {importFile && !importError && (
             <div className="import-preview-section">
               {/* 统计栏 */}
               <div className="import-stats-bar">
-                <span className="stat-total">总共: {previewRows.length}</span>
-                <span className="stat-success">成功: {previewRows.filter((r) => r.status === 'success').length}</span>
-                <span className="stat-error">失败: {previewRows.filter((r) => r.status === 'error').length}</span>
-                <span className="stat-pending">待处理: {previewRows.filter((r) => r.status === 'pending' || r.status === 'existing').length}</span>
+                <div className="import-stats-metrics">
+                  <span className="stat-total">总共: {previewRows.length}</span>
+                  {!importResult && (
+                    <span className="stat-pending">待导入: {previewRows.filter((r) => r.status === 'pending').length}</span>
+                  )}
+                  {importResult && (
+                    <>
+                      <span className="stat-success">成功: {previewRows.filter((r) => r.status === 'success').length}</span>
+                      <span className="stat-error">失败: {previewRows.filter((r) => r.status === 'error' || r.status === 'existing').length}</span>
+                      <span className="stat-pending">待处理: {previewRows.filter((r) => r.status === 'pending').length}</span>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* 进度条 */}
@@ -901,13 +966,21 @@ export default function UserListPage() {
                       <tr key={row.row} className={row.status === 'error' ? 'row-error' : row.status === 'existing' ? 'row-existing' : row.status === 'success' ? 'row-success' : ''}>
                         <td>
                           {row.status === 'error' ? (
-                            <Tooltip title={row.errorDetail || row.error}><WarningOutlined style={{ color: '#f54a45' }} /></Tooltip>
+                            <Tooltip title={row.errorDetail || row.error || '导入失败'}>
+                              <CloseCircleOutlined style={{ color: '#f54a45' }} />
+                            </Tooltip>
                           ) : row.status === 'existing' ? (
-                            <Tooltip title="账号已存在"><ExclamationCircleOutlined style={{ color: '#faad14' }} /></Tooltip>
+                            <Tooltip title="账号已存在">
+                              <ExclamationCircleOutlined style={{ color: '#faad14' }} />
+                            </Tooltip>
                           ) : row.status === 'success' ? (
-                            <CheckCircleOutlined style={{ color: '#64894d' }} />
+                            <Tooltip title="导入成功">
+                              <CheckCircleOutlined style={{ color: 'var(--primary-color)' }} />
+                            </Tooltip>
                           ) : (
-                            <CheckCircleOutlined style={{ color: '#64894d', opacity: 0.5 }} />
+                            <Tooltip title="待导入">
+                              <ClockCircleOutlined style={{ color: '#94a3b8' }} />
+                            </Tooltip>
                           )}
                         </td>
                         <td>{row.nickname}</td>
@@ -924,88 +997,11 @@ export default function UserListPage() {
                 </table>
               </div>
 
-              {/* 已存在用户处理 */}
-              {importResult && (importResult.existing?.length ?? 0) > 0 && !updateResult && (
-                <div className="import-existing-section">
-                  <div className="import-existing-header">
-                    <ExclamationCircleOutlined className="existing-icon" />
-                    <span className="existing-title">以下账号已存在，是否更新信息？</span>
-                  </div>
-                  <table className="import-existing-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: 40 }}>
-                          <Checkbox
-                            checked={existingSelected.length === (importResult.existing?.length ?? 0)}
-                            indeterminate={existingSelected.length > 0 && existingSelected.length < (importResult.existing?.length ?? 0)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setExistingSelected((importResult.existing || []).map((_, idx) => idx));
-                              } else {
-                                setExistingSelected([]);
-                              }
-                            }}
-                          />
-                        </th>
-                        <th style={{ width: 60 }}>行号</th>
-                        <th>账号</th>
-                        <th>姓名</th>
-                        <th>邮箱</th>
-                        <th>手机号</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(importResult.existing || []).map((item, idx) => (
-                        <tr key={`${item.row}-${item.username}`}>
-                          <td>
-                            <Checkbox
-                              checked={existingSelected.includes(idx)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setExistingSelected([...existingSelected, idx]);
-                                } else {
-                                  setExistingSelected(existingSelected.filter((i) => i !== idx));
-                                }
-                              }}
-                            />
-                          </td>
-                          <td>{item.row}</td>
-                          <td className="col-account">{item.username}</td>
-                          <td>{item.nickname}</td>
-                          <td>{item.email || '-'}</td>
-                          <td>{item.phone || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="import-existing-actions">
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setImportResult({ ...importResult, existing: [] });
-                        setExistingSelected([]);
-                      }}
-                    >
-                      全部跳过
-                    </Button>
-                    <Button
-                      type="primary"
-                      size="small"
-                      loading={updatingExisting}
-                      disabled={existingSelected.length === 0}
-                      onClick={handleUpdateExisting}
-                    >
-                      更新选中{existingSelected.length > 0 ? `（${existingSelected.length}）` : ''}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* 更新结果 */}
               {updateResult && (
                 <div className="import-existing-section">
                   <div className="import-existing-header">
-                    <span className="existing-title">更新完成：成功 <strong style={{ color: '#64894d' }}>{updateResult.updated}</strong> 个</span>
+                    <span className="existing-title">更新完成：成功 <strong style={{ color: 'var(--primary-color)' }}>{updateResult.updated}</strong> 个</span>
                     {updateResult.failed > 0 && (
                       <span style={{ color: '#f54a45', marginLeft: 16 }}>失败 <strong>{updateResult.failed}</strong> 个</span>
                     )}
@@ -1036,14 +1032,31 @@ export default function UserListPage() {
           )}
         </div>
         <div className="drawer-footer">
-          <Button onClick={resetImportDrawer}>取消</Button>
-          {!importResult && (
+          <Button
+            onClick={() => {
+              if (importFile || importResult || importError) {
+                backToImportStart();
+              } else {
+                resetImportDrawer();
+              }
+            }}
+            disabled={importing}
+          >
+            取消
+          </Button>
+          {!importResult && !importError && (
             <Button
               type="primary"
               loading={importing}
+              disabled={importing}
               onClick={handleImportConfirm}
             >
               导入
+            </Button>
+          )}
+          {importError && (
+            <Button type="primary" loading={importing} disabled={importing || !importFile} onClick={handleImportConfirm}>
+              重试导入
             </Button>
           )}
           {importResult && (

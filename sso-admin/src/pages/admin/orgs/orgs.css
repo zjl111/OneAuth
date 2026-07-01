@@ -151,10 +151,23 @@
   gap: 10px;
   flex-shrink: 0;
   z-index: 10;
+  margin-top: auto;
 }
 
 .drawer-footer .ant-btn {
   min-width: 72px;
   height: 36px;
   font-size: 14px;
+}
+
+/* 部门抽屉：确保按钮始终在最底部 */
+.dept-drawer .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dept-drawer .ant-form {
+  flex: 1;
+  overflow-y: auto;
 }

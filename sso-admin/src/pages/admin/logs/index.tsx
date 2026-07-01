@@ -103,12 +103,18 @@ const loginColumns: TableColumnsType<LoginLog> = [
   { title: '用户名', dataIndex: 'username', width: 140 },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
   {
-    title: '省 / 市',
+    title: '登录城市',
     width: 150,
     render: (_, r) => {
       const p = (r as any).province || '';
       const c = (r as any).city || '';
-      if (!p && !c) return '—';
+      if (!p && !c) {
+        const ip = r.ip_address || '';
+        if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.') || ip === '127.0.0.1' || ip === '::1') {
+          return '局域网';
+        }
+        return '—';
+      }
       if (p && c && p !== c) return `${p} / ${c}`;
       return p || c;
     },
@@ -213,6 +219,23 @@ const accessColumns: TableColumnsType<AccessLog> = [
   { title: '应用名称', dataIndex: 'client_name', width: 200 },
   { title: 'Client ID', dataIndex: 'client_id', width: 200 },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
+  {
+    title: '登录城市',
+    width: 150,
+    render: (_, r) => {
+      const p = (r as any).province || '';
+      const c = (r as any).city || '';
+      if (!p && !c) {
+        const ip = r.ip_address || '';
+        if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.') || ip === '127.0.0.1' || ip === '::1') {
+          return '局域网';
+        }
+        return '—';
+      }
+      if (p && c && p !== c) return `${p} / ${c}`;
+      return p || c;
+    },
+  },
   { title: '时间', dataIndex: 'created_at', render: fmtTime },
 ];
 

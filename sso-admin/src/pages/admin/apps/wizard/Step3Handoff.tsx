@@ -1,4 +1,4 @@
-import { Input, Typography, App as AntdApp } from 'antd';
+import { Input, Typography, Button, App as AntdApp } from 'antd';
 import { CopyOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { OAuth2Client } from '@/api/apps';
 import { FAMILY_LABEL, fmtSeconds, type ProtoFamily } from './types';
@@ -8,30 +8,44 @@ function HandoffRow({
   label,
   value,
   password,
+  tooltip,
 }: {
   label: string;
   value: string;
   password?: boolean;
+  tooltip?: string;
 }) {
   const { message } = AntdApp.useApp();
-  const copyIcon = (
-    <CopyOutlined
-      style={{ cursor: 'pointer', color: '#94a3b8' }}
-      onClick={() => {
-        navigator.clipboard.writeText(value || '');
-        message.success('已复制');
-      }}
-    />
-  );
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value || '');
+    message.success('已复制');
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10, gap: 10 }}>
-      <div style={{ width: 160, color: '#64748b', fontSize: 13, flexShrink: 0 }}>{label}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {password ? (
-          <Input.Password value={value || ''} readOnly visibilityToggle addonAfter={copyIcon} />
-        ) : (
-          <Input value={value || ''} readOnly addonAfter={copyIcon} />
+      <div style={{ width: 160, color: '#64748b', fontSize: 13, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        {tooltip && (
+          <Typography.Text type="secondary" style={{ fontSize: 12, cursor: 'help' }} title={tooltip}>
+            <InfoCircleOutlined />
+          </Typography.Text>
         )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {password ? (
+            <Input.Password value={value || ''} readOnly visibilityToggle style={{ width: '100%' }} />
+          ) : (
+            <Input value={value || ''} readOnly style={{ width: '100%' }} />
+          )}
+        </div>
+        <Button
+          type="text"
+          size="small"
+          icon={<CopyOutlined />}
+          onClick={handleCopy}
+          style={{ color: '#94a3b8', flexShrink: 0 }}
+          title="复制"
+        />
       </div>
     </div>
   );
@@ -161,6 +175,7 @@ export default function Step3Handoff({
                 label="客户端密钥"
                 value={isNewly ? (submitted?.client_secret || '') : '••••••••（已加密保存，仅创建时显示一次，请通过"轮换密钥"获取新密钥）'}
                 password={isNewly}
+                tooltip='客户端密钥仅在创建时显示一次，之后无法查看。如需获取新密钥，请使用"轮换密钥"功能。'
               />
               <HandoffRow label="客户端认证方式" value="Client Secret Post" />
               <HandoffRow label="回调地址 / Redirect URI" value={Array.isArray(summary.redirect_uris) ? summary.redirect_uris.join('\n') : (summary.redirect_uris || '')} />
@@ -266,12 +281,11 @@ export default function Step3Handoff({
                 {discovery.end_session_endpoint && (
                   <HandoffRow label="注销会话端点地址" value={discovery.end_session_endpoint} />
                 )}
-                {isOIDC && (
-                  <HandoffRow
-                    label="Discovery"
-                    value={(discovery.issuer || '') + '/.well-known/openid-configuration'}
-                  />
-                )}
+                <HandoffRow
+                  label="Discovery"
+                  value={(discovery.issuer || '') + '/.well-known/openid-configuration'}
+                  tooltip="OAuth 2.0 与 OIDC 共用此 Discovery 端点"
+                />
               </>
             ) : (
               <Typography.Text type="secondary">正在加载端点信息…</Typography.Text>

@@ -280,6 +280,7 @@ func (h *UserHandler) ImportUsers(c *gin.Context) {
 		response.ServerError(c, "导入服务未启用")
 		return
 	}
+	updateExisting := strings.EqualFold(c.PostForm("mode"), "update")
 	fh, err := c.FormFile("file")
 	if err != nil {
 		response.BadRequest(c, "请上传 file 字段")
@@ -300,7 +301,7 @@ func (h *UserHandler) ImportUsers(c *gin.Context) {
 		response.ServerError(c, "读取文件失败："+err.Error())
 		return
 	}
-	res, err := h.ImportService.ImportFromBytes(fh.Filename, buf)
+	res, err := h.ImportService.ImportFromBytes(fh.Filename, buf, updateExisting)
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return

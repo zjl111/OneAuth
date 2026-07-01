@@ -47,12 +47,14 @@
   font-size: 13px;
   font-weight: 500;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--primary-color), #7a9f5e);
+  background: var(--primary-color);
   border: none;
   letter-spacing: 2px;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--primary-color) 30%, transparent);
 }
 .login-modal-submit:hover {
-  background: linear-gradient(135deg, #7a9f5e, var(--primary-color)) !important;
+  background: color-mix(in srgb, var(--primary-color) 85%, #000) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--primary-color) 40%, transparent);
 }
 
 .login-modal-forgot {

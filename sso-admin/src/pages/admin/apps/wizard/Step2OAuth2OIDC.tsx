@@ -1,6 +1,6 @@
 import { Form, Input, Select, Radio, InputNumber, Switch, Tag, Collapse } from 'antd';
 
-export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
+export default function Step2OAuth2OIDC({ isOIDC, hasOpenId }: { isOIDC: boolean; hasOpenId: boolean }) {
   return (
     <div
       className="app-wizard-step2"
@@ -30,7 +30,15 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
         <Select
           mode="multiple"
           maxTagCount="responsive"
-          options={[{ value: 'authorization_code', label: 'authorization_code' }]}
+          options={[
+            { value: 'authorization_code', label: 'authorization_code' },
+            { value: 'password',           label: 'password' },
+            { value: 'client_credentials', label: 'client_credentials' },
+            { value: 'implicit',           label: 'implicit' },
+            { value: 'id_token',           label: 'id_token' },
+            { value: 'token',              label: 'token' },
+            { value: 'refresh_token',      label: 'refresh_token' },
+          ]}
           placeholder="选择授权方式"
           className="wizard-multi-select"
         />
@@ -57,28 +65,14 @@ export default function Step2OAuth2OIDC({ isOIDC }: { isOIDC: boolean }) {
             maxTagCount="responsive"
             placeholder="选择需要的作用域"
             options={[
-              ...(isOIDC ? [{ value: 'openid', label: 'openid', disabled: true }] : []),
+              ...(hasOpenId ? [{ value: 'openid', label: 'openid' }] : []),
+              { value: 'read',    label: 'read' },
+              { value: 'write',   label: 'write' },
+              { value: 'trust',   label: 'trust' },
               { value: 'profile', label: 'profile' },
               { value: 'email',   label: 'email' },
               { value: 'phone',   label: 'phone' },
-              { value: 'roles',   label: 'roles' },
-              { value: 'read',    label: 'read' },
-              { value: 'write',   label: 'write' },
             ]}
-            tagRender={isOIDC ? ({ label, value, closable, onClose }) => {
-              if (value === 'openid') {
-                return (
-                  <Tag color="default" style={{ marginInlineEnd: 4, color: '#94a3b8', cursor: 'not-allowed' }}>
-                    {label}
-                  </Tag>
-                );
-              }
-              return (
-                <Tag closable={closable} onClose={onClose} style={{ marginInlineEnd: 4 }}>
-                  {label}
-                </Tag>
-              );
-            } : undefined}
             className="wizard-multi-select"
           />
         </Form.Item>

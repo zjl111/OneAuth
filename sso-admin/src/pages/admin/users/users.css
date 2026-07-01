@@ -735,7 +735,7 @@
 }
 
 .import-result-summary .stat-success {
-  color: #64894d;
+  color: var(--primary-color);
 }
 
 .import-result-summary .stat-error {
@@ -781,8 +781,15 @@
 /* ---- 统计栏 ---- */
 .import-stats-bar {
   display: flex;
-  gap: 0;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.import-stats-metrics {
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
 }
 
 .import-stats-bar span {
@@ -798,9 +805,9 @@
 
 .import-stats-bar span:first-child {
   border-radius: 4px 0 0 4px;
-  background: #64894d;
+  background: var(--primary-color);
   color: #fff;
-  border-color: #64894d;
+  border-color: var(--primary-color);
 }
 
 .import-stats-bar span:last-child {
@@ -808,14 +815,53 @@
   border-radius: 0 4px 4px 0;
 }
 
-.import-stats-bar .stat-success { color: #64894d; }
+.import-stats-bar .stat-success { color: var(--primary-color); }
 .import-stats-bar .stat-error { color: #f54a45; }
-.import-stats-bar .stat-pending { color: #faad14; }
+.import-stats-bar .stat-pending { color: color-mix(in srgb, var(--primary-color) 70%, #94a3b8); }
 
 /* ---- 预览表格 ---- */
 .import-preview-section {
   display: flex;
   flex-direction: column;
+}
+
+.import-error-state {
+  min-height: 260px;
+  border: 1px dashed #f5a3a3;
+  border-radius: 8px;
+  background: #fff7f7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.import-error-icon {
+  font-size: 42px;
+  color: #f54a45;
+}
+
+.import-error-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.import-error-desc {
+  max-width: 640px;
+  font-size: 13px;
+  color: #646a73;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.import-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 .import-preview-table-wrap {
@@ -867,7 +913,7 @@
 }
 
 .import-preview-table tr.row-success {
-  background: #f6ffed;
+  background: color-mix(in srgb, var(--primary-color) 6%, #fff);
 }
 
 /* ---- 进度条 ---- */
@@ -888,7 +934,7 @@
 
 .import-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #64894d, #7a9f5e);
+  background: var(--primary-color);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
@@ -896,7 +942,7 @@
 .import-progress-text {
   font-size: 13px;
   font-weight: 600;
-  color: #64894d;
+  color: var(--primary-color);
   min-width: 40px;
   text-align: right;
 }

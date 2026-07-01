@@ -54,6 +54,7 @@ export default function AppWizard({
   const [saving, setSaving] = useState(false);
   const logoUrl = Form.useWatch('logo_url', form);
   const isOIDC = family === 'oidc';
+  const hasOpenId = family === 'oidc' || family === 'oauth2';
   const [discovery, setDiscovery] = useState<Record<string, any> | null>(null);
 
   // 内联 Logo 上传配置（Step0 横向布局复用）
@@ -179,9 +180,7 @@ export default function AppWizard({
         redirect_uris: [],
         grant_types: ['authorization_code'],
         subject_type: 'username',
-        scope: family === 'oidc'
-          ? ['openid', 'profile', 'email', 'phone', 'roles']
-          : ['profile', 'email'],
+        scope: ['profile', 'email'],
         require_consent: false,
         require_pkce: false,
         access_token_ttl: 3600,
@@ -228,10 +227,7 @@ export default function AppWizard({
         redirect_uris: v.redirect_uris || [],
         grant_types: v.grant_types || [],
         subject_type: v.subject_type,
-        scope: (backendProtocol === 'oidc'
-          ? ['openid', ...((v.scope || []).filter((s: string) => s !== 'openid'))]
-          : (v.scope || [])
-        ).join(' '),
+        scope: (v.scope || []).join(' '),
         require_consent: v.require_consent,
         require_pkce: v.require_pkce,
         access_token_ttl: v.access_token_ttl,
@@ -431,9 +427,19 @@ export default function AppWizard({
               </Form.Item>
             )}
 
-            <Form.Item name="is_active" label="状态" valuePropName="checked" rules={[{ required: true }]}>
-              <Switch />
-            </Form.Item>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <Form.Item name="is_active" label="状态" valuePropName="checked" rules={[{ required: true }]}>
+                <Switch />
+              </Form.Item>
+              <Form.Item
+                name="visible_in_portal"
+                label="是否显示"
+                valuePropName="checked"
+                rules={[{ required: true }]}
+              >
+                <Switch />
+              </Form.Item>
+            </div>
 
             <Form.Item name="description" label="描述">
               <Input.TextArea rows={3} placeholder="一句话描述该应用" />
@@ -443,7 +449,7 @@ export default function AppWizard({
 
         {/* ============== Step 2 客户端配置 ============== */}
         <div style={{ display: step === 1 ? 'block' : 'none' }}>
-          {(family === 'oidc' || family === 'oauth2') && <Step2OAuth2OIDC isOIDC={isOIDC} />}
+          {(family === 'oidc' || family === 'oauth2') && <Step2OAuth2OIDC isOIDC={isOIDC} hasOpenId={hasOpenId} />}
           {family === 'saml' && <Step2Saml />}
           {family === 'cas' && <Step2Cas />}
         </div>

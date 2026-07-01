@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Form, Radio, Input, Tabs, Tag, Switch, Alert, Empty, Checkbox } from 'antd';
+import { Form, Radio, Input, Tabs, Tag, Switch, Alert, Empty, Checkbox, Tree } from 'antd';
 import { SearchOutlined, UserOutlined, ApartmentOutlined, UsergroupAddOutlined } from '@ant-design/icons';
 import { get } from '@/api/request';
 
@@ -38,6 +38,7 @@ export default function Step3AppPerm() {
   const [orgs, setOrgs] = useState<Subject[]>([]);
   const [groups, setGroups] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(false);
+  const [orgTree, setOrgTree] = useState<any[]>([]);
 
   // 选中已选集合（用于 checkbox 受控）
   const selectedKey = (s: Subject) => `${s.type}:${s.id}`;
@@ -62,7 +63,9 @@ export default function Step3AppPerm() {
           setUsers(list);
         }
         if (tab === 'org' && orgs.length === 0) {
-          const r: any = await get<any>('/departments');
+          const r: any = await get<any>('/departments/tree');
+          const rawTree = Array.isArray(r) ? r : [];
+          setOrgTree(rawTree);
           const flatten = (nodes: any[], parents: string[] = []): Subject[] => {
             const out: Subject[] = [];
             for (const n of nodes || []) {
@@ -76,7 +79,7 @@ export default function Step3AppPerm() {
             }
             return out;
           };
-          setOrgs(flatten(Array.isArray(r) ? r : []));
+          setOrgs(flatten(rawTree));
         }
         if (tab === 'group' && groups.length === 0) {
           const r: any = await get<any>('/user-groups');
@@ -122,6 +125,30 @@ export default function Step3AppPerm() {
     return list.filter((s) => s.name.toLowerCase().includes(k) || (s.sub || '').toLowerCase().includes(k));
   }, [list, keyword]);
 
+  // 组织树数据转换
+  const convertToTreeData = (nodes: any[]): any[] =>
+    (nodes || []).map((n) => ({
+      key: n.id,
+      title: n.name,
+      children: n.children?.length ? convertToTreeData(n.children) : [],
+    }));
+
+  const filterTree = (nodes: any[], k: string): any[] =>
+    (nodes || [])
+      .map((n) => {
+        const children = n.children?.length ? filterTree(n.children, k) : [];
+        if (n.name.toLowerCase().includes(k) || children.length > 0) {
+          return { ...n, children };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+  const orgCheckedKeys = useMemo(
+    () => grants.filter((g) => g.principal_type === 'org').map((g) => g.principal_id),
+    [grants],
+  );
+
   const tagColor = (t: string) => (t === 'user' ? 'blue' : t === 'org' ? 'orange' : 'purple');
   const tagLabel = (t: string) => (t === 'user' ? '用户' : t === 'org' ? '组织' : '用户组');
 
@@ -132,9 +159,6 @@ export default function Step3AppPerm() {
         <Input type="hidden" />
       </Form.Item>
       <Form.Item name="grants" hidden>
-        <Input type="hidden" />
-      </Form.Item>
-      <Form.Item name="visible_in_portal" hidden initialValue={true} valuePropName="checked">
         <Input type="hidden" />
       </Form.Item>
       <Form.Item name="allow_idp_initiated" hidden initialValue={true} valuePropName="checked">
@@ -213,6 +237,46 @@ export default function Step3AppPerm() {
               <div style={{ maxHeight: 280, overflowY: 'auto', marginTop: 4 }}>
                 {loading ? (
                   <div style={{ color: '#94a3b8', fontSize: 12, padding: 20, textAlign: 'center' }}>加载中…</div>
+                ) : tab === 'org' ? (
+                  (() => {
+                    const k = keyword.trim().toLowerCase();
+                    const treeData = convertToTreeData(
+                      k ? filterTree(orgTree, k) : orgTree,
+                    );
+                    if (treeData.length === 0) {
+                      return (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={<span style={{ color: '#94a3b8', fontSize: 12 }}>{k ? '无匹配部门' : '暂无部门数据'}</span>}
+                          style={{ marginTop: 24 }}
+                        />
+                      );
+                    }
+                    return (
+                      <Tree
+                        checkable
+                        checkStrictly
+                        checkedKeys={{ checked: orgCheckedKeys, halfChecked: [] }}
+                        onCheck={(checked, _info) => {
+                          const keys = Array.isArray(checked) ? checked : checked.checked;
+                          const orgMap = new Map(orgs.map((o) => [o.id, o]));
+                          const newOrgGrants = (keys as string[])
+                            .map((id) => {
+                              const o = orgMap.get(id);
+                              return o
+                                ? { principal_type: 'org' as const, principal_id: o.id, principal_name: o.name }
+                                : null;
+                            })
+                            .filter(Boolean) as typeof grants;
+                          const nonOrg = grants.filter((g) => g.principal_type !== 'org');
+                          setGrants([...nonOrg, ...newOrgGrants]);
+                        }}
+                        treeData={treeData}
+                        defaultExpandAll
+                        style={{ fontSize: 13 }}
+                      />
+                    );
+                  })()
                 ) : filtered.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -291,25 +355,13 @@ export default function Step3AppPerm() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <Switch
-                  checked={!!form.getFieldValue('visible_in_portal')}
-                  onChange={(v) => form.setFieldValue('visible_in_portal', v)}
-                />
-                <div>
-                  <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>在应用门户中显示</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                    在 OneAuth 应用门户中展示该应用，方便用户发现和访问
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <Switch
                   checked={!!form.getFieldValue('allow_idp_initiated')}
                   onChange={(v) => form.setFieldValue('allow_idp_initiated', v)}
                 />
                 <div>
                   <div style={{ fontSize: 14, color: '#1d2c5b', fontWeight: 500 }}>允许从 OneAuth 发起访问</div>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                    用户可以从 OneAuth 应用门户或我的应用中点击进入该应用
+                    用户可以从 OneAuth 个人工作台或我的应用中点击进入该应用
                   </div>
                 </div>
               </div>

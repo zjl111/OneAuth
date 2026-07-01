@@ -60,6 +60,8 @@ export interface AccessLog {
   client_id: string;
   client_name: string;
   ip_address: string;
+  province?: string;
+  city?: string;
   created_at: string;
 }
 

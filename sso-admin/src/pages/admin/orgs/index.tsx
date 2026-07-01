@@ -17,6 +17,7 @@ import {
   Select,
   Drawer,
   Transfer,
+  TreeSelect,
 } from 'antd';
 import {
   PlusOutlined,
@@ -64,6 +65,10 @@ function collectSubtreeIds(tree: Department[], rootId: string): string[] {
   const root = dfs(tree);
   if (!root) return [rootId];
   return flattenDepts([root]).map((d) => d.id);
+}
+
+function getFirstDepartment(tree: Department[]): Department | null {
+  return tree[0]?.children?.[0] || tree[0] || null;
 }
 
 export default function OrgPage() {
@@ -123,18 +128,14 @@ export default function OrgPage() {
   }, []);
 
   const loadMembers = (deptId?: string) => {
-    if (!deptId) {
-      setMembers([]);
-      setMemberTotal(0);
-      return;
-    }
-    const ids = collectSubtreeIds(tree, deptId);
     setMemberLoading(true);
+    // 如果选中了部门，收集该部门及其所有子部门的 ID
+    const deptIds = deptId ? collectSubtreeIds(tree, deptId) : undefined;
     usersApi
       .list({
         page: pagination.current,
         page_size: pagination.pageSize,
-        department_ids: ids.join(','),
+        department_ids: deptIds ? deptIds.join(',') : undefined,
         keyword: memberKeyword,
       })
       .then((d) => {
@@ -149,27 +150,36 @@ export default function OrgPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDept?.id, pagination.current, pagination.pageSize]);
 
-  // 第一次树加载完成后自动选第一个
-  useEffect(() => {
-    if (!selectedDept && tree.length > 0) {
-      const first = tree[0].children?.[0] || tree[0];
-      setSelectedDept(first);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree]);
+  // 首次加载时不自动选中任何部门，展示全部用户
 
   const handleDeptAdd = (p?: Department) => {
     setEditingDept(null);
-    setDeptParent(p || null);
+    // 如果传入了父节点（点击"新建子部门"），使用它；否则默认为根目录
+    const defaultParent = p || null;
+    setDeptParent(defaultParent);
     deptForm.resetFields();
-    deptForm.setFieldsValue({ sort_order: 0 });
+    setTimeout(() => {
+      deptForm.setFieldsValue({ 
+        sort_order: 0,
+        parent_id: defaultParent?.id || '',
+      });
+    }, 0);
     setDeptOpen(true);
   };
 
   const handleDeptEdit = (d: Department) => {
     setEditingDept(d);
     setDeptParent(null);
-    deptForm.setFieldsValue(d);
+    deptForm.resetFields();
+    // 使用 setTimeout 确保表单字段已渲染后再设置值
+    setTimeout(() => {
+      deptForm.setFieldsValue({
+        name: d.name,
+        parent_id: d.parent_id || '',
+        sort_order: d.sort_order ?? 0,
+        description: d.description || '',
+      });
+    }, 0);
     setDeptOpen(true);
   };
 
@@ -192,7 +202,7 @@ export default function OrgPage() {
       await orgApi.update(editingDept.id, v);
       message.success('已更新');
     } else {
-      await orgApi.create({ ...v, parent_id: deptParent?.id });
+      await orgApi.create({ ...v, parent_id: v.parent_id || null });
       message.success('已创建');
     }
     setDeptOpen(false);
@@ -339,10 +349,10 @@ export default function OrgPage() {
           <div className="dept-members-title">
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>
-                {selectedDept ? `${selectedDept.name} 成员` : '请选择左侧部门'}
+                {selectedDept ? `${selectedDept.name} 成员` : '全部成员'}
               </div>
               <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {selectedDept ? `共 ${memberTotal} 人` : '点击左侧任意部门查看成员'}
+                {selectedDept ? `共 ${memberTotal} 人` : `共 ${memberTotal} 人`}
               </div>
             </div>
             <Space>
@@ -442,7 +452,7 @@ export default function OrgPage() {
 
       {/* 部门 Drawer */}
       <Drawer
-        title={editingDept ? '编辑部门' : `新建部门${deptParent ? ' (父级: ' + deptParent.name + ')' : ''}`}
+        title={editingDept ? '编辑部门' : '新建部门'}
         className="dept-drawer"
         open={deptOpen}
         onClose={() => setDeptOpen(false)}
@@ -453,6 +463,32 @@ export default function OrgPage() {
         <Form form={deptForm} layout="vertical" preserve={false}>
           <Form.Item name="name" label="部门名称" rules={[{ required: true }]}>
             <Input />
+          </Form.Item>
+          <Form.Item name="parent_id" label="上级组织">
+            <TreeSelect
+              allowClear
+              showSearch
+              treeDefaultExpandAll
+              placeholder="根目录（顶级部门）"
+              treeNodeFilterProp="title"
+              treeData={[
+                { title: '根目录', value: '', key: 'root' },
+                ...(() => {
+                  // 编辑时排除自身及其子树，防止循环引用
+                  const exclude = editingDept ? new Set(collectSubtreeIds(tree, editingDept.id)) : new Set<string>();
+                  const build = (list: Department[]): any[] =>
+                    list
+                      .filter((d) => !exclude.has(d.id))
+                      .map((d) => ({
+                        title: d.name,
+                        value: d.id,
+                        key: d.id,
+                        children: d.children?.length ? build(d.children) : undefined,
+                      }));
+                  return build(tree);
+                })(),
+              ]}
+            />
           </Form.Item>
           <Form.Item name="sort_order" label="排序">
             <InputNumber min={0} style={{ width: '100%' }} />
@@ -470,6 +506,7 @@ export default function OrgPage() {
       {/* 移动部门 Drawer */}
       <Drawer
         title={movingDept ? `移动部门「${movingDept.name}」` : '移动部门'}
+        className="dept-drawer"
         open={moveOpen}
         onClose={() => setMoveOpen(false)}
         width={760}
@@ -477,31 +514,34 @@ export default function OrgPage() {
         closable
       >
         <div style={{ marginBottom: 12, color: '#475569', fontSize: 13 }}>
-          选择新的上级部门：选"根部门"将变成顶级部门；不能选择自身或自身的子部门。
+          选择新的上级部门：选"根目录"将变成顶级部门；不能选择自身或自身的子部门。
         </div>
-        <Select
+        <TreeSelect
           allowClear
+          showSearch
+          treeDefaultExpandAll
           style={{ width: '100%' }}
-          placeholder="根部门"
+          placeholder="根目录（顶级部门）"
+          treeNodeFilterProp="title"
           value={moveTargetParent || undefined}
           onChange={(v) => setMoveTargetParent(v || null)}
-          showSearch
-          optionFilterProp="label"
-          options={(() => {
-            // 平铺并排除自己 + 自己子树
-            const exclude = movingDept ? new Set(collectSubtreeIds(tree, movingDept.id)) : new Set<string>();
-            const flat: Array<{ value: string; label: string }> = [];
-            const dfs = (nodes: Department[], depth: number) => {
-              for (const n of nodes) {
-                if (!exclude.has(n.id)) {
-                  flat.push({ value: n.id, label: '— '.repeat(depth) + n.name });
-                }
-                if (n.children?.length) dfs(n.children, depth + 1);
-              }
-            };
-            dfs(tree, 0);
-            return flat;
-          })()}
+          treeData={[
+            { title: '根目录', value: '', key: 'root' },
+            ...(() => {
+              // 排除自己 + 自己子树
+              const exclude = movingDept ? new Set(collectSubtreeIds(tree, movingDept.id)) : new Set<string>();
+              const build = (list: Department[]): any[] =>
+                list
+                  .filter((d) => !exclude.has(d.id))
+                  .map((d) => ({
+                    title: d.name,
+                    value: d.id,
+                    key: d.id,
+                    children: d.children?.length ? build(d.children) : undefined,
+                  }));
+              return build(tree);
+            })(),
+          ]}
         />
         <div className="drawer-footer">
           <Button onClick={() => setMoveOpen(false)}>取消</Button>
