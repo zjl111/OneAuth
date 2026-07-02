@@ -33,6 +33,7 @@ export interface Permission {
 export interface LoginLog {
   id: number;
   username: string;
+  display_name?: string;
   ip_address: string;
   province?: string;
   city?: string;
@@ -46,6 +47,7 @@ export interface LoginLog {
 export interface OperationLog {
   id: number;
   username: string;
+  display_name?: string;
   action: string;
   resource_type: string;
   description: string;
@@ -57,6 +59,7 @@ export interface OperationLog {
 export interface AccessLog {
   id: number;
   username: string;
+  display_name?: string;
   client_id: string;
   client_name: string;
   ip_address: string;
@@ -215,6 +218,7 @@ export interface OnlineSession {
   sid: string;
   user_id: string;
   username: string;
+  display_name?: string;
   is_staff: boolean;
   ip: string;
   ua: string;

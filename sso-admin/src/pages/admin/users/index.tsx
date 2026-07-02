@@ -529,6 +529,7 @@ export default function UserListPage() {
           pageSize: pagination.pageSize,
           total,
           showSizeChanger: true,
+          showTotal: (t) => `共 ${t} 条`,
           onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
         }}
         columns={[

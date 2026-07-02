@@ -16,6 +16,21 @@ type LogRepository struct{ db *gorm.DB }
 
 func NewLogRepository(db *gorm.DB) *LogRepository { return &LogRepository{db: db} }
 
+type LoginLogView struct {
+	model.LoginLog
+	DisplayName string `gorm:"column:display_name" json:"display_name"`
+}
+
+type OperationLogView struct {
+	model.OperationLog
+	DisplayName string `gorm:"column:display_name" json:"display_name"`
+}
+
+type AccessLogView struct {
+	model.AccessLog
+	DisplayName string `gorm:"column:display_name" json:"display_name"`
+}
+
 func (r *LogRepository) RecordLogin(userID *uuid.UUID, username, ip, ua, method, status, msg string) {
 	if method == "" {
 		method = "password"
@@ -140,71 +155,98 @@ func paginate(page, size int) (int, int) {
 	return page, size
 }
 
-func (r *LogRepository) ListLoginLogs(q LogQuery) ([]model.LoginLog, int64, error) {
-	tx := applyLogFilter(r.db.Model(&model.LoginLog{}), q)
+func (r *LogRepository) ListLoginLogs(q LogQuery) ([]LoginLogView, int64, error) {
+	tx := r.db.Table("sso_login_log AS l").
+		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
+		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
+	if q.Username != "" {
+		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
+	}
+	if q.StartTime != nil {
+		tx = tx.Where("l.created_at >= ?", q.StartTime)
+	}
+	if q.EndTime != nil {
+		tx = tx.Where("l.created_at <= ?", q.EndTime)
+	}
 	if q.Status != "" {
-		tx = tx.Where("status = ?", q.Status)
+		tx = tx.Where("l.status = ?", q.Status)
 	}
 	var total int64
-	tx.Count(&total)
+	if err := tx.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	page, size := paginate(q.Page, q.PageSize)
-	var items []model.LoginLog
-	err := tx.Order("created_at DESC").Limit(size).Offset((page - 1) * size).Find(&items).Error
+	var items []LoginLogView
+	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
 	return items, total, err
 }
 
-func (r *LogRepository) ListOperationLogs(q LogQuery) ([]model.OperationLog, int64, error) {
-	tx := applyLogFilter(r.db.Model(&model.OperationLog{}), q)
+func (r *LogRepository) ListOperationLogs(q LogQuery) ([]OperationLogView, int64, error) {
+	tx := r.db.Table("sso_operation_log AS l").
+		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
+		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
+	if q.Username != "" {
+		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
+	}
+	if q.StartTime != nil {
+		tx = tx.Where("l.created_at >= ?", q.StartTime)
+	}
+	if q.EndTime != nil {
+		tx = tx.Where("l.created_at <= ?", q.EndTime)
+	}
 	if q.Status != "" {
 		if code, err := strconv.Atoi(q.Status); err == nil {
-			tx = tx.Where("status = ?", code)
+			tx = tx.Where("l.status = ?", code)
 		}
 	}
 	if q.Resource != "" {
-		tx = tx.Where("resource_type LIKE ?", "%"+q.Resource+"%")
+		tx = tx.Where("l.resource_type LIKE ?", "%"+q.Resource+"%")
 	}
 	var total int64
-	tx.Count(&total)
+	if err := tx.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	page, size := paginate(q.Page, q.PageSize)
-	var items []model.OperationLog
-	err := tx.Order("created_at DESC").Limit(size).Offset((page - 1) * size).Find(&items).Error
+	var items []OperationLogView
+	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
 	return items, total, err
 }
 
-func (r *LogRepository) ListAccessLogs(q LogQuery) ([]model.AccessLog, int64, error) {
-	tx := applyLogFilter(r.db.Model(&model.AccessLog{}), q)
-	if q.ClientID != "" {
-		tx = tx.Where("client_id LIKE ?", "%"+q.ClientID+"%")
-	}
-	var total int64
-	tx.Count(&total)
-	page, size := paginate(q.Page, q.PageSize)
-	var items []model.AccessLog
-	err := tx.Order("created_at DESC").Limit(size).Offset((page - 1) * size).Find(&items).Error
-	return items, total, err
-}
-
-// applyLogFilter 应用用户名 / 时间窗口。status 只在 login_log 上是文本，operation_log 是整型，
-// access_log 没有该列——交由 caller 自己决定如何处理。
-func applyLogFilter(tx *gorm.DB, q LogQuery) *gorm.DB {
+func (r *LogRepository) ListAccessLogs(q LogQuery) ([]AccessLogView, int64, error) {
+	tx := r.db.Table("sso_access_log AS l").
+		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
+		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
 	if q.Username != "" {
-		tx = tx.Where("username LIKE ?", "%"+q.Username+"%")
+		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
 	}
 	if q.StartTime != nil {
-		tx = tx.Where("created_at >= ?", q.StartTime)
+		tx = tx.Where("l.created_at >= ?", q.StartTime)
 	}
 	if q.EndTime != nil {
-		tx = tx.Where("created_at <= ?", q.EndTime)
+		tx = tx.Where("l.created_at <= ?", q.EndTime)
 	}
-	return tx
+	if q.ClientID != "" {
+		tx = tx.Where("l.client_id LIKE ?", "%"+q.ClientID+"%")
+	}
+	var total int64
+	if err := tx.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, size := paginate(q.Page, q.PageSize)
+	var items []AccessLogView
+	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
+	return items, total, err
 }
 
-// PruneOlderThan 清理超过保留期的日志（用于定时任务）
-func (r *LogRepository) PruneOlderThan(d time.Duration) {
-	cutoff := time.Now().Add(-d)
-	r.db.Where("created_at < ?", cutoff).Delete(&model.LoginLog{})
-	r.db.Where("created_at < ?", cutoff).Delete(&model.OperationLog{})
-	r.db.Where("created_at < ?", cutoff).Delete(&model.AccessLog{})
+func pruneTableBefore(db *gorm.DB, table string, cutoff time.Time) {
+	db.Exec("DELETE FROM "+table+" WHERE created_at < ?", cutoff)
+}
+
+// PruneLogsBefore 按表分别清理指定时间之前的日志。
+func (r *LogRepository) PruneLogsBefore(loginBefore, operationBefore, accessBefore time.Time) {
+	pruneTableBefore(r.db, "sso_login_log", loginBefore)
+	pruneTableBefore(r.db, "sso_operation_log", operationBefore)
+	pruneTableBefore(r.db, "sso_access_log", accessBefore)
 }
 
 // CountActiveUsersWithin 返回过去 d 时间内有成功登录或应用访问记录的去重用户数。

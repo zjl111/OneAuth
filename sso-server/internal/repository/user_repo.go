@@ -19,10 +19,14 @@ func (r *UserRepository) Update(u *model.User) error { return r.db.Save(u).Error
 
 func (r *UserRepository) Delete(id uuid.UUID) error {
 	// 物理删除：先清掉 many2many 关联表 sso_user_roles 里这个 user 的所有行，
+	// 以及 sso_user_group_members 里的成员关系，
 	// 再删用户本身。否则 user 删后角色关联行就成了孤儿（虽然没 FK 报错也无害，
 	// 但留垃圾，下次 SetRoles 的 Replace 也认不出来）。
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM sso_user_roles WHERE user_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM sso_user_group_members WHERE user_id = ?", id).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&model.User{}, "id = ?", id).Error

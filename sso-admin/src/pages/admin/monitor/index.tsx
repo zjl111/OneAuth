@@ -20,12 +20,19 @@ export default function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [form] = Form.useForm();
+
+  const pagedData = data.slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
 
   const load = () => {
     setLoading(true);
     monitorApi.list().then((d) => {
       setData(d);
+      setPagination((p) => {
+        const totalPages = Math.max(1, Math.ceil(d.length / p.pageSize));
+        return { ...p, current: Math.min(p.current, totalPages) };
+      });
       setLoading(false);
     });
   };
@@ -82,8 +89,15 @@ export default function MonitorPage() {
       <Table
         rowKey="client_id"
         loading={loading}
-        dataSource={data}
-        pagination={false}
+        dataSource={pagedData}
+        pagination={{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          total: data.length,
+          showSizeChanger: true,
+          showTotal: (t) => `共 ${t} 条`,
+          onChange: (current, pageSize) => setPagination({ current, pageSize }),
+        }}
         scroll={{ x: 1180 }}
         rowSelection={{
           selectedRowKeys: selectedIds,

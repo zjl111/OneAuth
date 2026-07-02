@@ -386,6 +386,7 @@ export default function OrgPage() {
             pageSize: pagination.pageSize,
             total: memberTotal,
             showSizeChanger: true,
+            showTotal: (t) => `共 ${t} 条`,
             onChange: (p, s) => setPagination({ current: p, pageSize: s }),
           }}
           columns={[

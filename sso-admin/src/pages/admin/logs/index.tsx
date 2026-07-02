@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Input, Button, Select, type TableColumnsType } from 'antd';
+import { Card, Tabs, Table, Tag, Input, Button, Select, Form, InputNumber, Space, App as AntdApp, type TableColumnsType } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { logApi, type LoginLog, type OperationLog, type AccessLog } from '@/api/misc';
+import { configApi, logApi, type AccessLog, type LoginLog, type OperationLog, type SystemConfig } from '@/api/misc';
 import type { PageData } from '@/api/request';
 import './logs.css';
 
@@ -22,6 +22,81 @@ interface LogTableProps<T> {
 
 function fmtTime(v: string) {
   return dayjs(v).format('YYYY-MM-DD HH:mm:ss');
+}
+
+function LogsStrategyPanel() {
+  const { message } = AntdApp.useApp();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const items = await configApi.byCategory('logs');
+      const obj: Record<string, number> = {
+        'logs.login_retention_days': 180,
+        'logs.operation_retention_days': 180,
+        'logs.access_retention_days': 180,
+      };
+      (items || []).forEach((c: SystemConfig) => {
+        const n = Number(c.value);
+        if (!Number.isNaN(n) && n > 0) {
+          obj[`${c.category}.${c.key}`] = n;
+        }
+      });
+      form.setFieldsValue(obj);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    const values = await form.validateFields();
+    const items = Object.entries(values).map(([k, v]) => {
+      const [category, ...rest] = k.split('.');
+      return { category, key: rest.join('.'), value: String(v) };
+    });
+    setSaving(true);
+    try {
+      await configApi.set(items);
+      message.success('已保存清除策略');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ paddingTop: 8 }}>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Card>
+          <Form form={form} layout="vertical" disabled={loading}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 24 }}>
+              <Form.Item label="登录日志清除时间" name="logs.login_retention_days" extra="默认清除 180 天前的登录记录">
+                <InputNumber min={1} max={3650} style={{ width: '100%' }} addonAfter="天" />
+              </Form.Item>
+              <Form.Item label="操作日志清除时间" name="logs.operation_retention_days" extra="默认清除 180 天前的操作记录">
+                <InputNumber min={1} max={3650} style={{ width: '100%' }} addonAfter="天" />
+              </Form.Item>
+              <Form.Item label="访问日志清除时间" name="logs.access_retention_days" extra="默认清除 180 天前的访问记录">
+                <InputNumber min={1} max={3650} style={{ width: '100%' }} addonAfter="天" />
+              </Form.Item>
+            </div>
+          </Form>
+        </Card>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button type="primary" onClick={save} loading={saving}>
+            保存清除策略
+          </Button>
+        </div>
+      </Space>
+    </div>
+  );
 }
 
 function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: LogTableProps<T>) {
@@ -92,6 +167,7 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
           pageSize: pagination.pageSize,
           total,
           showSizeChanger: true,
+          showTotal: (t) => `共 ${t} 条`,
           onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
         }}
       />
@@ -100,7 +176,14 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
 }
 
 const loginColumns: TableColumnsType<LoginLog> = [
-  { title: '用户名', dataIndex: 'username', width: 140 },
+  {
+    title: '用户名',
+    width: 220,
+    render: (_, r) => {
+      const name = r.display_name || r.username;
+      return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
+    },
+  },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
   {
     title: '登录城市',
@@ -127,7 +210,7 @@ const loginColumns: TableColumnsType<LoginLog> = [
     render: (v) => (v === 'success' ? <Tag color="green">成功</Tag> : <Tag color="red">失败</Tag>),
   },
   { title: '消息', dataIndex: 'message', width: 160, ellipsis: true },
-  { title: 'User-Agent', dataIndex: 'user_agent', ellipsis: true, render: (v: string) => v || '—' },
+  { title: '用户代理', dataIndex: 'user_agent', ellipsis: true, render: (v: string) => v || '—' },
   { title: '时间', dataIndex: 'created_at', width: 170, render: fmtTime },
 ];
 
@@ -184,7 +267,14 @@ function translateAction(action: string, resource: string): string {
 }
 
 const operationColumns: TableColumnsType<OperationLog> = [
-  { title: '用户', dataIndex: 'username', width: 140 },
+  {
+    title: '用户',
+    width: 220,
+    render: (_, r) => {
+      const name = r.display_name || r.username;
+      return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
+    },
+  },
   {
     title: '资源',
     dataIndex: 'resource_type',
@@ -215,7 +305,14 @@ const operationColumns: TableColumnsType<OperationLog> = [
 ];
 
 const accessColumns: TableColumnsType<AccessLog> = [
-  { title: '用户', dataIndex: 'username', width: 140 },
+  {
+    title: '用户',
+    width: 220,
+    render: (_, r) => {
+      const name = r.display_name || r.username;
+      return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
+    },
+  },
   { title: '应用名称', dataIndex: 'client_name', width: 200 },
   { title: 'Client ID', dataIndex: 'client_id', width: 200 },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
@@ -253,7 +350,7 @@ export default function LogsPage() {
                 <LogTable<LoginLog>
                   fetcher={logApi.login}
                   columns={loginColumns}
-                  filters={[{ key: 'username', placeholder: '用户名' }]}
+                  filters={[{ key: 'username', placeholder: '姓名 / 用户名' }]}
                 />
               ),
             },
@@ -289,6 +386,11 @@ export default function LogsPage() {
                   ]}
                 />
               ),
+            },
+            {
+              key: 'strategy',
+              label: '清除策略',
+              children: <LogsStrategyPanel />,
             },
           ]}
         />

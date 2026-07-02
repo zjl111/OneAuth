@@ -142,6 +142,16 @@ func (h *AuthHandler) setAccessTokenCookie(c *gin.Context, token string) {
 	setCookie(c, session.AccessTokenCookieName, token, int(h.TokenService.AccessTTL().Seconds()))
 }
 
+func sessionDisplayName(u *model.User) string {
+	if u == nil {
+		return ""
+	}
+	if u.Nickname != "" {
+		return u.Nickname
+	}
+	return u.Username
+}
+
 func (h *AuthHandler) clearSSOCookies(c *gin.Context) {
 	clearCookie(c, session.CookieName)
 	clearCookie(c, session.AccessTokenCookieName)
@@ -204,7 +214,11 @@ func (h *AuthHandler) SyncSSOSession(c *gin.Context) {
 		log.Printf("[session-debug] sync: no sso_session cookie in request, creating new session")
 	}
 
-	sd, err := h.SessionMgr.Create(c.Request.Context(), userID, username, c.ClientIP(), c.GetHeader("User-Agent"), isStaff)
+	displayName := username
+	if user != nil {
+		displayName = sessionDisplayName(user)
+	}
+	sd, err := h.SessionMgr.Create(c.Request.Context(), userID, username, displayName, c.ClientIP(), c.GetHeader("User-Agent"), isStaff)
 	if err != nil {
 		response.ServerError(c, "同步会话失败")
 		return
@@ -280,7 +294,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
-	sd, err := h.SessionMgr.Create(c.Request.Context(), user.ID.String(), user.Username, c.ClientIP(), c.GetHeader("User-Agent"), user.IsStaff)
+	sd, err := h.SessionMgr.Create(c.Request.Context(), user.ID.String(), user.Username, sessionDisplayName(user), c.ClientIP(), c.GetHeader("User-Agent"), user.IsStaff)
 	if err != nil {
 		response.ServerError(c, "创建会话失败")
 		return

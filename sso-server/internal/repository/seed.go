@@ -307,6 +307,9 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "security", Key: "ip_ban_duration", Value: "3600", Description: "封禁时长（秒），0 = 永久"},
 		{Category: "monitor", Key: "interval", Value: "30", Description: "监控周期(秒)"},
 		{Category: "monitor", Key: "public_status_page", Value: "true", Description: "状态页是否公开"},
+		{Category: "logs", Key: "login_retention_days", Value: "180", Description: "登录日志保留天数（单位：天）"},
+		{Category: "logs", Key: "operation_retention_days", Value: "180", Description: "操作日志保留天数（单位：天）"},
+		{Category: "logs", Key: "access_retention_days", Value: "180", Description: "应用访问日志保留天数（单位：天）"},
 		// OAuth2 / OIDC 协议参数 — 修改后重启服务生效
 		{Category: "oauth", Key: "issuer", Value: "http://localhost:8080", Description: "Issuer URL（修改会让已签发的 JWT 全部失效，慎改）"},
 		{Category: "oauth", Key: "access_token_ttl", Value: "3600", Description: "Access Token 有效期（秒）"},

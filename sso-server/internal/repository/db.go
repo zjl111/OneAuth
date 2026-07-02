@@ -90,6 +90,8 @@ func AutoMigrate(db *gorm.DB) error {
 	runOnce(db, "backfill_health_check_urls_v1", func() { backfillHealthCheckURLs(db) })
 	runOnce(db, "migrate_access_policy_v1", func() { migrateAccessPolicy(db) })
 	runOnce(db, "purge_soft_deleted_users_v1", func() { purgeSoftDeletedUsers(db) })
+	runOnce(db, "dedupe_user_group_members_v1", func() { dedupeUserGroupMembers(db) })
+	runOnce(db, "prune_orphan_user_group_members_v1", func() { pruneOrphanUserGroupMembers(db) })
 	return nil
 }
 
@@ -156,6 +158,52 @@ func migrateAccessPolicy(db *gorm.DB) {
 	           AND COALESCE(grant_mode, '') IN ('user', 'group', 'org')`)
 }
 
+// dedupeUserGroupMembers 清理历史 many2many 重复关系，并补一个唯一约束，避免成员数和
+// 关联数据继续膨胀。旧数据可能因为 AddMember/导入重复执行而写出多行同一关系。
+func dedupeUserGroupMembers(db *gorm.DB) {
+	switch db.Dialector.Name() {
+	case "sqlite":
+		db.Exec(`
+			DELETE FROM sso_user_group_members
+			WHERE rowid NOT IN (
+				SELECT MIN(rowid)
+				FROM sso_user_group_members
+				GROUP BY user_group_id, user_id
+			)
+		`)
+	case "postgres":
+		db.Exec(`
+			DELETE FROM sso_user_group_members a
+			USING sso_user_group_members b
+			WHERE a.user_group_id = b.user_group_id
+			  AND a.user_id = b.user_id
+			  AND a.ctid < b.ctid
+		`)
+	}
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_user_group_members_unique
+		ON sso_user_group_members (user_group_id, user_id)`)
+}
+
+// pruneOrphanUserGroupMembers 清理已经不存在的用户/用户组对应的成员关系。
+// 历史上用户物理删除时没有级联清理，导致 sso_user_group_members 里残留大量孤儿行，
+// 页面成员数和应用授权判断都会被这些脏数据抬高。
+func pruneOrphanUserGroupMembers(db *gorm.DB) {
+	switch db.Dialector.Name() {
+	case "sqlite":
+		db.Exec(`
+			DELETE FROM sso_user_group_members
+			WHERE user_id NOT IN (SELECT id FROM sso_user)
+			   OR user_group_id NOT IN (SELECT id FROM sso_user_group)
+		`)
+	default:
+		db.Exec(`
+			DELETE FROM sso_user_group_members m
+			WHERE NOT EXISTS (SELECT 1 FROM sso_user u WHERE u.id = m.user_id)
+			   OR NOT EXISTS (SELECT 1 FROM sso_user_group g WHERE g.id = m.user_group_id)
+		`)
+	}
+}
+
 // BackfillLogRegion 在 geoip.Init 之后由 main 调用，重算所有缺 city 的日志行。
 // 这条不走 runOnce 标记，因为 ip2region 库可能后续更新，下次启动如果检测到坏数据仍需修复。
 // 用 LIMIT 200 防止启动时一次扫太多。
@@ -163,7 +211,7 @@ func BackfillLogRegion(db *gorm.DB) { backfillLogRegion(db) }
 
 // backfillLogRegion 修复历史登录/访问日志的 province/city/isp。
 // 历史问题：旧版本只写 province，但当时 geoip 把直辖市的城市名（如"郑州"）写到了 province 字段。
-// 启动时跑一次：把所有 city='' 的行用当前 IP 重新解析一次，填齐三列。
+// 启动时跑一次：把所有 city=” 的行用当前 IP 重新解析一次，填齐三列。
 func backfillLogRegion(db *gorm.DB) {
 	type row struct {
 		Table string

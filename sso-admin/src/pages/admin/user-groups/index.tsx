@@ -145,7 +145,12 @@ export default function UserGroupsPage() {
           rowKey="id"
           loading={loading}
           dataSource={filtered}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            total: filtered.length,
+            showTotal: (t) => `共 ${t} 条`,
+          }}
           columns={[
             {
               title: '名称',

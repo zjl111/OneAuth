@@ -20,15 +20,16 @@ const (
 
 // SessionData 服务端会话数据
 type SessionData struct {
-	SessionID string    `json:"sid"`
-	UserID    string    `json:"user_id"`
-	Username  string    `json:"username"`
-	IsStaff   bool      `json:"is_staff"`
-	IP        string    `json:"ip"`
-	UserAgent string    `json:"ua"`
-	AuthTime  time.Time `json:"auth_time"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	SessionID   string    `json:"sid"`
+	UserID      string    `json:"user_id"`
+	Username    string    `json:"username"`
+	DisplayName string    `json:"display_name"`
+	IsStaff     bool      `json:"is_staff"`
+	IP          string    `json:"ip"`
+	UserAgent   string    `json:"ua"`
+	AuthTime    time.Time `json:"auth_time"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 type Manager struct {
@@ -46,18 +47,19 @@ func New(store oauth.Store, ttl time.Duration) *Manager {
 	return &Manager{store: store, ttl: ttl, index: make(map[string]struct{})}
 }
 
-func (m *Manager) Create(ctx context.Context, userID, username, ip, ua string, isStaff bool) (*SessionData, error) {
+func (m *Manager) Create(ctx context.Context, userID, username, displayName, ip, ua string, isStaff bool) (*SessionData, error) {
 	now := time.Now()
 	data := &SessionData{
-		SessionID: utils.RandomString(32),
-		UserID:    userID,
-		Username:  username,
-		IsStaff:   isStaff,
-		IP:        ip,
-		UserAgent: ua,
-		AuthTime:  now,
-		CreatedAt: now,
-		ExpiresAt: now.Add(m.ttl),
+		SessionID:   utils.RandomString(32),
+		UserID:      userID,
+		Username:    username,
+		DisplayName: displayName,
+		IsStaff:     isStaff,
+		IP:          ip,
+		UserAgent:   ua,
+		AuthTime:    now,
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(m.ttl),
 	}
 	b, err := json.Marshal(data)
 	if err != nil {

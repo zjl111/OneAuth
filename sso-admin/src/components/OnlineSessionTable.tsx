@@ -8,6 +8,11 @@ function fmtTime(v: string) {
   return v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-';
 }
 
+function fmtUser(r: OnlineSession) {
+  const name = r.display_name || r.username;
+  return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
+}
+
 export default function OnlineSessionTable() {
   const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<OnlineSession[]>([]);
@@ -54,7 +59,7 @@ export default function OnlineSessionTable() {
         dataSource={data}
         pagination={false}
         columns={[
-          { title: '用户名', dataIndex: 'username', width: 160 },
+          { title: '用户名', width: 220, render: (_, r) => fmtUser(r) },
           {
             title: '类型',
             dataIndex: 'is_staff',
@@ -62,14 +67,14 @@ export default function OnlineSessionTable() {
             render: (v) => (v ? <Tag color="purple">管理员</Tag> : <Tag>普通用户</Tag>),
           },
           { title: 'IP', dataIndex: 'ip', width: 140 },
-          { title: 'User-Agent', dataIndex: 'ua', ellipsis: true },
+          { title: '用户代理', dataIndex: 'ua', ellipsis: true },
           { title: '登录时间', dataIndex: 'auth_time', width: 170, render: fmtTime },
           { title: '过期时间', dataIndex: 'expires_at', width: 170, render: fmtTime },
           {
             title: '操作',
             width: 100,
             render: (_, r) => (
-              <Popconfirm title={`强制 ${r.username} 下线？`} okType="danger" onConfirm={() => handleKick(r)}>
+              <Popconfirm title={`强制 ${fmtUser(r)} 下线？`} okType="danger" onConfirm={() => handleKick(r)}>
                 <span className="act-link" style={{ color: '#ef4444' }}>强制下线</span>
               </Popconfirm>
             ),

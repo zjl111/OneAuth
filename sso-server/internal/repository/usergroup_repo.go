@@ -39,7 +39,8 @@ func (r *UserGroupRepository) ListWithCount() ([]UserGroupWithCount, error) {
 	}
 	var rows []row
 	r.db.Table("sso_user_group_members").
-		Select("user_group_id, COUNT(*) as cnt").
+		Joins("JOIN sso_user u ON u.id = sso_user_group_members.user_id").
+		Select("user_group_id, COUNT(DISTINCT sso_user_group_members.user_id) as cnt").
 		Group("user_group_id").
 		Scan(&rows)
 	cntMap := make(map[uuid.UUID]int64, len(rows))
@@ -95,6 +96,7 @@ func (r *UserGroupRepository) ListMembers(id uuid.UUID) ([]model.User, error) {
 // SetMembers 全量重置组成员列表
 func (r *UserGroupRepository) SetMembers(id uuid.UUID, userIDs []uuid.UUID) error {
 	group := &model.UserGroup{ID: id}
+	userIDs = uniqUUIDs(userIDs)
 	var users []model.User
 	if len(userIDs) > 0 {
 		if err := r.db.Where("id IN ?", userIDs).Find(&users).Error; err != nil {
@@ -106,7 +108,35 @@ func (r *UserGroupRepository) SetMembers(id uuid.UUID, userIDs []uuid.UUID) erro
 
 // AddMember 往组里追加一个成员（不覆盖已有的）
 func (r *UserGroupRepository) AddMember(groupID uuid.UUID, userID uuid.UUID) error {
-	user := model.User{ID: userID}
-	group := model.UserGroup{ID: groupID}
-	return r.db.Model(&group).Association("Members").Append(&user)
+	switch r.db.Dialector.Name() {
+	case "sqlite":
+		return r.db.Exec(
+			`INSERT OR IGNORE INTO sso_user_group_members (user_group_id, user_id) VALUES (?, ?)`,
+			groupID, userID,
+		).Error
+	default:
+		return r.db.Exec(
+			`INSERT INTO sso_user_group_members (user_group_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+			groupID, userID,
+		).Error
+	}
+}
+
+func uniqUUIDs(ids []uuid.UUID) []uuid.UUID {
+	if len(ids) < 2 {
+		return ids
+	}
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if id == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }

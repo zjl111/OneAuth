@@ -106,7 +106,7 @@ func (h *WeComHandler) Callback(c *gin.Context) {
 	}
 
 	// 创建 SSO 会话 cookie，让浏览器之后访问 /oauth/authorize 时已"登录"
-	sd, err := h.SessionMgr.Create(c.Request.Context(), user.ID.String(), user.Username, c.ClientIP(), c.GetHeader("User-Agent"), user.IsStaff)
+	sd, err := h.SessionMgr.Create(c.Request.Context(), user.ID.String(), user.Username, sessionDisplayName(user), c.ClientIP(), c.GetHeader("User-Agent"), user.IsStaff)
 	if err != nil {
 		response.ServerError(c, "创建会话失败")
 		return

@@ -150,12 +150,30 @@ func main() {
 		log.Printf("[startup] monitor scheduler started (interval=%ds)", intervalSec)
 	}
 
-	// 日志保留 90 天，每小时清理一次
+	// 日志清理：按系统配置中的保留天数，每小时清理一次
 	go func() {
 		t := time.NewTicker(time.Hour)
 		defer t.Stop()
+		retentionDays := func(key string, fallback int) int {
+			v := configRepo.Get("logs", key)
+			if v == "" {
+				return fallback
+			}
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				return n
+			}
+			return fallback
+		}
 		for range t.C {
-			logRepo.PruneOlderThan(90 * 24 * time.Hour)
+			now := time.Now()
+			loginDays := retentionDays("login_retention_days", 180)
+			operationDays := retentionDays("operation_retention_days", 180)
+			accessDays := retentionDays("access_retention_days", 180)
+			logRepo.PruneLogsBefore(
+				now.AddDate(0, 0, -loginDays),
+				now.AddDate(0, 0, -operationDays),
+				now.AddDate(0, 0, -accessDays),
+			)
 		}
 	}()
 
