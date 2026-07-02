@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"log"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -48,21 +49,24 @@ func (h *OAuthHandler) effectiveIssuer() string {
 // --- helpers -------------------------------------------------------------
 
 func (h *OAuthHandler) currentSession(c *gin.Context) *session.SessionData {
-	sid, err := c.Cookie(session.CookieName)
-	if err != nil {
-		return nil
+	if sd := currentSessionFromCookie(c, h.SessionMgr); sd != nil {
+		return sd
 	}
-	sd, err := h.SessionMgr.Get(c.Request.Context(), sid)
-	if err != nil {
-		return nil
+	return recoverSessionFromAccessToken(c, h.SessionMgr, h.TokenService, h.UserService)
+}
+
+// normalizeRedirectURI 兼容第三方客户端把回调地址尾部多带的 '?' 或 '/'。
+// 这里保持和 client.CheckRedirectURI 的宽松语义一致，避免 authorize/token 两端出现不一致。
+func normalizeRedirectURI(uri string) string {
+	for len(uri) > 0 && (uri[len(uri)-1] == '?' || uri[len(uri)-1] == '/') {
+		uri = uri[:len(uri)-1]
 	}
-	return sd
+	return uri
 }
 
 func (h *OAuthHandler) clearSession(c *gin.Context) {
-	secure := c.Request.TLS != nil
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, "", -1, "/", "", secure, true)
+	clearCookie(c, session.CookieName)
+	clearCookie(c, session.AccessTokenCookieName)
 }
 
 func errorRedirect(c *gin.Context, redirectURI, err, desc, state string) {
@@ -85,8 +89,15 @@ func errorRedirect(c *gin.Context, redirectURI, err, desc, state string) {
 
 // Authorize 授权端点
 func (h *OAuthHandler) Authorize(c *gin.Context) {
+	log.Printf("[session-debug] /oauth/authorize: Cookie header = %q", c.GetHeader("Cookie"))
 	clientID := c.Query("client_id")
 	redirectURI := c.Query("redirect_uri")
+	// 登录回跳场景：return_to 中的 redirect_uri 经过 return_to 编码 + 浏览器导航，
+	// Gin 的 c.Query() 只解一层，可能还剩一层编码，需要再解一次
+	if decoded, err := url.QueryUnescape(redirectURI); err == nil && decoded != redirectURI {
+		redirectURI = decoded
+	}
+	redirectURI = normalizeRedirectURI(redirectURI)
 	scope := c.DefaultQuery("scope", "openid")
 	state := c.Query("state")
 	nonce := c.Query("nonce")
@@ -115,12 +126,14 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 
 	sd := h.currentSession(c)
 	if sd == nil {
+		log.Printf("[session-debug] /oauth/authorize: NO session found, redirecting to login")
 		loginURL := h.FrontendBase + "/?" + url.Values{
 			"return_to": []string{c.Request.URL.RequestURI()},
 		}.Encode()
 		c.Redirect(http.StatusFound, loginURL)
 		return
 	}
+	log.Printf("[session-debug] /oauth/authorize: session OK sid=%q user=%s", sd.SessionID, sd.Username)
 
 	userID := uuid.MustParse(sd.UserID)
 
@@ -196,14 +209,17 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 	c.Redirect(http.StatusFound, loc)
 }
 
-// Token 令牌端点
+// Token 令牌端点（同时支持 GET/POST，兼容 JumpServer 等用 GET 调 token 的客户端）
 func (h *OAuthHandler) Token(c *gin.Context) {
-	grantType := c.PostForm("grant_type")
+	// FormValue 同时读取 query string 和 POST body
+	param := c.Request.FormValue
+
+	grantType := param("grant_type")
 
 	clientID, clientSecret, hasBasic := c.Request.BasicAuth()
 	if !hasBasic {
-		clientID = c.PostForm("client_id")
-		clientSecret = c.PostForm("client_secret")
+		clientID = param("client_id")
+		clientSecret = param("client_secret")
 	}
 
 	client, err := h.ClientService.GetByClientID(clientID)
@@ -227,9 +243,10 @@ func (h *OAuthHandler) Token(c *gin.Context) {
 }
 
 func (h *OAuthHandler) handleAuthCodeGrant(c *gin.Context, client *model.OAuth2Client) {
-	code := c.PostForm("code")
-	redirectURI := c.PostForm("redirect_uri")
-	codeVerifier := c.PostForm("code_verifier")
+	param := c.Request.FormValue
+	code := param("code")
+	redirectURI := normalizeRedirectURI(param("redirect_uri"))
+	codeVerifier := param("code_verifier")
 
 	authCode, err := h.AuthCodeStore.Get(c.Request.Context(), code, client.ClientID)
 	if err != nil {
@@ -298,7 +315,7 @@ func (h *OAuthHandler) handleAuthCodeGrant(c *gin.Context, client *model.OAuth2C
 }
 
 func (h *OAuthHandler) handleRefreshTokenGrant(c *gin.Context, client *model.OAuth2Client) {
-	rt := c.PostForm("refresh_token")
+	rt := c.Request.FormValue("refresh_token")
 	if rt == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 		return
@@ -422,6 +439,9 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 			if user.Avatar != "" {
 				resp["picture"] = user.Avatar
 			}
+			if pick("department") && user.Department != nil {
+				resp["department"] = user.Department.Name
+			}
 		case "email":
 			if pick("email") && user.Email != nil {
 				resp["email"] = *user.Email
@@ -504,7 +524,7 @@ func (h *OAuthHandler) Discovery(c *gin.Context) {
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported": []string{
 			"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr",
-			"name", "preferred_username", "email", "email_verified", "phone_number", "roles", "is_staff",
+			"name", "preferred_username", "email", "email_verified", "phone_number", "department", "roles", "is_staff",
 		},
 		"code_challenge_methods_supported": []string{"S256"},
 	})

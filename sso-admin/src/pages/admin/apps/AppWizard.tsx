@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Form,
   Input,
+  InputNumber,
   Switch,
   Steps,
   Button,
@@ -126,6 +127,7 @@ export default function AppWizard({
         logo_url: editing.logo_url,
         login_url: editing.login_url || editing.home_url,
         is_active: editing.is_active,
+        sort_order: editing.sort_order || 0,
         description: editing.description,
 
         redirect_uris: editing.redirect_uris || [],
@@ -177,6 +179,7 @@ export default function AppWizard({
         protocol: family,
         protocol_version: initVersion,
         is_active: true,
+        sort_order: 0,
         redirect_uris: [],
         grant_types: ['authorization_code'],
         subject_type: 'username',
@@ -220,6 +223,7 @@ export default function AppWizard({
       home_url: v.login_url,
       login_url: v.login_url,
       is_active: v.is_active,
+      sort_order: v.sort_order || 0,
       description: v.description,
     };
     if (backendProtocol === 'oauth2' || backendProtocol === 'oidc') {
@@ -440,6 +444,10 @@ export default function AppWizard({
                 <Switch />
               </Form.Item>
             </div>
+
+            <Form.Item name="sort_order" label="排序" tooltip="数值越小越靠前，默认为 0">
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="数值越小越靠前" />
+            </Form.Item>
 
             <Form.Item name="description" label="描述">
               <Input.TextArea rows={3} placeholder="一句话描述该应用" />

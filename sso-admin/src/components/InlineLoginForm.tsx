@@ -42,6 +42,8 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
       setPending(null);
       const target = returnTo || redirectTo;
       if (target.startsWith('/oauth/authorize') || target.startsWith('/cas/') || target.startsWith('/saml/')) {
+        // 清除首页 useEffect 的防循环标记，让回跳顺利进行
+        sessionStorage.removeItem('__protoRedirect:' + target);
         window.location.replace(target);
         return;
       }

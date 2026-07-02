@@ -46,6 +46,8 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       onClose();
       const target = returnTo || redirectTo;
       if (target.startsWith('/oauth/authorize') || target.startsWith('/cas/') || target.startsWith('/saml/')) {
+        // 清除首页 useEffect 的防循环标记，让回跳顺利进行
+        sessionStorage.removeItem('__protoRedirect:' + target);
         // OAuth / CAS 协议页面必须 full reload，让后端读到刚 set 的 sso_session cookie
         window.location.replace(target);
         return;

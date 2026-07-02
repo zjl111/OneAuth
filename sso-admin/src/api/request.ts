@@ -1,7 +1,6 @@
 import axios, { type AxiosResponse } from 'axios';
 import { message } from 'antd';
 import { useAuthStore } from '@/store/authStore';
-import { loginPath } from '@/utils/redirect';
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -45,7 +44,7 @@ function bounceToLogin() {
   if ((window as any).__authBouncing) return;
   (window as any).__authBouncing = true;
   // 用硬跳转确保 SPA 路由不会拦截
-  window.location.href = loginPath(location.pathname + location.search);
+  window.location.href = '/';
 }
 
 request.interceptors.response.use(

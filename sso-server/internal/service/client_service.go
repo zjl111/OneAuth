@@ -40,6 +40,7 @@ type CreateClientInput struct {
 	HomeURL        string `json:"home_url"`
 	LoginURL       string `json:"login_url"`
 	HealthCheckURL string `json:"health_check_url"`
+	SortOrder      int    `json:"sort_order"`
 
 	// 访问授权：access_policy=all|assigned|none，assigned 时通过 Grants 提供 principals
 	AccessPolicy      string       `json:"access_policy"`
@@ -138,6 +139,7 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		LoginURL:         in.LoginURL,
 		// 监控地址默认与"应用入口"相同；状态监控页可单独覆盖
 		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
+		SortOrder:        in.SortOrder,
 		IsActive:         true,
 		AccessPolicy:     defaultStr(in.AccessPolicy, "all"),
 		VisibleInPortal:   in.VisibleInPortal == nil || *in.VisibleInPortal,
@@ -224,6 +226,7 @@ type UpdateClientInput struct {
 	LoginURL       *string `json:"login_url"`
 	HealthCheckURL *string `json:"health_check_url"`
 	IsActive       *bool   `json:"is_active"`
+	SortOrder      *int    `json:"sort_order"`
 
 	GrantMode         *string       `json:"grant_mode"` // 旧字段兼容（前端现在传 access_policy）
 	AccessPolicy      *string       `json:"access_policy"`
@@ -336,6 +339,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	}
 	if in.IsActive != nil {
 		c.IsActive = *in.IsActive
+	}
+	if in.SortOrder != nil {
+		c.SortOrder = *in.SortOrder
 	}
 
 	if in.OIDCIssuer != nil {
@@ -498,6 +504,10 @@ func (s *ClientService) List(q repository.ClientQuery) ([]model.OAuth2Client, in
 
 func (s *ClientService) ListAll() ([]model.OAuth2Client, error) {
 	return s.repo.ListAll()
+}
+
+func (s *ClientService) UpdateSortOrders(items []repository.SortItem) error {
+	return s.repo.UpdateSortOrders(items)
 }
 
 func defaultStr(v, fallback string) string {

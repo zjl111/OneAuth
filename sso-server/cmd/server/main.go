@@ -225,7 +225,7 @@ func main() {
 			Service:       userService,
 			ImportService: service.NewUserImportService(userService, deptRepo, roleRepo, userGroupRepo),
 		},
-		App:  &handler.AppHandler{Service: clientService},
+		App: &handler.AppHandler{Service: clientService},
 		Dashboard: &handler.DashboardHandler{
 			UserRepo: userRepo, ClientRepo: clientRepo,
 			LogRepo: logRepo, MonitorRepo: monitorRepo,
@@ -250,8 +250,8 @@ func main() {
 				}
 			},
 		},
-		Access:     &handler.AccessHandler{Repo: ipRepo},
-		Monitor:    &handler.MonitorHandler{Repo: monitorRepo, ClientRepo: clientRepo, ProbeFunc: probeFunc},
+		Access:  &handler.AccessHandler{Repo: ipRepo},
+		Monitor: &handler.MonitorHandler{Repo: monitorRepo, ClientRepo: clientRepo, ProbeFunc: probeFunc},
 		Status: &handler.StatusHandler{
 			MonitorRepo:   monitorRepo,
 			ClientService: clientService,
@@ -262,12 +262,13 @@ func main() {
 				return int(scheduler.Interval().Seconds())
 			},
 		},
-		Site:       &handler.SiteHandler{ConfigRepo: configRepo, Mailer: mailService},
-		Session:    &handler.SessionHandler{SessionMgr: sessionMgr},
-		UserGroup:  &handler.UserGroupHandler{Repo: userGroupRepo},
-		LoginRule:  &handler.LoginRuleHandler{Repo: loginRuleRepo},
+		Site:      &handler.SiteHandler{ConfigRepo: configRepo, Mailer: mailService},
+		Session:   &handler.SessionHandler{SessionMgr: sessionMgr},
+		UserGroup: &handler.UserGroupHandler{Repo: userGroupRepo},
+		LoginRule: &handler.LoginRuleHandler{Repo: loginRuleRepo},
 		CAS: &handler.CASHandler{
 			Store:         store,
+			TokenService:  tokenService,
 			SessionMgr:    sessionMgr,
 			ClientService: clientService,
 			UserService:   userService,
@@ -279,6 +280,7 @@ func main() {
 		SAML: &handler.SAMLHandler{
 			KeyManager:    keyManager,
 			Store:         store,
+			TokenService:  tokenService,
 			SessionMgr:    sessionMgr,
 			ClientService: clientService,
 			UserService:   userService,

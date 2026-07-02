@@ -70,7 +70,7 @@ func (r *ClientRepository) List(q ClientQuery) ([]model.OAuth2Client, int64, err
 		q.PageSize = 20
 	}
 	var items []model.OAuth2Client
-	if err := tx.Order("created_at DESC").Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).Find(&items).Error; err != nil {
+	if err := tx.Order("sort_order ASC, created_at DESC").Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).Find(&items).Error; err != nil {
 		return nil, 0, err
 	}
 	return items, total, nil
@@ -78,10 +78,33 @@ func (r *ClientRepository) List(q ClientQuery) ([]model.OAuth2Client, int64, err
 
 func (r *ClientRepository) ListAll() ([]model.OAuth2Client, error) {
 	var items []model.OAuth2Client
-	if err := r.db.Where("is_active = ?", true).Order("created_at DESC").Find(&items).Error; err != nil {
+	if err := r.db.Where("is_active = ?", true).Order("sort_order ASC, created_at DESC").Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil
+}
+
+// SortItem 批量排序用的 id + sort_order 对
+type SortItem struct {
+	ID        uuid.UUID
+	SortOrder int
+}
+
+// UpdateSortOrders 批量更新应用排序值
+func (r *ClientRepository) UpdateSortOrders(items []SortItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, item := range items {
+			if err := tx.Model(&model.OAuth2Client{}).
+				Where("id = ?", item.ID).
+				Update("sort_order", item.SortOrder).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *ClientRepository) Count() (int64, error) {

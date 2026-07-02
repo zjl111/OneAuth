@@ -1,4 +1,4 @@
-FROM scratch
+FROM alpine:latest
 WORKDIR /app
 COPY release/build/gateway/oneauth-gateway /app/oneauth-gateway
 COPY release/build/frontend/dist /app/site

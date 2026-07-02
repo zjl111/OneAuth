@@ -104,6 +104,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 	{
 		oauthGroup.GET("/authorize", h.OAuth.Authorize)
 		oauthGroup.POST("/authorize", h.OAuth.Authorize)
+		oauthGroup.GET("/token", h.OAuth.Token)
 		oauthGroup.POST("/token", h.OAuth.Token)
 		oauthGroup.GET("/userinfo", h.OAuth.UserInfo)
 		oauthGroup.POST("/userinfo", h.OAuth.UserInfo)
@@ -126,6 +127,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		api.GET("/auth/wecom/qr-config", h.WeCom.QRConfig)
 	}
 	api.POST("/auth/login", h.Auth.Login)
+	api.POST("/auth/sso-session", middleware.JWTAuth(ts, userSvc), h.Auth.SyncSSOSession)
 	api.POST("/auth/logout", h.Auth.Logout)
 	api.POST("/auth/refresh", h.Auth.Refresh)
 	api.POST("/auth/forgot-password", h.Auth.ForgotPassword)
@@ -216,6 +218,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/apps/batch-delete", h.App.BatchDelete)
 		admin.POST("/apps/:id/rotate-secret", h.App.RotateSecret)
 		admin.POST("/apps/:id/toggle-status", h.App.ToggleStatus)
+		admin.POST("/apps/sort", h.App.BatchSort)
 		// SAML：粘贴/上传 SP metadata URL 或 XML，返回前端要回填的字段
 		if h.SAML != nil {
 			admin.POST("/apps/saml/parse-metadata", h.SAML.ParseMetadata)

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { isTokenExpired } from '@/utils/token';
-import { loginPath } from '@/utils/redirect';
 
 /**
  * 全局 Token 过期监控 —— 挂载在应用根部，每 30 秒检测一次。
@@ -35,7 +34,7 @@ export default function AuthMonitor() {
           location.pathname.startsWith('/oauth/reset-password') ||
           location.pathname.startsWith('/status');
         if (!onPublicPage) {
-          window.location.href = loginPath(location.pathname + location.search);
+          window.location.href = '/';
         }
       }
     };

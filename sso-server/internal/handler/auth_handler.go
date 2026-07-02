@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -119,10 +120,98 @@ func toUserInfoPublic(u *model.User) UserInfoPublic {
 	}
 }
 
+// isHTTPSRequest 判断原始请求是否为 HTTPS —— 同时检查直连 TLS 和反向代理头。
+func isHTTPSRequest(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	if c.GetHeader("X-Forwarded-Proto") == "https" {
+		return true
+	}
+	if c.Request.URL.Scheme == "https" {
+		return true
+	}
+	return false
+}
+
 func (h *AuthHandler) setSSOCookie(c *gin.Context, sd *session.SessionData) {
-	secure := c.Request.TLS != nil
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, sd.SessionID, int(h.SessionMgr.TTL().Seconds()), "/", "", secure, true)
+	setCookie(c, session.CookieName, sd.SessionID, int(h.SessionMgr.TTL().Seconds()))
+}
+
+func (h *AuthHandler) setAccessTokenCookie(c *gin.Context, token string) {
+	setCookie(c, session.AccessTokenCookieName, token, int(h.TokenService.AccessTTL().Seconds()))
+}
+
+func (h *AuthHandler) clearSSOCookies(c *gin.Context) {
+	clearCookie(c, session.CookieName)
+	clearCookie(c, session.AccessTokenCookieName)
+}
+
+// SyncSSOSession 用当前 Bearer JWT 补建/补刷一次服务端 SSO 会话 cookie。
+// 适用于前端登录成功后，浏览器偶发没有稳定接住 Set-Cookie 的场景。
+func (h *AuthHandler) SyncSSOSession(c *gin.Context) {
+	userVal, _ := c.Get("user")
+	userIDVal, hasUserID := c.Get("user_id")
+	usernameVal, hasUsername := c.Get("username")
+	isStaffVal, hasIsStaff := c.Get("is_staff")
+
+	var user *model.User
+	if u, ok := userVal.(*model.User); ok {
+		user = u
+	}
+
+	var userID string
+	if user != nil {
+		userID = user.ID.String()
+	} else if hasUserID {
+		if s, ok := userIDVal.(string); ok {
+			userID = s
+		}
+	}
+	if userID == "" {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	username := ""
+	if user != nil {
+		username = user.Username
+	} else if hasUsername {
+		if s, ok := usernameVal.(string); ok {
+			username = s
+		}
+	}
+
+	isStaff := false
+	if user != nil {
+		isStaff = user.IsStaff
+	} else if hasIsStaff {
+		if b, ok := isStaffVal.(bool); ok {
+			isStaff = b
+		}
+	}
+
+	// 如果浏览器已经带了可用的 SSO 会话，直接复用并刷新 cookie。
+	if sid, err := c.Cookie(session.CookieName); err == nil && sid != "" {
+		if sd, err := h.SessionMgr.Get(c.Request.Context(), sid); err == nil && sd.UserID == userID {
+			log.Printf("[session-debug] sync: reusing existing session sid=%q", sid)
+			h.setSSOCookie(c, sd)
+			response.OK(c, gin.H{"synced": true})
+			return
+		}
+		log.Printf("[session-debug] sync: existing cookie sid=%q not found in store, creating new", sid)
+	} else {
+		log.Printf("[session-debug] sync: no sso_session cookie in request, creating new session")
+	}
+
+	sd, err := h.SessionMgr.Create(c.Request.Context(), userID, username, c.ClientIP(), c.GetHeader("User-Agent"), isStaff)
+	if err != nil {
+		response.ServerError(c, "同步会话失败")
+		return
+	}
+	log.Printf("[session-debug] sync: created new session sid=%q user=%s", sd.SessionID, username)
+	h.setSSOCookie(c, sd)
+	response.OK(c, gin.H{"synced": true})
 }
 
 // Login 管理后台/SPA 登录（产出 JWT + 设置 SSO Cookie）
@@ -196,7 +285,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.ServerError(c, "创建会话失败")
 		return
 	}
+	log.Printf("[session-debug] login: created session sid=%q user=%s", sd.SessionID, user.Username)
 	h.setSSOCookie(c, sd)
+	log.Printf("[session-debug] login: set cookie %s=%s (secure=%v, path=/)", session.CookieName, sd.SessionID, isHTTPSRequest(c))
 
 	access, _ := h.TokenService.IssueAccessToken(user.Username, user.ID.String(), AdminClientID, user.Username, AdminDefaultScope, 0)
 	refresh, err := h.TokenService.SaveRefreshToken(c.Request.Context(), user.ID.String(), AdminClientID, AdminDefaultScope, 0)
@@ -204,6 +295,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.ServerError(c, "签发刷新令牌失败")
 		return
 	}
+	h.setAccessTokenCookie(c, access)
 
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
 	h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
@@ -225,9 +317,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if sid != "" {
 		_ = h.SessionMgr.Delete(c.Request.Context(), sid)
 	}
-	secure := c.Request.TLS != nil
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, "", -1, "/", "", secure, true)
+	h.clearSSOCookies(c)
 	response.OK(c, nil)
 }
 
@@ -269,6 +359,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		response.ServerError(c, "签发刷新令牌失败")
 		return
 	}
+	h.setAccessTokenCookie(c, access)
 	response.OK(c, gin.H{
 		"access_token":  access,
 		"refresh_token": newRT,

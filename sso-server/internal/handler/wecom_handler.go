@@ -112,6 +112,9 @@ func (h *WeComHandler) Callback(c *gin.Context) {
 		return
 	}
 	setSSOCookieRaw(c, sd)
+	if access, err := h.TokenService.IssueAccessToken(user.Username, user.ID.String(), "sso-admin", user.Username, "openid profile email roles", 0); err == nil {
+		setCookieRaw(c, session.AccessTokenCookieName, access, int(h.TokenService.AccessTTL().Seconds()))
+	}
 
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), "wecom", "success", "")
 
@@ -126,7 +129,11 @@ func (h *WeComHandler) Callback(c *gin.Context) {
 
 // setSSOCookieRaw 与 AuthHandler.setSSOCookie 等价（不引入循环依赖，单独写一份）
 func setSSOCookieRaw(c *gin.Context, sd *session.SessionData) {
+	setCookieRaw(c, session.CookieName, sd.SessionID, int(session.DefaultTTL.Seconds()))
+}
+
+func setCookieRaw(c *gin.Context, name, value string, ttlSeconds int) {
 	secure := strings.HasPrefix(c.Request.URL.Scheme, "https") || c.GetHeader("X-Forwarded-Proto") == "https"
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, sd.SessionID, int(session.DefaultTTL.Seconds()), "/", "", secure, true)
+	c.SetCookie(name, value, ttlSeconds, "/", "", secure, true)
 }

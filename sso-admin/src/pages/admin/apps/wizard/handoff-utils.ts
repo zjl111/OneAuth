@@ -90,11 +90,28 @@ export async function copyHandoffText(
 ) {
   const obj = collectHandoff(family, isOIDC, submitted, v, discovery);
   const lines = Object.entries(obj).map(([k, val]) => `${k}: ${val ?? '—'}`);
+  const text = lines.join('\n');
   try {
-    await navigator.clipboard.writeText(lines.join('\n'));
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      throw new Error('clipboard API unavailable');
+    }
     message.success('已复制全部配置到剪贴板');
   } catch {
-    message.error('复制失败');
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      message.success('已复制全部配置到剪贴板');
+    } catch {
+      message.error('复制失败，请手动复制');
+    }
+    document.body.removeChild(ta);
   }
 }
 

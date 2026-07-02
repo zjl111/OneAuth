@@ -15,6 +15,7 @@ export interface OAuth2Client {
   home_url: string;
   login_url?: string;
   health_check_url: string;
+  sort_order: number;
   is_active: boolean;
   is_builtin: boolean;
 
@@ -82,4 +83,5 @@ export const appsApi = {
   batchDelete: (ids: string[]) => post<{ deleted: number; failed: string[] }>('/apps/batch-delete', { ids }),
   rotateSecret: (id: string) => post<{ client_secret: string }>(`/apps/${id}/rotate-secret`),
   toggleStatus: (id: string) => post<OAuth2Client>(`/apps/${id}/toggle-status`),
+  batchSort: (items: Array<{ id: string; sort_order: number }>) => post('/apps/sort', { items }),
 };

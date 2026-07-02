@@ -9,17 +9,23 @@ import (
 
 	"sso-server/internal/oauth"
 	"sso-server/internal/service"
+	"sso-server/internal/session"
 )
 
-// JWTAuth 解析 Bearer Token 并写入上下文
+// JWTAuth 解析 Bearer Token，并在没有 Authorization 时回退到 SSO access_token cookie。
 func JWTAuth(ts *oauth.TokenService, userSvc *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := ""
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+		} else if cookieToken, err := c.Cookie(session.AccessTokenCookieName); err == nil && cookieToken != "" {
+			tokenStr = cookieToken
+		}
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 4001, "message": "未登录"})
 			return
 		}
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 		claims, err := ts.ValidateAccessToken(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 4001, "message": "Token 无效"})

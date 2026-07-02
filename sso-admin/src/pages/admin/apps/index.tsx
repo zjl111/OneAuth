@@ -39,6 +39,22 @@ import './apps.css';
 
 const { Paragraph } = Typography;
 
+function fallbackCopyText(text: string, message: any) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    message.success('已复制');
+  } catch {
+    message.error('复制失败，请手动复制');
+  }
+  document.body.removeChild(ta);
+}
+
 export default function AppListPage() {
   const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<OAuth2Client[]>([]);
@@ -573,8 +589,15 @@ export default function AppListPage() {
               icon={<CopyOutlined />}
               onClick={() => {
                 const json = buildHandoffJson(handoffClient, ((handoffClient.protocol as Proto) || 'oidc') as ProtoFamily);
-                navigator.clipboard.writeText(JSON.stringify(json, null, 2));
-                message.success('已复制 JSON');
+                const text = JSON.stringify(json, null, 2);
+                if (navigator.clipboard && window.isSecureContext) {
+                  navigator.clipboard.writeText(text).then(
+                    () => message.success('已复制 JSON'),
+                    () => { fallbackCopyText(text, message); },
+                  );
+                } else {
+                  fallbackCopyText(text, message);
+                }
               }}
             >
               复制 JSON

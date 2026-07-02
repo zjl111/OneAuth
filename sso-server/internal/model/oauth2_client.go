@@ -26,6 +26,9 @@ type OAuth2Client struct {
 	IsBuiltin      bool   `gorm:"default:false" json:"is_builtin"`
 	HealthCheckURL string `gorm:"size:512" json:"health_check_url"`
 
+	// 自定义排序（值越小越靠前，0 表示未设置）
+	SortOrder int `gorm:"default:0" json:"sort_order"`
+
 	// 访问授权策略
 	//   all      - 所有人可访问
 	//   assigned - 仅指定用户/组织/用户组（grants 表生效）
@@ -102,8 +105,17 @@ func (c *OAuth2Client) CheckSecret(secret string) bool {
 }
 
 func (c *OAuth2Client) CheckRedirectURI(uri string) bool {
+	// 规范化：去掉末尾无意义的 '?' 和 '/'（部分第三方应用会自动追加）
+	// 必须保持精确匹配语义，因为 token 端点也会用原始 redirect_uri 做校验
+	normalize := func(s string) string {
+		for len(s) > 0 && (s[len(s)-1] == '?' || s[len(s)-1] == '/') {
+			s = s[:len(s)-1]
+		}
+		return s
+	}
+	normURI := normalize(uri)
 	for _, u := range c.RedirectURIs {
-		if u == uri {
+		if normalize(u) == normURI {
 			return true
 		}
 	}

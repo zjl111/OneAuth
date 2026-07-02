@@ -57,11 +57,11 @@ import (
 	"sso-server/internal/session"
 )
 
-
 // SAMLHandler IdP 协议实现。共享 OAuth 体系的 KeyManager / SessionMgr / Store。
 type SAMLHandler struct {
 	KeyManager    *oauth.KeyManager
 	Store         oauth.Store
+	TokenService  *oauth.TokenService
 	SessionMgr    *session.Manager
 	ClientService *service.ClientService
 	UserService   *service.UserService
@@ -102,14 +102,14 @@ func (h *SAMLHandler) idpCertificate() (*x509.Certificate, error) {
 		}
 		serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 		tmpl := &x509.Certificate{
-			SerialNumber: serial,
-			Subject:      pkix.Name{CommonName: cn, Organization: []string{"OneAuth"}},
-			Issuer:       pkix.Name{CommonName: cn, Organization: []string{"OneAuth"}},
-			NotBefore:    time.Now().Add(-1 * time.Hour),
-			NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
-			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
-			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-			IsCA:         true,
+			SerialNumber:          serial,
+			Subject:               pkix.Name{CommonName: cn, Organization: []string{"OneAuth"}},
+			Issuer:                pkix.Name{CommonName: cn, Organization: []string{"OneAuth"}},
+			NotBefore:             time.Now().Add(-1 * time.Hour),
+			NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+			KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+			IsCA:                  true,
 			BasicConstraintsValid: true,
 		}
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &priv.PublicKey, priv)
@@ -158,7 +158,7 @@ func (h *SAMLHandler) idpInstance(ctx context.Context, c *model.OAuth2Client) (*
 		// 签名 / 摘要算法可在签发时按 client 调
 		SignatureMethod: samlSignatureURL(c.SAMLSignatureAlgorithm),
 
-		AssertionMaker: &assertionMaker{handler: h, client: c},
+		AssertionMaker:  &assertionMaker{handler: h, client: c},
 		SessionProvider: nil, // 我们手工绕开 crewjam 的 cookie session，自己注入 user
 	}
 	return idp, nil
@@ -312,7 +312,7 @@ func (m *assertionMaker) MakeAssertion(req *saml.IdpAuthnRequest, sess *saml.Ses
 		NotBefore:    now.Add(-5 * time.Minute),
 		NotOnOrAfter: now.Add(ttl),
 		AudienceRestrictions: []saml.AudienceRestriction{{
-		Audience: saml.Audience{Value: nonEmptyStr(c.SAMLAudience, c.SAMLEntityID)},
+			Audience: saml.Audience{Value: nonEmptyStr(c.SAMLAudience, c.SAMLEntityID)},
 		}},
 	}
 	a.IssueInstant = now
@@ -581,9 +581,8 @@ func (h *SAMLHandler) SLO(c *gin.Context) {
 	if sd != nil {
 		_ = h.SessionMgr.Delete(c.Request.Context(), sd.SessionID)
 	}
-	secure := c.Request.TLS != nil
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, "", -1, "/", "", secure, true)
+	clearCookie(c, session.CookieName)
+	clearCookie(c, session.AccessTokenCookieName)
 	c.Redirect(http.StatusFound, h.FrontendBase+"/")
 }
 
@@ -690,15 +689,10 @@ func (h *SAMLHandler) findClientByEntityID(entityID string) (*model.OAuth2Client
 }
 
 func (h *SAMLHandler) currentSession(c *gin.Context) *session.SessionData {
-	sid, err := c.Cookie(session.CookieName)
-	if err != nil {
-		return nil
+	if sd := currentSessionFromCookie(c, h.SessionMgr); sd != nil {
+		return sd
 	}
-	sd, err := h.SessionMgr.Get(c.Request.Context(), sid)
-	if err != nil {
-		return nil
-	}
-	return sd
+	return recoverSessionFromAccessToken(c, h.SessionMgr, h.TokenService, h.UserService)
 }
 
 // 抑制未使用 import 警告（备用 helpers）
@@ -716,8 +710,8 @@ func nonEmptyStr(v, fallback string) string {
 // ParseMetadataReq /api/v1/saml/parse-metadata：管理员粘贴 SP metadata URL 或 XML 文本，
 // 返回前端需要的字段（entity_id / acs_url / nameid_format / certificate / binding）。
 type ParseMetadataReq struct {
-	URL  string `json:"url"`
-	XML  string `json:"xml"`
+	URL string `json:"url"`
+	XML string `json:"xml"`
 }
 
 type ParseMetadataResp struct {

@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 OUT_DIR="release/build"
-PKG_NAME="oneauth-v1.0.0"
+PKG_NAME="oneauth-v1.0.6"
 PKG_DIR="release/$PKG_NAME"
 
 command -v go >/dev/null 2>&1 || { echo "go is required" >&2; exit 1; }
@@ -35,12 +35,12 @@ docker cp "${cid}:/etc/ssl/certs/ca-certificates.crt" "$OUT_DIR/base/ca-certific
 docker rm -v "$cid" >/dev/null
 
 echo "Building amd64 images..."
-docker buildx build --platform linux/amd64 --pull=false --load -t oneauth/backend:v1.0.0 -f release/Dockerfile.backend.offline .
-docker buildx build --platform linux/amd64 --pull=false --load -t oneauth/gateway:v1.0.0 -f release/Dockerfile.gateway.offline .
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --pull=false -t oneauth/backend:v1.0.6 -f release/Dockerfile.backend.offline .
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --pull=false -t oneauth/gateway:v1.0.6 -f release/Dockerfile.gateway.offline .
 
 echo "Saving images..."
-docker save oneauth/backend:v1.0.0 -o "$PKG_DIR/images/backend-v1.0.0.tar"
-docker save oneauth/gateway:v1.0.0 -o "$PKG_DIR/images/gateway-v1.0.0.tar"
+docker save oneauth/backend:v1.0.6 -o "$PKG_DIR/images/backend-v1.0.6.tar"
+docker save oneauth/gateway:v1.0.6 -o "$PKG_DIR/images/gateway-v1.0.6.tar"
 
 echo "Assembling package..."
 # Scripts, configs, and data files

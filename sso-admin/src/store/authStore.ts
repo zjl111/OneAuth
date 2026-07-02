@@ -22,7 +22,7 @@ interface AuthState {
   refreshToken: string | null;
   user: UserInfo | null;
   permissions: string[];
-  /** 派生值：accessToken 与 user 同时存在才算已登录。不持久化。 */
+/** 派生值：只要能拿到用户信息就算已登录，不持久化。 */
   isAuthenticated: boolean;
 
   login: (username: string, password: string, remember?: boolean, captchaTicket?: string) => Promise<UserInfo>;
@@ -33,7 +33,7 @@ interface AuthState {
   clear: () => void;
 }
 
-const authed = (s: Pick<AuthState, 'accessToken' | 'user'>) => !!(s.accessToken && s.user);
+const authed = (s: Pick<AuthState, 'user'>) => !!s.user;
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -55,6 +55,8 @@ export const useAuthStore = create<AuthState>()(
           permissions: data.permissions || [],
           isAuthenticated: true,
         });
+        // 兜底同步一次 SSO session cookie，避免浏览器偶发没有接住登录响应里的 Set-Cookie。
+        await authApi.syncSsoSession().catch(() => null);
         return data.user;
       },
 
@@ -107,8 +109,8 @@ export const useAuthStore = create<AuthState>()(
       name: 'oneauth-auth',
       // 固定 sessionStorage：关浏览器/标签页即清登录态
       storage: sessionOnlyStorage,
-      // isAuthenticated 不持久化 —— rehydrate 后从 accessToken+user 派生，
-      // 避免 storage 里残留的 true 误导首页 useEffect。
+          // isAuthenticated 不持久化 —— rehydrate 后从 user 派生，
+          // 避免 storage 里残留的 true 误导首页 useEffect。
       partialize: (s) => ({
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,
@@ -117,8 +119,8 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // token 已过期 → 清除登录态，跳转登录页
-          if (isTokenExpired(state.accessToken)) {
+          // 有 accessToken 且已过期 → 清除登录态，跳转登录页
+          if (state.accessToken && isTokenExpired(state.accessToken)) {
             state.accessToken = null;
             state.refreshToken = null;
             state.user = null;

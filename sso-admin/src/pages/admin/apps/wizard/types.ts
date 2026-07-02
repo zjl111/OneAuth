@@ -37,7 +37,7 @@ export function defaultProtocolVersion(f: ProtoFamily) {
   return PROTOCOL_VERSIONS[f][0].value;
 }
 
-export const ALL_OIDC_CLAIMS = ['name', 'email', 'phone', 'roles', 'is_staff', 'department', 'position'];
+export const ALL_OIDC_CLAIMS = ['name', 'email', 'phone', 'department', 'roles', 'is_staff', 'position'];
 
 // 各家族在 Step2 需要校验的字段
 export const STEP2_FIELDS: Record<ProtoFamily, string[]> = {
@@ -64,6 +64,7 @@ export type WizardValues = {
   logo_url?: string;
   login_url?: string;
   is_active: boolean;
+  sort_order?: number;
   description?: string;
 
   redirect_uris?: string[];

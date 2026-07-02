@@ -24,6 +24,7 @@ export interface LoginResponse {
 export const authApi = {
   login: (data: { username: string; password: string; remember?: boolean; captcha_ticket?: string }) =>
     post<LoginResponse>('/auth/login', data),
+  syncSsoSession: () => post('/auth/sso-session'),
   logout: () => post('/auth/logout'),
   refresh: (refresh_token: string) =>
     post<{ access_token: string; refresh_token: string; expires_in: number }>('/auth/refresh', {

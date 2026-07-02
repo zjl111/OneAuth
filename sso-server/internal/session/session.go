@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	CookieName     = "sso_session"
-	DefaultTTL     = 8 * time.Hour
-	sessionKeyBase = "session:"
+	CookieName            = "sso_session"
+	AccessTokenCookieName = "sso_access_token"
+	DefaultTTL            = 8 * time.Hour
+	sessionKeyBase        = "session:"
 )
 
 // SessionData 服务端会话数据

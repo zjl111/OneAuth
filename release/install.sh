@@ -47,10 +47,8 @@ GATEWAY_PORT="${GATEWAY_PORT:-80}"
 echo "Setting up install directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"/{conf,data,keys}
 
-# Copy config files and scripts
-for item in docker-compose.yml install.sh upgrade.sh stop.sh status.sh backup.sh README.md; do
-  cp "$ROOT/$item" "$INSTALL_DIR/"
-done
+# Copy docker-compose.yml
+cp "$ROOT/docker-compose.yml" "$INSTALL_DIR/"
 
 # Copy default config.yaml if not exists
 if [ ! -f "$INSTALL_DIR/conf/config.yaml" ]; then
@@ -89,7 +87,7 @@ if [ ! -f "$INSTALL_DIR/data/ip2region.xdb" ]; then
     echo "Copied ip2region.xdb to data/"
   else
     echo "Extracting ip2region.xdb from backend image..."
-    cid="$(docker create oneauth/backend:v1.0.0)"
+    cid="$(docker create oneauth/backend:v1.0.6)"
     docker cp "${cid}:/app/data/ip2region.xdb" "$INSTALL_DIR/data/ip2region.xdb"
     docker rm "$cid" >/dev/null
   fi

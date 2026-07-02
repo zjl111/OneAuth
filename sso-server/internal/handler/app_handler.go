@@ -145,3 +145,30 @@ func (h *AppHandler) ToggleStatus(c *gin.Context) {
 	}
 	response.OK(c, updated)
 }
+
+func (h *AppHandler) BatchSort(c *gin.Context) {
+	var req struct {
+		Items []struct {
+			ID        string `json:"id" binding:"required"`
+			SortOrder int    `json:"sort_order"`
+		} `json:"items" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	items := make([]repository.SortItem, 0, len(req.Items))
+	for _, item := range req.Items {
+		id, err := uuid.Parse(item.ID)
+		if err != nil {
+			response.BadRequest(c, "无效的应用 ID："+item.ID)
+			return
+		}
+		items = append(items, repository.SortItem{ID: id, SortOrder: item.SortOrder})
+	}
+	if err := h.Service.UpdateSortOrders(items); err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	response.OK(c, nil)
+}

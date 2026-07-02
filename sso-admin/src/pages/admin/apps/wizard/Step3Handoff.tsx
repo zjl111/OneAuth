@@ -3,6 +3,23 @@ import { CopyOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { OAuth2Client } from '@/api/apps';
 import { FAMILY_LABEL, fmtSeconds, type ProtoFamily } from './types';
 
+// 降级复制方案（兼容非安全上下文）
+function fallbackCopy(text: string, message: any) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    message.success('已复制');
+  } catch {
+    message.error('复制失败，请手动复制');
+  }
+  document.body.removeChild(ta);
+}
+
 // 带复制按钮的只读 KV 行
 function HandoffRow({
   label,
@@ -17,8 +34,15 @@ function HandoffRow({
 }) {
   const { message } = AntdApp.useApp();
   const handleCopy = () => {
-    navigator.clipboard.writeText(value || '');
-    message.success('已复制');
+    const text = value || '';
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(
+        () => message.success('已复制'),
+        () => fallbackCopy(text, message),
+      );
+    } else {
+      fallbackCopy(text, message);
+    }
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10, gap: 10 }}>

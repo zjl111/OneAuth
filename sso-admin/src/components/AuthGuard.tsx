@@ -1,7 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { loginPath } from '@/utils/redirect';
 import { isTokenExpired } from '@/utils/token';
 
 interface Props {
@@ -10,25 +9,36 @@ interface Props {
 }
 
 export default function AuthGuard({ children, requireStaff = false }: Props) {
-  const { isAuthenticated, user, accessToken } = useAuthStore();
+  const { isAuthenticated, user, accessToken, loadProfile } = useAuthStore();
   const location = useLocation();
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
     if (accessToken && !user) {
-      useAuthStore.getState().loadProfile();
+      loadProfile().finally(() => setBootstrapped(true));
+      return;
     }
-  }, [accessToken, user]);
+    if (!isAuthenticated) {
+      loadProfile().finally(() => setBootstrapped(true));
+      return;
+    }
+    setBootstrapped(true);
+  }, [accessToken, user, isAuthenticated, loadProfile]);
 
   // token 过期 → 清除登录态并跳转
   useEffect(() => {
     if (accessToken && isTokenExpired(accessToken)) {
       useAuthStore.getState().clear();
-      window.location.href = loginPath(location.pathname + location.search);
+      window.location.href = '/';
     }
   }, [accessToken, location]);
 
-  if (!isAuthenticated || !accessToken) {
-    return <Navigate to={loginPath(location.pathname + location.search)} replace />;
+  if (!bootstrapped) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
   }
 
   if (requireStaff && !user?.is_staff) {

@@ -22,20 +22,30 @@ export default function HomePage() {
   const returnTo = params.get('return_to') || '';
   const site = useSite();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const loadProfile = useAuthStore((s) => s.loadProfile);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   const isInline = site.login_style === 'inline' && !isAuthenticated;
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      loadProfile().finally(() => setBootstrapped(true));
+      return;
+    }
+    setBootstrapped(true);
+  }, [isAuthenticated, loadProfile]);
+
   // 已登录且没有 return_to → 直接进门户
   useEffect(() => {
-    if (isAuthenticated && !returnTo) {
+    if (bootstrapped && isAuthenticated && !returnTo) {
       navigate('/portal', { replace: true });
     }
-  }, [isAuthenticated, returnTo, navigate]);
+  }, [bootstrapped, isAuthenticated, returnTo, navigate]);
 
   // 携带 return_to 落地时：已登录直接回跳；未登录自动弹出登录框
   useEffect(() => {
-    if (!returnTo) return;
+    if (!bootstrapped || !returnTo) return;
     if (isAuthenticated) {
       const isProtoRoute =
         returnTo.startsWith('/oauth/authorize') ||
@@ -45,9 +55,10 @@ export default function HomePage() {
         const key = '__protoRedirect:' + returnTo;
         const last = Number(sessionStorage.getItem(key) || 0);
         if (last && Date.now() - last < 5000) {
+          // 后端把我们又弹回来了（session 可能未生效），清除标记让下次登录能重试
           sessionStorage.removeItem(key);
-          useAuthStore.getState().clear();
-          setLoginOpen(true);
+          // 不清除 auth 状态 —— 用户确实已登录，只是后端 session cookie 可能未就绪
+          // 不弹登录框 —— 用户已登录，弹框无意义
           return;
         }
         sessionStorage.setItem(key, String(Date.now()));
@@ -61,13 +72,17 @@ export default function HomePage() {
         setLoginOpen(true);
       }
     }
-  }, [returnTo, isAuthenticated, navigate, isInline]);
+  }, [bootstrapped, returnTo, isAuthenticated, navigate, isInline]);
 
   // 标题如果未自定义，回落到默认文案
   const title = site.hero_title || '一键登录所有应用';
   const description =
     site.hero_description ||
     `${site.name || 'OneAuth'} 是一个简单、安全、开源的 SSO 单点登录项目，让登录更简单，让管理更高效。`;
+
+  if (!bootstrapped && !returnTo) {
+    return null;
+  }
 
   return (
     <div className="home-page">

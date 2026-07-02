@@ -43,6 +43,7 @@ import (
 
 type CASHandler struct {
 	Store         oauth.Store
+	TokenService  *oauth.TokenService
 	SessionMgr    *session.Manager
 	ClientService *service.ClientService
 	UserService   *service.UserService
@@ -55,11 +56,11 @@ type CASHandler struct {
 // --- ST ticket store --------------------------------------------------------
 
 type casTicket struct {
-	ClientID  string    `json:"client_id"`
-	Service   string    `json:"service"`
-	UserID    string    `json:"user_id"`
-	Username  string    `json:"username"`
-	IssuedAt  time.Time `json:"issued_at"`
+	ClientID string    `json:"client_id"`
+	Service  string    `json:"service"`
+	UserID   string    `json:"user_id"`
+	Username string    `json:"username"`
+	IssuedAt time.Time `json:"issued_at"`
 }
 
 func casTicketKey(t string) string { return "cas:st:" + t }
@@ -102,15 +103,10 @@ func matchService(want, got string) bool {
 }
 
 func (h *CASHandler) currentSession(c *gin.Context) *session.SessionData {
-	sid, err := c.Cookie(session.CookieName)
-	if err != nil {
-		return nil
+	if sd := currentSessionFromCookie(c, h.SessionMgr); sd != nil {
+		return sd
 	}
-	sd, err := h.SessionMgr.Get(c.Request.Context(), sid)
-	if err != nil {
-		return nil
-	}
-	return sd
+	return recoverSessionFromAccessToken(c, h.SessionMgr, h.TokenService, h.UserService)
 }
 
 // --- /cas/login -------------------------------------------------------------
@@ -238,9 +234,8 @@ func (h *CASHandler) Logout(c *gin.Context) {
 		_ = h.SessionMgr.Delete(c.Request.Context(), sd.SessionID)
 	}
 	// 清 cookie
-	secure := c.Request.TLS != nil
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(session.CookieName, "", -1, "/", "", secure, true)
+	clearCookie(c, session.CookieName)
+	clearCookie(c, session.AccessTokenCookieName)
 
 	if target != "" {
 		c.Redirect(http.StatusFound, target)
@@ -289,16 +284,16 @@ type casV3Success struct {
 }
 
 type casAttributes struct {
-	Username     string `xml:"cas:username,omitempty"`
-	UserID       string `xml:"cas:user_id,omitempty"`
-	DisplayName  string `xml:"cas:display_name,omitempty"`
-	Nickname     string `xml:"cas:nickname,omitempty"`
-	Email        string `xml:"cas:email,omitempty"`
-	Mobile       string `xml:"cas:mobile,omitempty"`
-	Department   string `xml:"cas:department,omitempty"`
-	EmployeeNo   string `xml:"cas:employee_no,omitempty"`
-	IsStaff      bool   `xml:"cas:is_staff"`
-	AuthDate     string `xml:"cas:authenticationDate,omitempty"`
+	Username    string `xml:"cas:username,omitempty"`
+	UserID      string `xml:"cas:user_id,omitempty"`
+	DisplayName string `xml:"cas:display_name,omitempty"`
+	Nickname    string `xml:"cas:nickname,omitempty"`
+	Email       string `xml:"cas:email,omitempty"`
+	Mobile      string `xml:"cas:mobile,omitempty"`
+	Department  string `xml:"cas:department,omitempty"`
+	EmployeeNo  string `xml:"cas:employee_no,omitempty"`
+	IsStaff     bool   `xml:"cas:is_staff"`
+	AuthDate    string `xml:"cas:authenticationDate,omitempty"`
 }
 
 type casFailure struct {

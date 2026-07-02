@@ -1,4 +1,4 @@
-FROM scratch
+FROM alpine:latest
 WORKDIR /app
 COPY release/build/backend/sso-server /app/sso-server
 COPY sso-server/configs /app/configs
