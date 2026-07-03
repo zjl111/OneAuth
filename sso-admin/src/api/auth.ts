@@ -21,9 +21,22 @@ export interface LoginResponse {
   permissions: string[];
 }
 
+export interface CaptchaStatusResponse {
+  enabled: boolean;
+  required: boolean;
+  threshold: number;
+  failed_attempts?: number;
+  remaining_attempts?: number;
+  locked?: boolean;
+  lock_minutes?: number;
+  lock_until?: string;
+}
+
 export const authApi = {
   login: (data: { username: string; password: string; remember?: boolean; captcha_ticket?: string }) =>
     post<LoginResponse>('/auth/login', data),
+  captchaStatus: (username: string) =>
+    get<CaptchaStatusResponse>('/auth/captcha/status', { username }),
   syncSsoSession: () => post('/auth/sso-session'),
   logout: () => post('/auth/logout'),
   refresh: (refresh_token: string) =>

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -82,6 +83,12 @@ type LoginResponse struct {
 	Permissions  []string       `json:"permissions"`
 }
 
+type LoginFailureData struct {
+	RemainingAttempts int    `json:"remaining_attempts,omitempty"`
+	LockMinutes       int    `json:"lock_minutes,omitempty"`
+	LockUntil         string `json:"lock_until,omitempty"`
+}
+
 type UserInfoPublic struct {
 	ID       string   `json:"id"`
 	Username string   `json:"username"`
@@ -118,6 +125,18 @@ func toUserInfoPublic(u *model.User) UserInfoPublic {
 		IsActive: u.IsActive,
 		Roles:    roles,
 	}
+}
+
+func (h *AuthHandler) loginLockMinutes() int {
+	dur := h.loginLockoutDuration()
+	if dur <= 0 {
+		return 0
+	}
+	return int(math.Ceil(dur.Minutes()))
+}
+
+func (h *AuthHandler) sendLoginFailure(c *gin.Context, status int, code int, msg string, data LoginFailureData) {
+	response.ErrData(c, status, code, msg, data)
 }
 
 // isHTTPSRequest 判断原始请求是否为 HTTPS —— 同时检查直连 TLS 和反向代理头。
@@ -235,6 +254,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.BadRequest(c, "参数错误")
 		return
 	}
+	req.Username = strings.TrimSpace(req.Username)
 
 	// IP 黑名单：被自动封禁或人工拉黑的 IP 直接拒登。
 	clientIP := c.ClientIP()
@@ -244,6 +264,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			response.Forbidden(c, "您的 IP 已被封禁，请稍后再试或联系管理员")
 			return
 		}
+	}
+
+	// 账号锁定：优先于验证码，避免已经锁定的账号还被迫去过验证码。
+	lookupUser, err := h.UserService.FindLoginUser(req.Username)
+	if err != nil {
+		response.ServerError(c, "查询用户状态失败")
+		return
+	}
+	if lookupUser != nil && lookupUser.IsLocked {
+		h.LogRepo.RecordLogin(&lookupUser.ID, lookupUser.Username, clientIP, c.GetHeader("User-Agent"), "password", "failure", "locked")
+		data := LoginFailureData{}
+		if lookupUser.LockUntil != nil && time.Now().Before(*lookupUser.LockUntil) {
+			data.LockMinutes = int(math.Ceil(time.Until(*lookupUser.LockUntil).Minutes()))
+			data.LockUntil = lookupUser.LockUntil.Format("2006-01-02 15:04")
+		}
+		response.ErrData(c, http.StatusForbidden, 4003, h.lockedMessage(lookupUser), data)
+		return
 	}
 
 	// captcha gate：失败次数 >= 阈值时强制校验 ticket
@@ -276,10 +313,57 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			}
 		}
 		if err != nil {
-			h.recordLoginFail(c.Request.Context(), req.Username, c.ClientIP())
-			h.recordIPFailAndMaybeBan(c.Request.Context(), c.ClientIP())
+			if err.Error() == "账号已禁用" {
+				h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
+				response.Forbidden(c, err.Error())
+				return
+			}
+			if strings.HasPrefix(err.Error(), "账号已锁定") {
+				h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
+				response.Forbidden(c, err.Error())
+				return
+			}
+			if err.Error() != "账号已禁用" && !strings.HasPrefix(err.Error(), "账号已锁定") {
+				userFailCount := h.recordUserFail(c.Request.Context(), req.Username)
+				if userFailCount > 0 && userFailCount >= h.loginLockoutThreshold() && lookupUser != nil {
+					lockUntil := time.Time{}
+					var untilPtr *time.Time
+					if dur := h.loginLockoutDuration(); dur > 0 {
+						lockUntil = time.Now().Add(dur)
+						untilPtr = &lockUntil
+					}
+					if lockErr := h.UserService.LockUntil(lookupUser.ID, untilPtr); lockErr == nil {
+						data := LoginFailureData{
+							LockMinutes: h.loginLockMinutes(),
+						}
+						if untilPtr != nil {
+							data.LockUntil = untilPtr.Format("2006-01-02 15:04")
+						}
+						msg := h.lockedMessage(&model.User{LockUntil: untilPtr})
+						h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
+						h.clearUserFail(c.Request.Context(), req.Username)
+						h.LogRepo.RecordLogin(&lookupUser.ID, lookupUser.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", msg)
+						response.ErrData(c, http.StatusForbidden, 4003, msg, data)
+						return
+					}
+				}
+				remaining := h.loginLockoutThreshold() - userFailCount
+				if remaining < 0 {
+					remaining = 0
+				}
+				h.recordIPFailAndMaybeBan(c.Request.Context(), c.ClientIP())
+				if lookupUser != nil {
+					h.LogRepo.RecordLogin(&lookupUser.ID, lookupUser.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
+				} else {
+					h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
+				}
+				response.ErrData(c, http.StatusUnauthorized, 4001, fmt.Sprintf("账号或密码错误，还可再试 %d 次", remaining), LoginFailureData{
+					RemainingAttempts: remaining,
+				})
+				return
+			}
 			h.LogRepo.RecordLogin(nil, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), "password", "failure", err.Error())
-			response.Unauthorized(c, err.Error())
+			response.Unauthorized(c, "登录失败")
 			return
 		}
 	}
@@ -313,6 +397,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	h.LogRepo.RecordLogin(&user.ID, user.Username, c.ClientIP(), c.GetHeader("User-Agent"), loginMethod, "success", "")
 	h.clearLoginFail(c.Request.Context(), req.Username, c.ClientIP())
+	h.clearUserFail(c.Request.Context(), req.Username)
 	h.clearIPFail(c.Request.Context(), c.ClientIP())
 	middleware.MarkActive(h.Store, user.ID.String())
 
@@ -666,6 +751,36 @@ func (h *AuthHandler) captchaThreshold() int {
 	return n
 }
 
+func (h *AuthHandler) loginLockoutThreshold() int {
+	if h.ConfigRepo == nil {
+		return 3
+	}
+	v := h.ConfigRepo.Get("security", "login_lockout_threshold")
+	if v == "" {
+		return 3
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 3
+	}
+	return n
+}
+
+func (h *AuthHandler) loginLockoutDuration() time.Duration {
+	if h.ConfigRepo == nil {
+		return 30 * time.Minute
+	}
+	v := h.ConfigRepo.Get("security", "login_lockout_duration")
+	if v == "" {
+		return 30 * time.Minute
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 30 * time.Minute
+	}
+	return time.Duration(n) * time.Second
+}
+
 // captchaRequired 当前 username/IP 组合是否需要 captcha。
 // 阈值为 0 表示"每次登录都要"。
 func (h *AuthHandler) captchaRequired(ctx context.Context, username, ip string) bool {
@@ -682,6 +797,10 @@ func (h *AuthHandler) captchaRequired(ctx context.Context, username, ip string) 
 
 func (h *AuthHandler) loginFailKey(username, ip string) string {
 	return "loginfail:" + ip + ":" + username
+}
+
+func (h *AuthHandler) userFailKey(loginName string) string {
+	return "userloginfail:" + strings.ToLower(strings.TrimSpace(loginName))
 }
 
 func (h *AuthHandler) loginFailCount(ctx context.Context, username, ip string) int {
@@ -708,6 +827,43 @@ func (h *AuthHandler) clearLoginFail(ctx context.Context, username, ip string) {
 		return
 	}
 	_ = h.Store.Del(ctx, h.loginFailKey(username, ip))
+}
+
+func (h *AuthHandler) userFailCount(ctx context.Context, loginName string) int {
+	if h.Store == nil {
+		return 0
+	}
+	v, err := h.Store.Get(ctx, h.userFailKey(loginName))
+	if err != nil || len(v) == 0 {
+		return 0
+	}
+	n, _ := strconv.Atoi(string(v))
+	return n
+}
+
+func (h *AuthHandler) recordUserFail(ctx context.Context, loginName string) int {
+	if h.Store == nil {
+		return 0
+	}
+	count, err := h.Store.Incr(ctx, h.userFailKey(loginName), captchaFailWindow)
+	if err != nil {
+		return 0
+	}
+	return int(count)
+}
+
+func (h *AuthHandler) clearUserFail(ctx context.Context, loginName string) {
+	if h.Store == nil {
+		return
+	}
+	_ = h.Store.Del(ctx, h.userFailKey(loginName))
+}
+
+func (h *AuthHandler) lockedMessage(u *model.User) string {
+	if u != nil && u.LockUntil != nil && time.Now().Before(*u.LockUntil) {
+		return fmt.Sprintf("账号已锁定，请于 %s 后重试", u.LockUntil.Format("2006-01-02 15:04"))
+	}
+	return "账号已锁定，请联系管理员解锁"
 }
 
 // ---------- IP auto-ban ----------
@@ -832,9 +988,27 @@ func (h *AuthHandler) CaptchaVerify(c *gin.Context) {
 func (h *AuthHandler) CaptchaStatus(c *gin.Context) {
 	username := c.Query("username")
 	required := h.captchaRequired(c.Request.Context(), username, c.ClientIP())
+	failCount := h.loginFailCount(c.Request.Context(), username, c.ClientIP())
+	remaining := h.loginLockoutThreshold() - failCount
+	if remaining < 0 {
+		remaining = 0
+	}
+	lockedUser, _ := h.UserService.FindLoginUser(username)
+	locked := lockedUser != nil && lockedUser.IsLocked
+	lockMinutes := 0
+	lockUntil := ""
+	if locked && lockedUser != nil && lockedUser.LockUntil != nil && time.Now().Before(*lockedUser.LockUntil) {
+		lockMinutes = int(math.Ceil(time.Until(*lockedUser.LockUntil).Minutes()))
+		lockUntil = lockedUser.LockUntil.Format("2006-01-02 15:04")
+	}
 	response.OK(c, gin.H{
-		"enabled":   h.captchaEnabled(),
-		"required":  required,
-		"threshold": h.captchaThreshold(),
+		"enabled":            h.captchaEnabled(),
+		"required":           required,
+		"threshold":          h.captchaThreshold(),
+		"failed_attempts":    failCount,
+		"remaining_attempts": remaining,
+		"locked":             locked,
+		"lock_minutes":       lockMinutes,
+		"lock_until":         lockUntil,
 	})
 }

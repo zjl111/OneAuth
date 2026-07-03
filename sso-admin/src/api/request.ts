@@ -36,6 +36,11 @@ function isOnPublicPage(): boolean {
   );
 }
 
+function isAuthLoginRequest(url?: string): boolean {
+  if (!url) return false;
+  return url.includes('/auth/login');
+}
+
 /** 清除登录态并强制跳转到登录页 */
 function bounceToLogin() {
   useAuthStore.getState().clear();
@@ -52,6 +57,11 @@ request.interceptors.response.use(
   async (error) => {
     const status = error?.response?.status;
     const originalRequest = error.config || {};
+    const url = originalRequest.url as string | undefined;
+
+    if (isAuthLoginRequest(url)) {
+      return Promise.reject(error);
+    }
 
     if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

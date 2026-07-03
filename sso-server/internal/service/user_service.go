@@ -2,8 +2,11 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -14,11 +17,12 @@ import (
 )
 
 type UserService struct {
-	repo *repository.UserRepository
+	repo       *repository.UserRepository
+	configRepo *repository.ConfigRepository
 }
 
-func NewUserService(r *repository.UserRepository) *UserService {
-	return &UserService{repo: r}
+func NewUserService(r *repository.UserRepository, cfg *repository.ConfigRepository) *UserService {
+	return &UserService{repo: r, configRepo: cfg}
 }
 
 // staffRoleCodes 决定哪些角色 code 触发 is_staff=true。
@@ -30,6 +34,71 @@ var staffRoleCodes = map[string]bool{
 }
 
 var ErrUserProtected = errors.New("管理员用户不可删除")
+
+func (s *UserService) passwordPolicy() (minLen int, requireUpper, requireLower, requireDigit, requireSpecial bool) {
+	minLen = 8
+	requireUpper = true
+	requireLower = true
+	requireDigit = true
+	requireSpecial = true
+	if s.configRepo == nil {
+		return
+	}
+	if v := s.configRepo.Get("security", "password_min_length"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			minLen = n
+		}
+	}
+	getBool := func(key string, fallback bool) bool {
+		v := s.configRepo.Get("security", key)
+		if v == "" {
+			return fallback
+		}
+		return v == "true"
+	}
+	requireUpper = getBool("password_require_uppercase", true)
+	requireLower = getBool("password_require_lowercase", true)
+	requireDigit = getBool("password_require_digit", true)
+	requireSpecial = getBool("password_require_special", true)
+	return
+}
+
+func (s *UserService) validatePasswordPolicy(p string) error {
+	minLen, requireUpper, requireLower, requireDigit, requireSpecial := s.passwordPolicy()
+	if len(p) < minLen {
+		return fmt.Errorf("密码长度至少 %d 位", minLen)
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, r := range p {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			hasSpecial = true
+		}
+	}
+	missing := make([]string, 0, 4)
+	if requireUpper && !hasUpper {
+		missing = append(missing, "大写字母")
+	}
+	if requireLower && !hasLower {
+		missing = append(missing, "小写字母")
+	}
+	if requireDigit && !hasDigit {
+		missing = append(missing, "数字")
+	}
+	if requireSpecial && !hasSpecial {
+		missing = append(missing, "特殊字符")
+	}
+	if len(missing) > 0 {
+		return errors.New("密码必须包含" + strings.Join(missing, "、"))
+	}
+	return nil
+}
 
 // deriveIsStaff 根据 roleIDs 查询角色 code，命中 staffRoleCodes 则返回 true。
 func (s *UserService) deriveIsStaff(roleIDs []uuid.UUID) bool {
@@ -67,7 +136,7 @@ type CreateUserInput struct {
 }
 
 func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
-	if err := password.Validate(in.Password); err != nil {
+	if err := s.validatePasswordPolicy(in.Password); err != nil {
 		return nil, err
 	}
 	hash, err := password.Hash(in.Password)
@@ -236,6 +305,29 @@ func (s *UserService) GetByUsername(username string) (*model.User, error) {
 
 func (s *UserService) GetByEmail(email string) (*model.User, error) { return s.repo.GetByEmail(email) }
 
+// FindLoginUser 按账号或邮箱查找登录用户。
+// 若用户处于“临时锁定”且锁定时间已过，则在这里顺手解锁，避免已过期的锁一直影响登录。
+func (s *UserService) FindLoginUser(loginName string) (*model.User, error) {
+	u, err := s.repo.GetByUsername(loginName)
+	if err == gorm.ErrRecordNotFound {
+		u, err = s.repo.GetByEmail(loginName)
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if u.IsLocked && u.LockUntil != nil && time.Now().After(*u.LockUntil) {
+		u.IsLocked = false
+		u.LockUntil = nil
+		if err := s.repo.Update(u); err != nil {
+			return nil, err
+		}
+	}
+	return u, nil
+}
+
 func (s *UserService) List(q repository.UserQuery) ([]model.User, int64, error) {
 	return s.repo.List(q)
 }
@@ -256,7 +348,19 @@ func (s *UserService) Authenticate(username, plain string) (*model.User, error) 
 		return nil, errors.New("账号已禁用")
 	}
 	if u.IsLocked {
-		return nil, errors.New("账号已锁定")
+		if u.LockUntil != nil {
+			if time.Now().After(*u.LockUntil) {
+				u.IsLocked = false
+				u.LockUntil = nil
+				if err := s.repo.Update(u); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, errors.New(fmt.Sprintf("账号已锁定，请于 %s 后重试", u.LockUntil.Format("2006-01-02 15:04")))
+			}
+		} else {
+			return nil, errors.New("账号已锁定，请联系管理员解锁")
+		}
 	}
 	if !password.Verify(u.PasswordHash, plain) {
 		return nil, errors.New("用户名或密码错误")
@@ -268,7 +372,7 @@ func (s *UserService) Authenticate(username, plain string) (*model.User, error) 
 }
 
 func (s *UserService) ResetPassword(id uuid.UUID, newPlain string) error {
-	if err := password.Validate(newPlain); err != nil {
+	if err := s.validatePasswordPolicy(newPlain); err != nil {
 		return err
 	}
 	hash, err := password.Hash(newPlain)
@@ -291,6 +395,9 @@ func (s *UserService) ChangePassword(id uuid.UUID, oldPlain, newPlain string) er
 	if !password.Verify(u.PasswordHash, oldPlain) {
 		return errors.New("原密码错误")
 	}
+	if err := s.validatePasswordPolicy(newPlain); err != nil {
+		return err
+	}
 	return s.ResetPassword(id, newPlain)
 }
 
@@ -300,6 +407,17 @@ func (s *UserService) Lock(id uuid.UUID, lock bool) error {
 		return err
 	}
 	u.IsLocked = lock
+	u.LockUntil = nil
+	return s.repo.Update(u)
+}
+
+func (s *UserService) LockUntil(id uuid.UUID, until *time.Time) error {
+	u, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	u.IsLocked = true
+	u.LockUntil = until
 	return s.repo.Update(u)
 }
 

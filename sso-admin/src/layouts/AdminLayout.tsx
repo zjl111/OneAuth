@@ -6,7 +6,6 @@ import {
   ApartmentOutlined,
   SafetyOutlined,
   AppstoreOutlined,
-  LockOutlined,
   SettingOutlined,
   MonitorOutlined,
   FileTextOutlined,
@@ -44,7 +43,7 @@ const menuItems: any[] = [
   { type: 'divider' as const },
   {
     key: 'access',
-    icon: <LockOutlined />,
+    icon: <SafetyOutlined />,
     label: '访问控制',
     children: [
       { key: '/admin/access/login-rules', icon: <SafetyOutlined />, label: '登录控制' },

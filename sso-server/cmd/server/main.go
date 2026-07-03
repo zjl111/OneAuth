@@ -113,7 +113,7 @@ func main() {
 	appGrantRepo := repository.NewAppGrantRepository(db)
 
 	// services
-	userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, configRepo)
 	clientService := service.NewClientService(clientRepo, monitorRepo, appGrantRepo)
 	ldapService := service.NewLDAPService(configRepo, userRepo)
 	wecomService := service.NewWeComService(configRepo, userRepo)

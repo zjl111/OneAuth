@@ -558,7 +558,12 @@ export default function UserListPage() {
             width: 100,
             render: (_, r) =>
               r.is_locked ? (
-                <span className="user-tag user-tag--red">锁定</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span className="user-tag user-tag--red">已锁定</span>
+                  <span className="act-link" onClick={() => handleLock(r)} style={{ whiteSpace: 'nowrap' }}>
+                    解锁
+                  </span>
+                </span>
               ) : r.is_active ? (
                 <span className="user-tag user-tag--green">正常</span>
               ) : (

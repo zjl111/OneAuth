@@ -185,6 +185,15 @@
   line-height: 1.6;
 }
 
+.inline-login-card .login-error-text {
+  margin: 0 0 14px;
+  color: #d92d20;
+  line-height: 1.5;
+  font-size: 13px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
 .inline-login-card .ant-input-affix-wrapper,
 .inline-login-card .ant-input-password {
   background: #f5f7fb;

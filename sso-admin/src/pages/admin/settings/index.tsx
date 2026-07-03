@@ -23,13 +23,26 @@ const NUMERIC_SECURITY_KEYS = new Set([
   'ip_ban_threshold',
   'ip_ban_duration',
 ]);
+const MINUTE_VALUE_FIELDS = new Set([
+  'oauth.session_ttl',
+  'security.session_timeout',
+  'security.login_lockout_duration',
+  'security.ip_ban_duration',
+]);
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
 const NUMERIC_SMTP_KEYS = new Set(['port']);
 const PASSWORD_SMTP_KEYS = new Set(['password']);
 const PASSWORD_LDAP_KEYS = new Set(['bind_password']);
 const PASSWORD_WECOM_KEYS = new Set(['secret']);
 const PASSWORD_SECURITY_KEYS = new Set(['captcha_unsplash_key']);
-const BOOL_SECURITY_KEYS = new Set(['captcha_enabled', 'ip_ban_enabled']);
+const BOOL_SECURITY_KEYS = new Set([
+  'captcha_enabled',
+  'ip_ban_enabled',
+  'password_require_uppercase',
+  'password_require_lowercase',
+  'password_require_digit',
+  'password_require_special',
+]);
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',
@@ -46,6 +59,12 @@ function isNumeric(category: string, key: string) {
   if (category === 'monitor') return NUMERIC_MONITOR_KEYS.has(key);
   if (category === 'smtp') return NUMERIC_SMTP_KEYS.has(key);
   return false;
+}
+
+function displayMinuteValue(value: string) {
+  const sec = Number(value || '0');
+  if (!Number.isFinite(sec) || sec <= 0) return 0;
+  return Math.ceil(sec / 60);
 }
 
 export default function SettingsPage() {
@@ -79,7 +98,12 @@ export default function SettingsPage() {
       } else if (isBoolSwitch) {
         obj[`${c.category}.${c.key}`] = c.value === 'true';
       } else {
-        obj[`${c.category}.${c.key}`] = isNumeric(c.category, c.key) ? Number(c.value) : c.value;
+        const fieldKey = `${c.category}.${c.key}`;
+        if (MINUTE_VALUE_FIELDS.has(fieldKey)) {
+          obj[fieldKey] = displayMinuteValue(c.value);
+        } else {
+          obj[fieldKey] = isNumeric(c.category, c.key) ? Number(c.value) : c.value;
+        }
       }
     });
     form.setFieldsValue(obj);
@@ -118,7 +142,13 @@ export default function SettingsPage() {
       if (category === 'ldap' && PASSWORD_LDAP_KEYS.has(key) && v === '') continue;
       if (category === 'wecom' && PASSWORD_WECOM_KEYS.has(key) && v === '') continue;
       if (category === 'security' && PASSWORD_SECURITY_KEYS.has(key) && v === '') continue;
-      const strVal = typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v);
+      const fieldKey = `${category}.${key}`;
+      const strVal =
+        typeof v === 'boolean'
+          ? (v ? 'true' : 'false')
+          : MINUTE_VALUE_FIELDS.has(fieldKey)
+            ? String(Number(v) * 60)
+            : String(v);
       items.push({ category, key, value: strVal });
     }
     await configApi.set(items);

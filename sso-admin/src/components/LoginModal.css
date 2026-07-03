@@ -26,6 +26,15 @@
   line-height: 1.6;
 }
 
+.login-error-text {
+  margin: 0 0 14px;
+  color: #d92d20;
+  line-height: 1.5;
+  font-size: 13px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
 .login-modal .ant-input-affix-wrapper,
 .login-modal .ant-input-password {
   background: #f5f7fb;

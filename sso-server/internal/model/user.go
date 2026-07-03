@@ -8,27 +8,28 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID      `gorm:"type:char(36);primaryKey" json:"id"`
-	Username     string         `gorm:"size:150;uniqueIndex;not null" json:"username"`
-	Nickname     string         `gorm:"size:150" json:"nickname"`
-	Email        *string        `gorm:"size:254;uniqueIndex" json:"email"`
-	Phone        *string        `gorm:"size:20;uniqueIndex" json:"phone"`
-	PasswordHash string         `gorm:"size:256;not null" json:"-"`
-	Avatar       string         `gorm:"size:512" json:"avatar"`
-	Position     string         `gorm:"size:150" json:"position"`
-	Gender       string         `gorm:"size:10" json:"gender"`         // male | female | ""
-	EmployeeNo   string         `gorm:"size:64" json:"employee_no"`    // 员工编号
-	DomainAccount string        `gorm:"size:128" json:"domain_account"` // AD/域账号
-	UserType     string         `gorm:"size:30;default:'internal'" json:"user_type"` // internal | external
-	HireStatus   string         `gorm:"size:20;default:'active'" json:"hire_status"` // active | resigned
-	SortOrder    int            `gorm:"default:0" json:"sort_order"`
-	DepartmentID *uuid.UUID     `gorm:"type:char(36);index" json:"department_id"`
-	IsActive     bool           `gorm:"default:true" json:"is_active"`
-	IsStaff      bool           `gorm:"default:false" json:"is_staff"`
-	IsLocked     bool           `gorm:"default:false" json:"is_locked"`
-	LastLogin    *time.Time     `json:"last_login"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID            uuid.UUID  `gorm:"type:char(36);primaryKey" json:"id"`
+	Username      string     `gorm:"size:150;uniqueIndex;not null" json:"username"`
+	Nickname      string     `gorm:"size:150" json:"nickname"`
+	Email         *string    `gorm:"size:254;uniqueIndex" json:"email"`
+	Phone         *string    `gorm:"size:20;uniqueIndex" json:"phone"`
+	PasswordHash  string     `gorm:"size:256;not null" json:"-"`
+	Avatar        string     `gorm:"size:512" json:"avatar"`
+	Position      string     `gorm:"size:150" json:"position"`
+	Gender        string     `gorm:"size:10" json:"gender"`                       // male | female | ""
+	EmployeeNo    string     `gorm:"size:64" json:"employee_no"`                  // 员工编号
+	DomainAccount string     `gorm:"size:128" json:"domain_account"`              // AD/域账号
+	UserType      string     `gorm:"size:30;default:'internal'" json:"user_type"` // internal | external
+	HireStatus    string     `gorm:"size:20;default:'active'" json:"hire_status"` // active | resigned
+	SortOrder     int        `gorm:"default:0" json:"sort_order"`
+	DepartmentID  *uuid.UUID `gorm:"type:char(36);index" json:"department_id"`
+	IsActive      bool       `gorm:"default:true" json:"is_active"`
+	IsStaff       bool       `gorm:"default:false" json:"is_staff"`
+	IsLocked      bool       `gorm:"default:false" json:"is_locked"`
+	LockUntil     *time.Time `gorm:"index" json:"lock_until"`
+	LastLogin     *time.Time `json:"last_login"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 
 	Department *Department `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
 	Roles      []Role      `gorm:"many2many:sso_user_roles;" json:"roles,omitempty"`

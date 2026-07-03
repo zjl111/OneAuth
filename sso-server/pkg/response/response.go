@@ -29,6 +29,10 @@ func Err(c *gin.Context, status int, code int, msg string) {
 	c.AbortWithStatusJSON(status, Response{Code: code, Message: msg})
 }
 
+func ErrData(c *gin.Context, status int, code int, msg string, data interface{}) {
+	c.AbortWithStatusJSON(status, Response{Code: code, Message: msg, Data: data})
+}
+
 func BadRequest(c *gin.Context, msg string) {
 	Err(c, http.StatusBadRequest, 4000, msg)
 }

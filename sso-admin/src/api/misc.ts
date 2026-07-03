@@ -145,6 +145,7 @@ export const accessApi = {
   list: () => get<IPRule[]>('/access/ip'),
   create: (data: Partial<IPRule>) => post<IPRule>('/access/ip', data),
   delete: (id: string) => del(`/access/ip/${id}`),
+  unlock: (id: string) => del(`/access/ip/${id}`),
 };
 
 export interface LoginRule {
