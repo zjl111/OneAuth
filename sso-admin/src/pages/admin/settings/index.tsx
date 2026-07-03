@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import request from '@/api/request';
 
 import PlatformPanel from './panels/Platform';
+import NoticePanel from './panels/Notice';
 import MonitorPanel from './panels/Monitor';
 import SecurityPanel from './panels/Security';
 import SmtpPanel from './panels/Smtp';
@@ -32,6 +33,7 @@ const BOOL_SECURITY_KEYS = new Set(['captcha_enabled', 'ip_ban_enabled']);
 
 const categoryLabel: Record<string, string> = {
   platform: '平台信息',
+  notice: '公告通知',
   security: '安全策略',
   monitor: '监控设置',
   smtp: '邮件 (SMTP)',
@@ -91,7 +93,7 @@ export default function SettingsPage() {
   const grouped = useMemo(() => {
     // 强制 tab 顺序，且只展示白名单内的 category
     // 内部用的（_migration、临时迁移标记等）以下划线开头，从不暴露给用户
-    const order = ['platform', 'monitor', 'security', 'smtp', 'ldap', 'wecom'];
+    const order = ['platform', 'notice', 'monitor', 'security', 'smtp', 'ldap', 'wecom'];
     const allowed = new Set(order);
     const g: Record<string, SystemConfig[]> = {};
     order.forEach((k) => (g[k] = []));
@@ -178,6 +180,9 @@ export default function SettingsPage() {
                     message={message}
                   />
                 )}
+                {cat === 'notice' && (
+                  <NoticePanel items={items} form={form} />
+                )}
                 {cat === 'smtp' && (
                   <SmtpPanel onTest={testSMTP} onSave={handleSave} onReset={load} />
                 )}
@@ -186,7 +191,7 @@ export default function SettingsPage() {
                 {cat === 'ldap' && <LdapPanel />}
                 {cat === 'wecom' && <WecomPanel />}
                 {/* 其余分组（如未来新增）走兜底渲染 */}
-                {!['platform', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => {
+                {!['platform', 'notice', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => {
                   const isBool = c.value === 'true' || c.value === 'false';
                   return (
                     <Form.Item key={c.id} label={c.description || c.key} name={`${c.category}.${c.key}`} valuePropName={isBool ? 'checked' : undefined}>

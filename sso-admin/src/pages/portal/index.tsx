@@ -68,6 +68,13 @@ export default function PortalPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent'>('all');
   const [failedLogos, setFailedLogos] = useState<Set<string>>(new Set());
+  const noticeText = useMemo(
+    () => String(site.notice_text || '').replace(/\s+/g, ' ').trim(),
+    [site.notice_text]
+  );
+  const showNotice = site.notice_enabled === true && Boolean(noticeText);
+  const noticeDuration = `${Math.max(12, Math.round(noticeText.length * 0.35))}s`;
+  const noticeDelay = '3s';
 
   useEffect(() => {
     setLoading(true);
@@ -161,6 +168,27 @@ export default function PortalPage() {
           </div>
         </Dropdown>
       </div>
+
+      {/* 公告栏 */}
+      {showNotice && (
+        <div className="portal-notice-bar">
+          <div className="notice-track">
+            <div
+              className="notice-marquee"
+              aria-label="门户公告"
+              style={{
+                ['--notice-duration' as any]: noticeDuration,
+                ['--notice-delay' as any]: noticeDelay,
+              }}
+            >
+              <span className="notice-text">
+                <span className="notice-icon">📢</span>
+                <span>{noticeText}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 工具栏 */}
       <div className="portal-toolbar">

@@ -34,10 +34,16 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
       .catch(() => setWecomEnabled(false));
   }, []);
 
+  const normalizeCredentials = (username: string, password: string) => ({
+    username: username.trim(),
+    password: password.trim(),
+  });
+
   const doLogin = async (username: string, password: string, ticket?: string) => {
+    const normalized = normalizeCredentials(username, password);
     setSubmitting(true);
     try {
-      const u = await login(username, password, undefined, ticket);
+      const u = await login(normalized.username, normalized.password, undefined, ticket);
       message.success(`欢迎回来，${u.nickname || u.username}`);
       setPending(null);
       const target = returnTo || redirectTo;
@@ -52,7 +58,7 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
       const code = e?.response?.data?.code;
       const msg = e?.response?.data?.message;
       if (code === 4090 || msg === 'captcha_required') {
-        setPending({ username, password });
+        setPending(normalized);
         setCaptchaOpen(true);
         return;
       }

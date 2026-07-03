@@ -37,10 +37,16 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       .catch(() => setWecomEnabled(false));
   }, [open]);
 
+  const normalizeCredentials = (username: string, password: string) => ({
+    username: username.trim(),
+    password: password.trim(),
+  });
+
   const doLogin = async (username: string, password: string, ticket?: string) => {
+    const normalized = normalizeCredentials(username, password);
     setSubmitting(true);
     try {
-      const u = await login(username, password, undefined, ticket);
+      const u = await login(normalized.username, normalized.password, undefined, ticket);
       message.success(`欢迎回来，${u.nickname || u.username}`);
       setPending(null);
       onClose();
@@ -58,7 +64,7 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       const msg = e?.response?.data?.message;
       // 后端 captcha gate：要求滑块验证
       if (code === 4090 || msg === 'captcha_required') {
-        setPending({ username, password });
+        setPending(normalized);
         setCaptchaOpen(true);
         return;
       }

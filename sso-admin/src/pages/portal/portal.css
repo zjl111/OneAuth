@@ -48,6 +48,76 @@
 }
 .portal-user:hover { background: rgba(100, 137, 77, 0.06); }
 
+/* ── 公告栏 ──────────────────────────── */
+.portal-notice-bar {
+  width: 100%;
+  height: 36px;
+  background:
+    linear-gradient(90deg, rgba(217, 174, 44, 0.08), rgba(217, 174, 44, 0.05)),
+    rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(217, 174, 44, 0.14);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.notice-icon {
+  font-size: 14px;
+  color: #D9AE2C;
+  margin-right: 10px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+.notice-track {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.notice-marquee {
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notice-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #b58d12;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marqueeLinear var(--notice-duration, 24s) linear var(--notice-delay, 3s) infinite;
+  animation-fill-mode: both;
+}
+.notice-track:hover .notice-text {
+  animation-play-state: paused;
+}
+.notice-text > span:last-child {
+  display: inline-block;
+}
+@keyframes marqueeLinear {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(calc(-100% - 10ch), 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notice-text {
+    animation: none;
+  }
+}
+
 /* ── 工具栏 ──────────────────────────── */
 .portal-toolbar {
   display: flex;

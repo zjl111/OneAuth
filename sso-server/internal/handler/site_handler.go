@@ -23,6 +23,8 @@ type SiteInfo struct {
 	HeroSubtitle    string `json:"hero_subtitle"`
 	HeroDescription string `json:"hero_description"`
 	LoginStyle      string `json:"login_style"`
+	NoticeEnabled   bool   `json:"notice_enabled"`
+	NoticeText      string `json:"notice_text"`
 	SMTPEnabled     bool   `json:"smtp_enabled"`
 }
 
@@ -66,6 +68,18 @@ func (h *SiteHandler) Info(c *gin.Context) {
 				if it.Value != "" {
 					info.LoginStyle = it.Value
 				}
+			}
+		}
+	}
+	// 公告单独一个 category
+	noticeItems, err := h.ConfigRepo.GetByCategory("notice")
+	if err == nil {
+		for _, it := range noticeItems {
+			switch it.Key {
+			case "enabled":
+				info.NoticeEnabled = it.Value == "true"
+			case "text":
+				info.NoticeText = it.Value
 			}
 		}
 	}

@@ -50,6 +50,6 @@ cp release/.env.example "$PKG_DIR/.env.example"
 cp release/conf/config.yaml "$PKG_DIR/conf/config.yaml"
 cp sso-server/data/ip2region.xdb "$PKG_DIR/data/ip2region.xdb"
 
-tar -czf "${PKG_NAME}.tar.gz" -C "release" "$PKG_NAME"
+COPYFILE_DISABLE=1 tar -czf "${PKG_NAME}.tar.gz" -C "release" "$PKG_NAME"
 
 echo "Package created: $ROOT/${PKG_NAME}.tar.gz"

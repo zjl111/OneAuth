@@ -45,7 +45,12 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (username, password, remember, captchaTicket) => {
-        const data = await authApi.login({ username, password, remember, captcha_ticket: captchaTicket });
+        const data = await authApi.login({
+          username: username.trim(),
+          password: password.trim(),
+          remember,
+          captcha_ticket: captchaTicket,
+        });
         // 重新登录后重置 401 跳转闸门，允许下次过期时再次跳转
         (window as any).__authBouncing = false;
         set({

@@ -508,7 +508,7 @@ export default function PlatformPanel({
       {/* 兜底：自动渲染未识别的 platform.* 字段 */}
       {items
         .filter((c) =>
-          !['name', 'logo', 'theme_color', 'hero_title', 'hero_subtitle', 'hero_description', 'site_url', 'login_bg', 'login_logo', 'login_style', 'demo_apps_seeded'].includes(c.key),
+          !['name', 'logo', 'theme_color', 'hero_title', 'hero_subtitle', 'hero_description', 'site_url', 'login_bg', 'login_logo', 'login_style', 'notice_text', 'demo_apps_seeded'].includes(c.key),
         )
         .map((c) => (
           <Form.Item

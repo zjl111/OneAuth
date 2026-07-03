@@ -10,6 +10,8 @@ export interface SiteInfo {
   hero_subtitle?: string;
   hero_description?: string;
   login_style?: 'modal' | 'inline';
+  notice_enabled?: boolean;
+  notice_text?: string;
   smtp_enabled?: boolean;
 }
 
