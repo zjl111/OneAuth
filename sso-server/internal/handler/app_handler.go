@@ -76,6 +76,20 @@ func (h *AppHandler) Update(c *gin.Context) {
 	response.OK(c, cl)
 }
 
+func (h *AppHandler) BatchUpdate(c *gin.Context) {
+	var req service.BatchUpdateClientInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	updated, failed, err := h.Service.BatchUpdate(req)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"updated": updated, "failed": failed})
+}
+
 func (h *AppHandler) Delete(c *gin.Context) {
 	id, ok := parseIDParam(c, "id")
 	if !ok {

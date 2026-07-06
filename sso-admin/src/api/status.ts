@@ -12,6 +12,7 @@ export interface AppStatus {
   name: string;
   description: string;
   logo_url: string;
+  enabled: boolean;
   status: AppStatusKind;
   availability_current: number;
   response_time_ms: number;

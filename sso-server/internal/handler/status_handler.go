@@ -31,6 +31,7 @@ type appOverview struct {
 	Name                string             `json:"name"`
 	Description         string             `json:"description"`
 	LogoURL             string             `json:"logo_url"`
+	Enabled             bool               `json:"enabled"`
 	Status              string             `json:"status"`
 	AvailabilityCurrent float64            `json:"availability_current"`
 	ResponseTimeMs      int                `json:"response_time_ms"`
@@ -105,12 +106,18 @@ func (h *StatusHandler) computeOverview() gin.H {
 	overallOK := true
 	for _, cl := range clients {
 		mon := monMap[cl.ClientID]
+		enabled := mon != nil && mon.Enabled
+		if !enabled {
+			// 关闭监控的应用不参与门户状态页展示，也不计入综合可用性。
+			continue
+		}
 		ov := appOverview{
 			ID:          cl.ID.String(),
 			ClientID:    cl.ClientID,
 			Name:        cl.ClientName,
 			Description: cl.Description,
 			LogoURL:     cl.LogoURL,
+			Enabled:     enabled,
 			Status:      model.StatusNoData,
 			Windows:     make(map[string]float64, 4),
 			AvgResponse: make(map[string]int, 4),

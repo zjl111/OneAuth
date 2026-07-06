@@ -9,14 +9,15 @@ import (
 )
 
 type OAuth2Client struct {
-	ID               uuid.UUID   `gorm:"type:char(36);primaryKey" json:"id"`
-	ClientID         string      `gorm:"size:128;uniqueIndex;not null" json:"client_id"`
-	ClientSecretHash string      `gorm:"size:256;not null" json:"-"`
-	ClientName       string      `gorm:"size:255;not null" json:"client_name"`
-	ClientType       string      `gorm:"size:20;not null;default:'confidential'" json:"client_type"`
-	Protocol         string      `gorm:"size:20;not null;default:'oidc'" json:"protocol"` // oidc / oauth2 / saml / cas / link
-	ProtocolVersion  string      `gorm:"size:40" json:"protocol_version"`                 // 协议版本，如 OpenID_Connect_v1.0 / OAuth_v2.0 / SAML_v2.0 / CAS_v3.0
-	Description      string      `gorm:"type:text" json:"description"`
+	ID               uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
+	ClientID         string    `gorm:"size:128;uniqueIndex;not null" json:"client_id"`
+	ClientSecretHash string    `gorm:"size:256;not null" json:"-"`
+	ClientName       string    `gorm:"size:255;not null" json:"client_name"`
+	ClientType       string    `gorm:"size:20;not null;default:'confidential'" json:"client_type"`
+	Protocol         string    `gorm:"size:20;not null;default:'oidc'" json:"protocol"` // oidc / oauth2 / saml / cas / link
+	ProtocolVersion  string    `gorm:"size:40" json:"protocol_version"`                 // 协议版本，如 OpenID_Connect_v1.0 / OAuth_v2.0 / SAML_v2.0 / CAS_v3.0
+	Description      string    `gorm:"type:text" json:"description"`
+	Category         string    `gorm:"size:80;default:''" json:"category"` // 应用分类，便于门户展示和后台管理
 
 	// === 通用：基本信息 ===
 	LogoURL        string `gorm:"size:512" json:"logo_url"`
@@ -52,9 +53,9 @@ type OAuth2Client struct {
 	SubjectType     string      `gorm:"size:30;default:'username'" json:"subject_type"` // username / user_id / email / mobile
 	RequirePKCE     bool        `gorm:"default:false" json:"require_pkce"`
 	RequireConsent  bool        `gorm:"default:false" json:"require_consent"` // true=强制 false=自动
-	AccessTokenTTL    int  `gorm:"default:3600" json:"access_token_ttl"`
-	RefreshTokenTTL   int  `gorm:"default:604800" json:"refresh_token_ttl"`
-	IDTokenTTL        int  `gorm:"default:3600" json:"id_token_ttl"`
+	AccessTokenTTL  int         `gorm:"default:3600" json:"access_token_ttl"`
+	RefreshTokenTTL int         `gorm:"default:604800" json:"refresh_token_ttl"`
+	IDTokenTTL      int         `gorm:"default:3600" json:"id_token_ttl"`
 	// 默认 false（GORM 零值陷阱）；service 层会把缺省值显式置 true。
 	IssueRefreshToken bool `json:"issue_refresh_token"`
 
@@ -67,25 +68,25 @@ type OAuth2Client struct {
 	OIDCClaims StringSlice `gorm:"type:text" json:"oidc_claims"`
 
 	// === SAML 2.0 协议配置（仅 protocol=saml 生效） ===
-	SAMLEntityID            string `gorm:"size:512" json:"saml_entity_id"`
-	SAMLACSURL              string `gorm:"size:512" json:"saml_acs_url"`
-	SAMLAudience            string `gorm:"size:512" json:"saml_audience"`
-	SAMLIssuer              string `gorm:"size:512" json:"saml_issuer"`
-	SAMLBinding             string `gorm:"size:30" json:"saml_binding"`         // Redirect-Post / Post-Post / IdpInit-Post
-	SAMLNameIDFormat        string `gorm:"size:60" json:"saml_nameid_format"`   // unspecified / persistent / transient / emailAddress / ...
-	SAMLNameIDConvert       string `gorm:"size:20" json:"saml_nameid_convert"`  // original / uppercase / lowercase
-	SAMLSignatureAlgorithm  string `gorm:"size:30" json:"saml_signature_algorithm"`
-	SAMLDigestAlgorithm     string `gorm:"size:30" json:"saml_digest_algorithm"`
-	SAMLEncrypted           bool   `gorm:"default:false" json:"saml_encrypted"`
-	SAMLValiditySeconds     int    `gorm:"default:300" json:"saml_validity_seconds"`
-	SAMLCertificate         string `gorm:"type:text" json:"saml_certificate"` // PEM 证书内容
+	SAMLEntityID           string `gorm:"size:512" json:"saml_entity_id"`
+	SAMLACSURL             string `gorm:"size:512" json:"saml_acs_url"`
+	SAMLAudience           string `gorm:"size:512" json:"saml_audience"`
+	SAMLIssuer             string `gorm:"size:512" json:"saml_issuer"`
+	SAMLBinding            string `gorm:"size:30" json:"saml_binding"`        // Redirect-Post / Post-Post / IdpInit-Post
+	SAMLNameIDFormat       string `gorm:"size:60" json:"saml_nameid_format"`  // unspecified / persistent / transient / emailAddress / ...
+	SAMLNameIDConvert      string `gorm:"size:20" json:"saml_nameid_convert"` // original / uppercase / lowercase
+	SAMLSignatureAlgorithm string `gorm:"size:30" json:"saml_signature_algorithm"`
+	SAMLDigestAlgorithm    string `gorm:"size:30" json:"saml_digest_algorithm"`
+	SAMLEncrypted          bool   `gorm:"default:false" json:"saml_encrypted"`
+	SAMLValiditySeconds    int    `gorm:"default:300" json:"saml_validity_seconds"`
+	SAMLCertificate        string `gorm:"type:text" json:"saml_certificate"` // PEM 证书内容
 
 	// === CAS 协议配置（仅 protocol=cas 生效） ===
-	CASService        string `gorm:"size:512" json:"cas_service"`
-	CASCallbackURL    string `gorm:"size:512" json:"cas_callback_url"`
-	CASUserAttribute  string `gorm:"size:30" json:"cas_user_attribute"` // username / user_id / email / mobile
-	CASExpiresSeconds   int  `gorm:"default:300" json:"cas_expires_seconds"`
-	CASReturnAttributes bool `gorm:"default:true" json:"cas_return_attributes"` // 是否在 ticket validate 响应中返回用户属性 (cas:attributes)
+	CASService          string `gorm:"size:512" json:"cas_service"`
+	CASCallbackURL      string `gorm:"size:512" json:"cas_callback_url"`
+	CASUserAttribute    string `gorm:"size:30" json:"cas_user_attribute"` // username / user_id / email / mobile
+	CASExpiresSeconds   int    `gorm:"default:300" json:"cas_expires_seconds"`
+	CASReturnAttributes bool   `gorm:"default:true" json:"cas_return_attributes"` // 是否在 ticket validate 响应中返回用户属性 (cas:attributes)
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

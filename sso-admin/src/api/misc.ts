@@ -90,14 +90,15 @@ export interface UserGroup {
   id: string;
   name: string;
   description: string;
+  sort_order: number;
   created_at: string;
   member_count?: number;
 }
 
 export const userGroupApi = {
   list: () => get<UserGroup[]>('/user-groups'),
-  create: (data: { name: string; description?: string }) => post<UserGroup>('/user-groups', data),
-  update: (id: string, data: { name: string; description?: string }) =>
+  create: (data: { name: string; description?: string; sort_order?: number }) => post<UserGroup>('/user-groups', data),
+  update: (id: string, data: { name: string; description?: string; sort_order?: number }) =>
     put<UserGroup>(`/user-groups/${id}`, data),
   delete: (id: string) => del(`/user-groups/${id}`),
   members: (id: string) =>
@@ -240,6 +241,7 @@ export const monitorApi = {
       Array<{
         id: string;
         client_id: string;
+        sort_order: number;
         enabled: boolean;
         health_check_url: string;
         timeout_ms: number;

@@ -63,6 +63,7 @@ export type WizardValues = {
   protocol_version: string;
   logo_url?: string;
   login_url?: string;
+  category?: string;
   is_active: boolean;
   sort_order?: number;
   description?: string;

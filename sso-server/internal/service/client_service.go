@@ -34,6 +34,7 @@ type CreateClientInput struct {
 	Protocol        string `json:"protocol"`
 	ProtocolVersion string `json:"protocol_version"`
 	Description     string `json:"description"`
+	Category        string `json:"category"`
 
 	// 通用
 	LogoURL        string `json:"logo_url"`
@@ -50,16 +51,16 @@ type CreateClientInput struct {
 	AllowSpInitiated  *bool        `json:"allow_sp_initiated"`
 
 	// OAuth2 / OIDC
-	RedirectURIs    []string `json:"redirect_uris"`
-	GrantTypes      []string `json:"grant_types"`
-	Scope           string   `json:"scope"`
-	SubjectType     string   `json:"subject_type"`
-	RequirePKCE     bool     `json:"require_pkce"`
-	RequireConsent  bool     `json:"require_consent"`
-	AccessTokenTTL    int  `json:"access_token_ttl"`
-	RefreshTokenTTL   int  `json:"refresh_token_ttl"`
-	IDTokenTTL        int  `json:"id_token_ttl"`
-	IssueRefreshToken *bool `json:"issue_refresh_token"`
+	RedirectURIs      []string `json:"redirect_uris"`
+	GrantTypes        []string `json:"grant_types"`
+	Scope             string   `json:"scope"`
+	SubjectType       string   `json:"subject_type"`
+	RequirePKCE       bool     `json:"require_pkce"`
+	RequireConsent    bool     `json:"require_consent"`
+	AccessTokenTTL    int      `json:"access_token_ttl"`
+	RefreshTokenTTL   int      `json:"refresh_token_ttl"`
+	IDTokenTTL        int      `json:"id_token_ttl"`
+	IssueRefreshToken *bool    `json:"issue_refresh_token"`
 
 	// OIDC
 	OIDCIssuer            string   `json:"oidc_issuer"`
@@ -134,28 +135,29 @@ func (s *ClientService) Create(in CreateClientInput) (*ClientWithSecret, error) 
 		Protocol:         protocol,
 		ProtocolVersion:  defaultStr(in.ProtocolVersion, defaultProtocolVersion(protocol)),
 		Description:      in.Description,
+		Category:         in.Category,
 		LogoURL:          in.LogoURL,
 		HomeURL:          in.HomeURL,
 		LoginURL:         in.LoginURL,
 		// 监控地址默认与"应用入口"相同；状态监控页可单独覆盖
-		HealthCheckURL:   defaultStr(in.HealthCheckURL, in.LoginURL),
-		SortOrder:        in.SortOrder,
-		IsActive:         true,
-		AccessPolicy:     defaultStr(in.AccessPolicy, "all"),
+		HealthCheckURL:    defaultStr(in.HealthCheckURL, in.LoginURL),
+		SortOrder:         in.SortOrder,
+		IsActive:          true,
+		AccessPolicy:      defaultStr(in.AccessPolicy, "all"),
 		VisibleInPortal:   in.VisibleInPortal == nil || *in.VisibleInPortal,
 		AllowIdpInitiated: in.AllowIdpInitiated == nil || *in.AllowIdpInitiated,
 		AllowSpInitiated:  in.AllowSpInitiated == nil || *in.AllowSpInitiated,
 
-		RedirectURIs:    nonNilSlice(in.RedirectURIs),
-		GrantTypes:      defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
-		ResponseTypes:   []string{"code"},
-		Scope:           defaultStr(in.Scope, "openid profile email"),
-		SubjectType:     defaultStr(in.SubjectType, "username"),
-		RequirePKCE:     in.RequirePKCE,
-		RequireConsent:  in.RequireConsent,
-		AccessTokenTTL:  defaultInt(in.AccessTokenTTL, 3600),
-		RefreshTokenTTL: defaultInt(in.RefreshTokenTTL, 604800),
-		IDTokenTTL:      defaultInt(in.IDTokenTTL, 3600),
+		RedirectURIs:      nonNilSlice(in.RedirectURIs),
+		GrantTypes:        defaultSlice(in.GrantTypes, []string{"authorization_code", "refresh_token"}),
+		ResponseTypes:     []string{"code"},
+		Scope:             defaultStr(in.Scope, "openid profile email"),
+		SubjectType:       defaultStr(in.SubjectType, "username"),
+		RequirePKCE:       in.RequirePKCE,
+		RequireConsent:    in.RequireConsent,
+		AccessTokenTTL:    defaultInt(in.AccessTokenTTL, 3600),
+		RefreshTokenTTL:   defaultInt(in.RefreshTokenTTL, 604800),
+		IDTokenTTL:        defaultInt(in.IDTokenTTL, 3600),
 		IssueRefreshToken: in.IssueRefreshToken == nil || *in.IssueRefreshToken,
 
 		OIDCIssuer:            in.OIDCIssuer,
@@ -220,6 +222,7 @@ type UpdateClientInput struct {
 	Protocol        *string `json:"protocol"`
 	ProtocolVersion *string `json:"protocol_version"`
 	Description     *string `json:"description"`
+	Category        *string `json:"category"`
 
 	LogoURL        *string `json:"logo_url"`
 	HomeURL        *string `json:"home_url"`
@@ -235,16 +238,16 @@ type UpdateClientInput struct {
 	AllowIdpInitiated *bool         `json:"allow_idp_initiated"`
 	AllowSpInitiated  *bool         `json:"allow_sp_initiated"`
 
-	RedirectURIs    *[]string `json:"redirect_uris"`
-	GrantTypes      *[]string `json:"grant_types"`
-	Scope           *string   `json:"scope"`
-	SubjectType     *string   `json:"subject_type"`
-	RequirePKCE     *bool     `json:"require_pkce"`
-	RequireConsent  *bool     `json:"require_consent"`
-	AccessTokenTTL    *int  `json:"access_token_ttl"`
-	RefreshTokenTTL   *int  `json:"refresh_token_ttl"`
-	IDTokenTTL        *int  `json:"id_token_ttl"`
-	IssueRefreshToken *bool `json:"issue_refresh_token"`
+	RedirectURIs      *[]string `json:"redirect_uris"`
+	GrantTypes        *[]string `json:"grant_types"`
+	Scope             *string   `json:"scope"`
+	SubjectType       *string   `json:"subject_type"`
+	RequirePKCE       *bool     `json:"require_pkce"`
+	RequireConsent    *bool     `json:"require_consent"`
+	AccessTokenTTL    *int      `json:"access_token_ttl"`
+	RefreshTokenTTL   *int      `json:"refresh_token_ttl"`
+	IDTokenTTL        *int      `json:"id_token_ttl"`
+	IssueRefreshToken *bool     `json:"issue_refresh_token"`
 
 	OIDCIssuer            *string   `json:"oidc_issuer"`
 	OIDCAudience          *string   `json:"oidc_audience"`
@@ -272,6 +275,13 @@ type UpdateClientInput struct {
 	CASReturnAttributes *bool   `json:"cas_return_attributes"`
 }
 
+type BatchUpdateClientInput struct {
+	IDs             []string `json:"ids" binding:"required"`
+	Category        *string  `json:"category"`
+	IsActive        *bool    `json:"is_active"`
+	VisibleInPortal *bool    `json:"visible_in_portal"`
+}
+
 func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth2Client, error) {
 	c, err := s.repo.GetByID(id)
 	if err != nil {
@@ -288,6 +298,9 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 	}
 	if in.Description != nil {
 		c.Description = *in.Description
+	}
+	if in.Category != nil {
+		c.Category = *in.Category
 	}
 	if in.RedirectURIs != nil {
 		c.RedirectURIs = *in.RedirectURIs
@@ -450,6 +463,35 @@ func (s *ClientService) Update(id uuid.UUID, in UpdateClientInput) (*model.OAuth
 		}
 	}
 	return c, nil
+}
+
+func (s *ClientService) BatchUpdate(in BatchUpdateClientInput) (int, []string, error) {
+	if len(in.IDs) == 0 {
+		return 0, nil, errors.New("请选择要批量操作的应用")
+	}
+	if in.Category == nil && in.IsActive == nil && in.VisibleInPortal == nil {
+		return 0, nil, errors.New("请至少选择一个要修改的项目")
+	}
+	updated := 0
+	failed := make([]string, 0)
+	for _, raw := range in.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			failed = append(failed, raw)
+			continue
+		}
+		upd := UpdateClientInput{
+			Category:        in.Category,
+			IsActive:        in.IsActive,
+			VisibleInPortal: in.VisibleInPortal,
+		}
+		if _, err := s.Update(id, upd); err != nil {
+			failed = append(failed, raw)
+			continue
+		}
+		updated++
+	}
+	return updated, failed, nil
 }
 
 func (s *ClientService) Delete(id uuid.UUID) error {

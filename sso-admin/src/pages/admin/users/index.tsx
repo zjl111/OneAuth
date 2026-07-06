@@ -544,14 +544,39 @@ export default function UserListPage() {
           },
           {
             title: '用户角色',
-            dataIndex: 'is_staff',
-            width: 90,
-            render: (v) =>
-              v ? (
-                <span className="user-admin-dot">管理员</span>
-              ) : (
-                <span className="user-admin-no">—</span>
-              ),
+            dataIndex: 'roles',
+            width: 180,
+            render: (_, r) => {
+              const roles = r.roles || [];
+              if (roles.length === 0) return <span className="user-admin-no">普通用户</span>;
+              return (
+                <Space size={[6, 6]} wrap>
+                  {roles.map((role) => (
+                    <Tag key={role.id} color={role.code === 'super_admin' ? 'red' : 'blue'}>
+                      {role.name}
+                    </Tag>
+                  ))}
+                </Space>
+              );
+            },
+          },
+          {
+            title: '用户组',
+            dataIndex: 'groups',
+            width: 180,
+            render: (_, r) => {
+              const groups = r.groups || [];
+              if (groups.length === 0) return <span className="user-admin-no">未加入</span>;
+              return (
+                <Space size={[6, 6]} wrap>
+                  {groups.map((group) => (
+                    <Tag key={group.id} color="geekblue">
+                      {group.name}
+                    </Tag>
+                  ))}
+                </Space>
+              );
+            },
           },
           {
             title: '状态',

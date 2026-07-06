@@ -9,6 +9,7 @@ import {
   Modal,
   Form,
   Drawer,
+  InputNumber,
   Popconfirm,
   Transfer,
   App as AntdApp,
@@ -54,11 +55,12 @@ export default function UserGroupsPage() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
+    form.setFieldsValue({ sort_order: 0 });
     setOpen(true);
   };
   const openEdit = (g: UserGroup) => {
     setEditing(g);
-    form.setFieldsValue(g);
+    form.setFieldsValue({ ...g, sort_order: g.sort_order ?? 0 });
     setOpen(true);
   };
 
@@ -170,6 +172,13 @@ export default function UserGroupsPage() {
               align: 'center',
               render: (v: number) => <Tag color="blue">{v ?? 0} 人</Tag>,
             },
+            {
+              title: '排序',
+              dataIndex: 'sort_order',
+              width: 90,
+              align: 'center',
+              render: (v: number) => v ?? 0,
+            },
             { title: '创建时间', dataIndex: 'created_at', width: 180, render: (v: string) => new Date(v).toLocaleString('zh-CN') },
             {
               title: '操作',
@@ -205,6 +214,9 @@ export default function UserGroupsPage() {
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={3} placeholder="可选" />
+          </Form.Item>
+          <Form.Item name="sort_order" label="排序" tooltip="数字越小越靠前，默认为 0">
+            <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
         <div className="drawer-footer">

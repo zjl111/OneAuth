@@ -35,7 +35,7 @@ func (r *UserRepository) Delete(id uuid.UUID) error {
 
 func (r *UserRepository) GetByID(id uuid.UUID) (*model.User, error) {
 	var u model.User
-	if err := r.db.Preload("Department").Preload("Roles").First(&u, "id = ?", id).Error; err != nil {
+	if err := r.db.Preload("Department").Preload("Roles").Preload("Groups").First(&u, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -43,7 +43,7 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*model.User, error) {
 
 func (r *UserRepository) GetByUsername(username string) (*model.User, error) {
 	var u model.User
-	if err := r.db.Preload("Roles").First(&u, "username = ?", username).Error; err != nil {
+	if err := r.db.Preload("Roles").Preload("Groups").First(&u, "username = ?", username).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -51,7 +51,7 @@ func (r *UserRepository) GetByUsername(username string) (*model.User, error) {
 
 func (r *UserRepository) GetByEmail(email string) (*model.User, error) {
 	var u model.User
-	if err := r.db.Preload("Roles").First(&u, "email = ?", email).Error; err != nil {
+	if err := r.db.Preload("Roles").Preload("Groups").First(&u, "email = ?", email).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -59,7 +59,7 @@ func (r *UserRepository) GetByEmail(email string) (*model.User, error) {
 
 func (r *UserRepository) GetByPhone(phone string) (*model.User, error) {
 	var u model.User
-	if err := r.db.Preload("Roles").First(&u, "phone = ?", phone).Error; err != nil {
+	if err := r.db.Preload("Roles").Preload("Groups").First(&u, "phone = ?", phone).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -78,7 +78,7 @@ type UserQuery struct {
 }
 
 func (r *UserRepository) List(q UserQuery) ([]model.User, int64, error) {
-	tx := r.db.Model(&model.User{}).Preload("Department").Preload("Roles")
+	tx := r.db.Model(&model.User{}).Preload("Department").Preload("Roles").Preload("Groups")
 	if q.Username != "" {
 		tx = tx.Where("username LIKE ?", "%"+q.Username+"%")
 	}

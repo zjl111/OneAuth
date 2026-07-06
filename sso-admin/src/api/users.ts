@@ -22,6 +22,7 @@ export interface User {
   last_login: string | null;
   created_at: string;
   roles: Array<{ id: string; code: string; name: string }>;
+  groups: Array<{ id: string; name: string }>;
 }
 
 export interface ImportRowError {

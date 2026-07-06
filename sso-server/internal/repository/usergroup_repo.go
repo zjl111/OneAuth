@@ -15,7 +15,7 @@ func (r *UserGroupRepository) DB() *gorm.DB { return r.db }
 
 func (r *UserGroupRepository) List() ([]model.UserGroup, error) {
 	var items []model.UserGroup
-	err := r.db.Order("created_at DESC").Find(&items).Error
+	err := r.db.Order("sort_order ASC, created_at DESC").Find(&items).Error
 	return items, err
 }
 
@@ -27,7 +27,7 @@ type UserGroupWithCount struct {
 
 func (r *UserGroupRepository) ListWithCount() ([]UserGroupWithCount, error) {
 	var groups []model.UserGroup
-	if err := r.db.Order("created_at DESC").Find(&groups).Error; err != nil {
+	if err := r.db.Order("sort_order ASC, created_at DESC").Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	if len(groups) == 0 {
@@ -68,6 +68,7 @@ func (r *UserGroupRepository) Update(g *model.UserGroup) error {
 	return r.db.Model(g).Updates(map[string]any{
 		"name":        g.Name,
 		"description": g.Description,
+		"sort_order":  g.SortOrder,
 	}).Error
 }
 

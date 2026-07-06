@@ -6,10 +6,13 @@ import {
   Switch,
   Steps,
   Button,
+  Select,
   Upload,
   App as AntdApp,
+  Modal,
+  Divider,
 } from 'antd';
-import { CopyOutlined, DownloadOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { CopyOutlined, DownloadOutlined, AppstoreOutlined, PlusOutlined } from '@ant-design/icons';
 import type { OAuth2Client } from '@/api/apps';
 import { useAuthStore } from '@/store/authStore';
 import './wizard.css';
@@ -41,6 +44,7 @@ export default function AppWizard({
   isDuplicate,
   onClose,
   onSubmit,
+  categoryOptions = [],
 }: {
   open: boolean;
   family: ProtoFamily;
@@ -48,15 +52,27 @@ export default function AppWizard({
   isDuplicate?: boolean;
   onClose: () => void;
   onSubmit: (values: any) => Promise<OAuth2Client>;
+  categoryOptions?: string[];
 }) {
   const { message } = AntdApp.useApp();
   const [step, setStep] = useState(0);
   const [form] = Form.useForm<WizardValues>();
   const [saving, setSaving] = useState(false);
   const logoUrl = Form.useWatch('logo_url', form);
+  const [localCategories, setLocalCategories] = useState<string[]>([]);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState('');
   const isOIDC = family === 'oidc';
   const hasOpenId = family === 'oidc' || family === 'oauth2';
   const [discovery, setDiscovery] = useState<Record<string, any> | null>(null);
+  const categoryChoices = useMemo(() => {
+    const items = new Set<string>();
+    [...categoryOptions, ...localCategories].forEach((item) => {
+      const v = String(item || '').trim();
+      if (v) items.add(v);
+    });
+    return Array.from(items).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  }, [categoryOptions, localCategories]);
 
   // 内联 Logo 上传配置（Step0 横向布局复用）
   const uploadConfig = useMemo(() => ({
@@ -109,6 +125,8 @@ export default function AppWizard({
   useEffect(() => {
     if (!open) {
       setSubmitted(null);
+      setCategoryModalOpen(false);
+      setCategoryDraft('');
       return;
     }
     setSubmitted(editing || null);
@@ -126,6 +144,7 @@ export default function AppWizard({
         protocol_version: editVersion,
         logo_url: editing.logo_url,
         login_url: editing.login_url || editing.home_url,
+        category: editing.category || undefined,
         is_active: editing.is_active,
         sort_order: editing.sort_order || 0,
         description: editing.description,
@@ -178,6 +197,7 @@ export default function AppWizard({
       form.setFieldsValue({
         protocol: family,
         protocol_version: initVersion,
+        category: undefined,
         is_active: true,
         sort_order: 0,
         redirect_uris: [],
@@ -222,6 +242,7 @@ export default function AppWizard({
       logo_url: v.logo_url,
       home_url: v.login_url,
       login_url: v.login_url,
+      category: v.category || '',
       is_active: v.is_active,
       sort_order: v.sort_order || 0,
       description: v.description,
@@ -286,6 +307,21 @@ export default function AppWizard({
           }))
         : [];
     return base;
+  };
+
+  const createCategory = () => {
+    const value = categoryDraft.trim();
+    if (!value) {
+      message.warning('请输入分类名称');
+      return;
+    }
+    if (!categoryChoices.includes(value)) {
+      setLocalCategories((prev) => [...prev, value]);
+    }
+    form.setFieldValue('category', value);
+    setCategoryDraft('');
+    setCategoryModalOpen(false);
+    message.success('已添加分类');
   };
 
   const submitAndAdvance = async () => {
@@ -431,6 +467,36 @@ export default function AppWizard({
               </Form.Item>
             )}
 
+            <Form.Item
+              name="category"
+              label="分类"
+              tooltip="可按业务线、系统类型或部门自定义分类，例如：办公协作 / 财务 / 内部系统"
+            >
+              <Select
+                allowClear
+                showSearch
+                placeholder="请选择分类"
+                options={categoryChoices.map((item) => ({ value: item, label: item }))}
+                dropdownRender={(menu) => (
+                  <>
+                    {menu}
+                    <Divider style={{ margin: '8px 0' }} />
+                    <Button
+                      type="text"
+                      block
+                      icon={<PlusOutlined />}
+                      style={{ justifyContent: 'flex-start', paddingLeft: 12 }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setCategoryModalOpen(true)}
+                    >
+                      添加分类
+                    </Button>
+                  </>
+                )}
+                notFoundContent="暂无分类，请点击下方添加"
+              />
+            </Form.Item>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <Form.Item name="is_active" label="状态" valuePropName="checked" rules={[{ required: true }]}>
                 <Switch />
@@ -479,6 +545,27 @@ export default function AppWizard({
           />
         </div>
       </Form>
+
+      <Modal
+        open={categoryModalOpen}
+        title="添加分类"
+        okText="添加"
+        cancelText="取消"
+        destroyOnClose
+        onCancel={() => {
+          setCategoryModalOpen(false);
+          setCategoryDraft('');
+        }}
+        onOk={createCategory}
+      >
+        <Input
+          value={categoryDraft}
+          onChange={(e) => setCategoryDraft(e.target.value)}
+          onPressEnter={createCategory}
+          placeholder="请输入分类名称"
+          autoFocus
+        />
+      </Modal>
 
       <div className="app-wizard-footer">
         <Button onClick={onClose}>关闭</Button>

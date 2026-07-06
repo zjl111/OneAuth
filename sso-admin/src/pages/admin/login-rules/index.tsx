@@ -140,7 +140,7 @@ export default function LoginRulesPage() {
     <Card className="lr-page">
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ color: '#6b7280', fontSize: 13 }}>
-          按规则的优先级（数字越小越优先）顺序匹配登录请求的 IP 与时段。命中首条匹配规则即决定允许或拒绝；未命中任一规则时默认放行。
+          按规则的排序（数字越小越优先）顺序匹配登录请求的 IP 与时段。命中首条匹配规则即决定允许或拒绝；未命中任一规则时默认放行。
         </div>
         <Space>
           {selectedIds.length > 0 && (
@@ -167,7 +167,7 @@ export default function LoginRulesPage() {
           onChange: (keys) => setSelectedIds(keys as string[]),
         }}
         columns={[
-          { title: '优先级', dataIndex: 'priority', width: 90, align: 'center' },
+          { title: '排序', dataIndex: 'priority', width: 90, align: 'center' },
           { title: '名称', dataIndex: 'name' },
           {
             title: '范围',
@@ -238,7 +238,7 @@ export default function LoginRulesPage() {
               </Form.Item>
               <Form.Item
                 name="priority"
-                label="优先级"
+                label="排序"
                 tooltip="数字越小越优先匹配；多条规则同优先级时按创建顺序"
                 rules={[{ required: true }]}
               >

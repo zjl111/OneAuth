@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { Spin, Tooltip } from 'antd';
+import { Button, Empty, Spin, Tooltip } from 'antd';
 import {
   CheckCircleFilled,
   WarningFilled,
@@ -7,7 +7,9 @@ import {
   ToolFilled,
   QuestionCircleFilled,
   BulbOutlined,
+  ArrowLeftOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { statusApi, type StatusOverview, type AppStatus } from '@/api/status';
 import './status.css';
@@ -78,6 +80,7 @@ function formatOutage(sec: number): string {
 }
 
 export default function StatusPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState<StatusOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>(
@@ -112,7 +115,8 @@ export default function StatusPage() {
     };
   }, [refreshSec]);
 
-  const downCount = data?.apps.filter((a) => a.status === 'down').length || 0;
+  const visibleApps = data?.apps.filter((a) => a.enabled !== false) || [];
+  const downCount = visibleApps.filter((a) => a.status === 'down').length || 0;
   const isAllOk = downCount === 0;
 
   return (
@@ -134,6 +138,13 @@ export default function StatusPage() {
           </div>
         </div>
         <div className="status-actions">
+          <Button
+            className="status-back-btn"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/portal')}
+          >
+            返回门户
+          </Button>
           <button
             className="icon-btn"
             title="主题"
@@ -163,11 +174,17 @@ export default function StatusPage() {
       </div>
 
       <Spin spinning={loading}>
-        <div className="status-list">
-          {data?.apps.map((app) => (
-            <AppStatusCard key={app.id} app={app} />
-          ))}
-        </div>
+        {visibleApps.length > 0 ? (
+          <div className="status-list">
+            {visibleApps.map((app) => (
+              <AppStatusCard key={app.id} app={app} />
+            ))}
+          </div>
+        ) : (
+          <div className="status-empty">
+            <Empty description="暂无已启用监控的应用" />
+          </div>
+        )}
       </Spin>
     </div>
   );

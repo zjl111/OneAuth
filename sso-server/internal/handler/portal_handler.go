@@ -21,6 +21,7 @@ type PortalApp struct {
 	ID          string `json:"id"`
 	ClientID    string `json:"client_id"`
 	Name        string `json:"name"`
+	Category    string `json:"category"`
 	Description string `json:"description"`
 	Protocol    string `json:"protocol"` // 用于前端识别非 SSO 应用（link）
 	LogoURL     string `json:"logo_url"`
@@ -93,6 +94,7 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 			ID:          cl.ID.String(),
 			ClientID:    cl.ClientID,
 			Name:        cl.ClientName,
+			Category:    cl.Category,
 			Description: cl.Description,
 			Protocol:    cl.Protocol,
 			LogoURL:     cl.LogoURL,

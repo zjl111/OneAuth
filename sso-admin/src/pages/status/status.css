@@ -64,7 +64,11 @@
 
 .status-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+.status-back-btn {
+  border-radius: 8px;
 }
 .icon-btn {
   width: 36px;
@@ -111,6 +115,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.status-empty {
+  padding: 24px 0 8px;
 }
 .status-row {
   background: var(--card);

@@ -11,6 +11,7 @@ const statusMap: Record<string, { color: string; label: string }> = {
   degraded: { color: 'orange', label: '性能下降' },
   down: { color: 'red', label: '服务中断' },
   maintenance: { color: 'blue', label: '维护中' },
+  disabled: { color: 'default', label: '未启用' },
   no_data: { color: 'default', label: '无数据' },
 };
 
@@ -118,6 +119,13 @@ export default function MonitorPage() {
                 )}
               </div>
             ),
+          },
+          {
+            title: '排序',
+            dataIndex: 'sort_order',
+            width: 90,
+            align: 'center',
+            render: (v) => v ?? 0,
           },
           {
             title: '当前状态',

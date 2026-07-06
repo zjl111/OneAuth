@@ -56,6 +56,7 @@ func (h *MonitorHandler) List(c *gin.Context) {
 		LogoURL string `json:"logo_url"`
 		HomeURL string `json:"home_url"`
 	}{}
+	sortMap := map[string]int{}
 	if h.ClientRepo != nil {
 		if cs, err := h.ClientRepo.ListAll(); err == nil {
 			for _, c2 := range cs {
@@ -64,6 +65,7 @@ func (h *MonitorHandler) List(c *gin.Context) {
 					LogoURL string `json:"logo_url"`
 					HomeURL string `json:"home_url"`
 				}{Name: c2.ClientName, LogoURL: c2.LogoURL, HomeURL: c2.HomeURL}
+				sortMap[c2.ClientID] = c2.SortOrder
 			}
 		}
 	}
@@ -73,15 +75,20 @@ func (h *MonitorHandler) List(c *gin.Context) {
 		if m.ClientID == AdminClientID {
 			continue
 		}
+		status := m.CurrentStatus
+		if !m.Enabled {
+			status = "disabled"
+		}
 		row := gin.H{
 			"id":               m.ID,
 			"client_id":        m.ClientID,
+			"sort_order":       sortMap[m.ClientID],
 			"enabled":          m.Enabled,
 			"health_check_url": m.HealthCheckURL,
 			"timeout_ms":       m.TimeoutMs,
 			"degraded_ms":      m.DegradedMs,
 			"maintenance":      m.Maintenance,
-			"current_status":   m.CurrentStatus,
+			"current_status":   status,
 			"last_probed_at":   m.LastProbedAt,
 			"last_response_ms": m.LastResponseMs,
 			"created_at":       m.CreatedAt,

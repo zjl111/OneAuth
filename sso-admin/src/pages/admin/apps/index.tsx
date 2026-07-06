@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Table,
   Card,
   Button,
   Input,
+  Form,
+  Modal,
+  Radio,
   Space,
+  Select,
+  Divider,
   Tag,
   Dropdown,
   Drawer,
@@ -57,11 +62,17 @@ function fallbackCopyText(text: string, message: any) {
 
 export default function AppListPage() {
   const { message, modal } = AntdApp.useApp();
+  const [batchForm] = Form.useForm();
   const [data, setData] = useState<OAuth2Client[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchUpdateOpen, setBatchUpdateOpen] = useState(false);
+  const [batchUpdateSubmitting, setBatchUpdateSubmitting] = useState(false);
+  const [localCategories, setLocalCategories] = useState<string[]>([]);
+  const [batchCategoryModalOpen, setBatchCategoryModalOpen] = useState(false);
+  const [batchCategoryDraft, setBatchCategoryDraft] = useState('');
 
   const handleBatchDelete = () => {
     if (selectedIds.length === 0) return;
@@ -90,6 +101,43 @@ export default function AppListPage() {
       },
     });
   };
+
+  const handleBatchUpdate = async () => {
+    try {
+      const values = await batchForm.validateFields();
+      const payload: Record<string, unknown> = { ids: selectedIds };
+      if (typeof values.category === 'string' && values.category.trim()) {
+        payload.category = values.category.trim();
+      }
+      if (values.is_active_mode === 'enable') payload.is_active = true;
+      if (values.is_active_mode === 'disable') payload.is_active = false;
+      if (values.visible_mode === 'show') payload.visible_in_portal = true;
+      if (values.visible_mode === 'hide') payload.visible_in_portal = false;
+      if (Object.keys(payload).length === 1) {
+        message.warning('请至少选择一个要修改的项目');
+        return;
+      }
+      setBatchUpdateSubmitting(true);
+      try {
+        const r: any = await appsApi.batchUpdate(payload as any);
+        if (r?.failed?.length) {
+          message.warning(`已更新 ${r.updated} 个，${r.failed.length} 个失败`);
+        } else {
+          message.success(`已更新 ${selectedIds.length} 个应用`);
+        }
+        setBatchUpdateOpen(false);
+        setSelectedIds([]);
+        batchForm.resetFields();
+        load();
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '批量操作失败');
+      } finally {
+        setBatchUpdateSubmitting(false);
+      }
+    } catch {
+      // 表单校验已处理
+    }
+  };
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -100,6 +148,29 @@ export default function AppListPage() {
   const [handoffClient, setHandoffClient] = useState<OAuth2Client | null>(null);
   const [handoffSummary, setHandoffSummary] = useState<any>(null);
   const [handoffDiscovery, setHandoffDiscovery] = useState<Record<string, any> | null>(null);
+  const categoryOptions = useMemo(() => {
+    const items = new Set<string>();
+    [...data, ...localCategories.map((category) => ({ category }))].forEach((item) => {
+      const v = String(item.category || '').trim();
+      if (v) items.add(v);
+    });
+    return Array.from(items).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  }, [data, localCategories]);
+
+  const createBatchCategory = () => {
+    const value = batchCategoryDraft.trim();
+    if (!value) {
+      message.warning('请输入分类名称');
+      return;
+    }
+    if (!categoryOptions.includes(value)) {
+      setLocalCategories((prev) => [...prev, value]);
+    }
+    batchForm.setFieldValue('category', value);
+    setBatchCategoryDraft('');
+    setBatchCategoryModalOpen(false);
+    message.success('已添加分类');
+  };
 
   // 创建应用前先弹协议家族选择
   const [protocolOpen, setProtocolOpen] = useState(false);
@@ -150,6 +221,7 @@ export default function AppListPage() {
       merged.visible_in_portal = (detail?.client || c).visible_in_portal !== false;
       merged.allow_idp_initiated = (detail?.client || c).allow_idp_initiated !== false;
       merged.allow_sp_initiated = (detail?.client || c).allow_sp_initiated !== false;
+      merged.category = (detail?.client || c).category || '';
       setEditing(merged);
     } catch {
       setEditing(c);
@@ -238,6 +310,7 @@ export default function AppListPage() {
       merged.visible_in_portal = client.visible_in_portal !== false;
       merged.allow_idp_initiated = client.allow_idp_initiated !== false;
       merged.allow_sp_initiated = client.allow_sp_initiated !== false;
+      merged.category = client.category || '';
       const family = ((merged.protocol as Proto) || 'oidc') as ProtoFamily;
       setHandoffClient(merged);
       setHandoffSummary(merged);
@@ -311,6 +384,7 @@ export default function AppListPage() {
         visible_in_portal: src.visible_in_portal !== false,
         allow_idp_initiated: src.allow_idp_initiated !== false,
         allow_sp_initiated: src.allow_sp_initiated !== false,
+        category: src.category || '',
       };
       setPickedFamily(((src.protocol as Proto) || 'oidc') as ProtoFamily);
       setEditing(copy);
@@ -367,12 +441,35 @@ export default function AppListPage() {
     },
   ]);
 
+  const batchActionMenu: MenuProps['items'] = [
+    {
+      key: 'batch-update',
+      label: '批量操作',
+      icon: <SelectOutlined />,
+      onClick: () => {
+        batchForm.setFieldsValue({
+          category: undefined,
+          is_active_mode: 'keep',
+          visible_mode: 'keep',
+        });
+        setBatchUpdateOpen(true);
+      },
+    },
+    {
+      key: 'batch-delete',
+      label: '批量删除',
+      icon: <DeleteOutlined />,
+      danger: true,
+      onClick: handleBatchDelete,
+    },
+  ];
+
   return (
     <>
       <PageToolbar>
         <Tag color="blue">共 {total} 个</Tag>
         <Input
-          placeholder="搜索应用名称 / Client ID"
+          placeholder="搜索应用名称 / Client ID / 分类"
           allowClear
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -380,9 +477,11 @@ export default function AppListPage() {
           style={{ width: 240 }}
         />
         {selectedIds.length > 0 && (
-          <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
-            批量删除（{selectedIds.length}）
-          </Button>
+          <Dropdown trigger={['click']} menu={{ items: batchActionMenu }}>
+            <Button icon={<MoreOutlined />}>
+              更多操作（{selectedIds.length}）
+            </Button>
+          </Dropdown>
         )}
         <Button icon={<ReloadOutlined />} onClick={load}>
           刷新
@@ -447,6 +546,19 @@ export default function AppListPage() {
                 </Space>
               );
             },
+          },
+          {
+            title: '分类',
+            dataIndex: 'category',
+            width: 150,
+            render: (v: string) => v ? <Tag color="blue">{v}</Tag> : <span style={{ color: '#cbd5e1' }}>未分类</span>,
+          },
+          {
+            title: '排序',
+            dataIndex: 'sort_order',
+            width: 90,
+            align: 'center',
+            render: (v: number) => v ?? 0,
           },
           {
             title: '客户端 ID',
@@ -532,6 +644,90 @@ export default function AppListPage() {
         ]}
       />
 
+      <Modal
+        open={batchUpdateOpen}
+        title={`批量操作 ${selectedIds.length} 个应用`}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={batchUpdateSubmitting}
+        onCancel={() => {
+          setBatchUpdateOpen(false);
+          batchForm.resetFields();
+        }}
+        onOk={handleBatchUpdate}
+        destroyOnClose
+      >
+        <Form
+          form={batchForm}
+          layout="vertical"
+          initialValues={{
+            is_active_mode: 'keep',
+            visible_mode: 'keep',
+          }}
+        >
+          <Form.Item name="category" label="分类" extra="留空表示不修改。可直接选择或新建分类。">
+            <Select
+              allowClear
+              showSearch
+              placeholder="请选择分类"
+              options={categoryOptions.map((item) => ({ value: item, label: item }))}
+              dropdownRender={(menu) => (
+                <>
+                  {menu}
+                  <Divider style={{ margin: '8px 0' }} />
+                  <Button
+                    type="text"
+                    block
+                    icon={<PlusOutlined />}
+                    style={{ justifyContent: 'flex-start', paddingLeft: 12 }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setBatchCategoryModalOpen(true)}
+                  >
+                    添加分类
+                  </Button>
+                </>
+              )}
+              notFoundContent="暂无分类，请点击下方添加"
+            />
+          </Form.Item>
+          <Form.Item name="is_active_mode" label="状态">
+            <Radio.Group>
+              <Radio value="keep">不修改</Radio>
+              <Radio value="enable">启用</Radio>
+              <Radio value="disable">禁用</Radio>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item name="visible_mode" label="是否显示">
+            <Radio.Group>
+              <Radio value="keep">不修改</Radio>
+              <Radio value="show">显示</Radio>
+              <Radio value="hide">隐藏</Radio>
+            </Radio.Group>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        open={batchCategoryModalOpen}
+        title="添加分类"
+        okText="添加"
+        cancelText="取消"
+        destroyOnClose
+        onCancel={() => {
+          setBatchCategoryModalOpen(false);
+          setBatchCategoryDraft('');
+        }}
+        onOk={createBatchCategory}
+      >
+        <Input
+          value={batchCategoryDraft}
+          onChange={(e) => setBatchCategoryDraft(e.target.value)}
+          onPressEnter={createBatchCategory}
+          placeholder="请输入分类名称"
+          autoFocus
+        />
+      </Modal>
+
       <Drawer
         title={null}
         open={drawerOpen}
@@ -552,6 +748,7 @@ export default function AppListPage() {
           isDuplicate={isDuplicate}
           onClose={() => setDrawerOpen(false)}
           onSubmit={handleWizardSubmit}
+          categoryOptions={categoryOptions}
         />
       </Drawer>
 

@@ -33,6 +33,7 @@ type User struct {
 
 	Department *Department `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
 	Roles      []Role      `gorm:"many2many:sso_user_roles;" json:"roles,omitempty"`
+	Groups     []UserGroup `gorm:"many2many:sso_user_group_members;" json:"groups,omitempty"`
 }
 
 func (User) TableName() string { return "sso_user" }
@@ -69,6 +70,7 @@ type UserGroup struct {
 	ID          uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
 	Name        string    `gorm:"size:255;not null" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
+	SortOrder   int       `gorm:"default:0" json:"sort_order"`
 	CreatedAt   time.Time `json:"created_at"`
 
 	Members []User `gorm:"many2many:sso_user_group_members;" json:"members,omitempty"`

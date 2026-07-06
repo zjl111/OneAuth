@@ -214,6 +214,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/apps", h.App.Create)
 		admin.GET("/apps/:id", h.App.Detail)
 		admin.PUT("/apps/:id", h.App.Update)
+		admin.POST("/apps/batch-update", h.App.BatchUpdate)
 		admin.DELETE("/apps/:id", h.App.Delete)
 		admin.POST("/apps/batch-delete", h.App.BatchDelete)
 		admin.POST("/apps/:id/rotate-secret", h.App.RotateSecret)

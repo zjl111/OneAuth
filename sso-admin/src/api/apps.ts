@@ -9,6 +9,7 @@ export interface OAuth2Client {
   protocol?: string;
   protocol_version?: string;
   description: string;
+  category: string;
 
   // 通用
   logo_url: string;
@@ -81,6 +82,14 @@ export const appsApi = {
   update: (id: string, data: Partial<OAuth2Client>) => put<OAuth2Client>(`/apps/${id}`, data),
   delete: (id: string) => del(`/apps/${id}`),
   batchDelete: (ids: string[]) => post<{ deleted: number; failed: string[] }>('/apps/batch-delete', { ids }),
+  batchUpdate: (
+    data: {
+      ids: string[];
+      category?: string;
+      is_active?: boolean;
+      visible_in_portal?: boolean;
+    }
+  ) => post<{ updated: number; failed: string[] }>('/apps/batch-update', data),
   rotateSecret: (id: string) => post<{ client_secret: string }>(`/apps/${id}/rotate-secret`),
   toggleStatus: (id: string) => post<OAuth2Client>(`/apps/${id}/toggle-status`),
   batchSort: (items: Array<{ id: string; sort_order: number }>) => post('/apps/sort', { items }),

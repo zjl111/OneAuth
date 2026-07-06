@@ -26,12 +26,13 @@ func (h *UserGroupHandler) Create(c *gin.Context) {
 	var in struct {
 		Name        string `json:"name" binding:"required"`
 		Description string `json:"description"`
+		SortOrder   int    `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	g := &model.UserGroup{Name: in.Name, Description: in.Description}
+	g := &model.UserGroup{Name: in.Name, Description: in.Description, SortOrder: in.SortOrder}
 	if err := h.Repo.Create(g); err != nil {
 		response.ServerError(c, err.Error())
 		return
@@ -47,6 +48,7 @@ func (h *UserGroupHandler) Update(c *gin.Context) {
 	var in struct {
 		Name        string `json:"name" binding:"required"`
 		Description string `json:"description"`
+		SortOrder   int    `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
@@ -59,6 +61,7 @@ func (h *UserGroupHandler) Update(c *gin.Context) {
 	}
 	g.Name = in.Name
 	g.Description = in.Description
+	g.SortOrder = in.SortOrder
 	if err := h.Repo.Update(g); err != nil {
 		response.ServerError(c, err.Error())
 		return

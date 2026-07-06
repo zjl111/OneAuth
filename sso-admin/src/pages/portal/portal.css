@@ -127,16 +127,81 @@
   gap: 16px;
   flex-wrap: wrap;
 }
+.portal-filter-group {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #eef0f5;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  flex-shrink: 0;
+}
+.portal-filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+.portal-filter-item + .portal-filter-item {
+  border-left: 1px solid #eef0f5;
+}
+.portal-filter-item:hover {
+  background: #f8fafc;
+}
+.portal-filter-item--active {
+  background: var(--primary-color);
+  color: #fff;
+}
+.portal-filter-item--active:hover {
+  background: var(--primary-color);
+}
+.portal-filter-item-label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.portal-filter-item-label--clickable {
+  padding-right: 2px;
+}
+.portal-filter-item-arrow {
+  font-size: 11px;
+  opacity: 0.9;
+}
+.portal-filter-item--dropdown {
+  padding-right: 0;
+  gap: 0;
+}
+.portal-filter-item-arrow-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 40px;
+  border-left: 1px solid #eef0f5;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.portal-filter-item--active .portal-filter-item-arrow-wrap {
+  border-left-color: rgba(255, 255, 255, 0.22);
+}
+.portal-filter-item--active .portal-filter-item-arrow {
+  color: #fff;
+}
 .portal-search {
   flex: 1;
   min-width: 360px;
   max-width: 720px;
 }
 .portal-toolbar .ant-segmented {
-  background: #fff;
+  background: transparent;
   padding: 4px;
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border-radius: 0;
+  box-shadow: none;
 }
 /* 选中态：蓝色实心填充，白色文字 */
 .portal-toolbar .ant-segmented .ant-segmented-item-selected {
@@ -252,6 +317,68 @@
   color: var(--primary-color);
   font-weight: 600;
 }
+.app-fav-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.app-fav-btn.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.app-fav-btn:hover {
+  color: #f59e0b;
+  border-color: #fcd34d;
+  transform: scale(1.05);
+}
+.app-fav-btn.is-fav {
+  color: #f59e0b;
+  border-color: #fcd34d;
+  background: #fffaf0;
+}
+.app-fav-btn--list {
+  position: static;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  box-shadow: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+}
+.app-fav-btn--list:hover,
+.app-fav-btn--list.is-fav {
+  color: #f59e0b;
+  background: transparent;
+  border: 0;
+}
+.app-fav-btn--list:hover {
+  transform: scale(1.08);
+}
 
 /* ── 列表视图 ────────────────────────── */
 .portal-list {
@@ -292,8 +419,14 @@
 .list-logo img { width: 30px; height: 30px; object-fit: contain; }
 .list-text { flex: 1; }
 .list-name { font-weight: 700; color: #1d2c5b; font-size: 15px; }
+.list-name .app-fav-btn--list {
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .list-desc { font-size: 12.5px; color: #6b7280; margin-top: 2px; }
 .list-action {
+  display: inline-flex;
+  align-items: center;
   padding: 6px 14px;
   border-radius: 8px;
   font-size: 13px;

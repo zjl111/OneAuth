@@ -45,16 +45,16 @@ func (r *ClientRepository) FindByCASService(service string) (*model.OAuth2Client
 }
 
 type ClientQuery struct {
-	Name     string
-	Page     int
-	PageSize int
+	Name       string
+	Page       int
+	PageSize   int
 	OnlyActive bool
 }
 
 func (r *ClientRepository) List(q ClientQuery) ([]model.OAuth2Client, int64, error) {
 	tx := r.db.Model(&model.OAuth2Client{})
 	if q.Name != "" {
-		tx = tx.Where("client_name LIKE ? OR client_id LIKE ?", "%"+q.Name+"%", "%"+q.Name+"%")
+		tx = tx.Where("client_name LIKE ? OR client_id LIKE ? OR category LIKE ?", "%"+q.Name+"%", "%"+q.Name+"%", "%"+q.Name+"%")
 	}
 	if q.OnlyActive {
 		tx = tx.Where("is_active = ?", true)
@@ -70,7 +70,10 @@ func (r *ClientRepository) List(q ClientQuery) ([]model.OAuth2Client, int64, err
 		q.PageSize = 20
 	}
 	var items []model.OAuth2Client
-	if err := tx.Order("sort_order ASC, created_at DESC").Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).Find(&items).Error; err != nil {
+	if err := tx.Order("CASE WHEN client_id = 'sso-admin' THEN 1 ELSE 0 END ASC, sort_order ASC, created_at DESC").
+		Limit(q.PageSize).
+		Offset((q.Page - 1) * q.PageSize).
+		Find(&items).Error; err != nil {
 		return nil, 0, err
 	}
 	return items, total, nil
@@ -78,7 +81,9 @@ func (r *ClientRepository) List(q ClientQuery) ([]model.OAuth2Client, int64, err
 
 func (r *ClientRepository) ListAll() ([]model.OAuth2Client, error) {
 	var items []model.OAuth2Client
-	if err := r.db.Where("is_active = ?", true).Order("sort_order ASC, created_at DESC").Find(&items).Error; err != nil {
+	if err := r.db.Where("is_active = ?", true).
+		Order("CASE WHEN client_id = 'sso-admin' THEN 1 ELSE 0 END ASC, sort_order ASC, created_at DESC").
+		Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil
