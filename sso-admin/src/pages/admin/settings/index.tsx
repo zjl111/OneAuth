@@ -88,6 +88,7 @@ export default function SettingsPage() {
         (c.category === 'security' && PASSWORD_SECURITY_KEYS.has(c.key));
       const isBoolSwitch =
         (c.category === 'monitor' && c.key === 'public_status_page') ||
+        (c.category === 'notice' && c.key === 'enabled') ||
         (c.category === 'smtp' && c.key === 'enabled') ||
         (c.category === 'ldap' && (c.key === 'enabled' || c.key === 'start_tls')) ||
         (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user')) ||

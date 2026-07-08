@@ -198,11 +198,12 @@ export default function OrgPage() {
 
   const handleDeptSave = async () => {
     const v = await deptForm.validateFields();
+    const payload = { ...v, parent_id: v.parent_id || null };
     if (editingDept) {
-      await orgApi.update(editingDept.id, v);
+      await orgApi.update(editingDept.id, payload);
       message.success('已更新');
     } else {
-      await orgApi.create({ ...v, parent_id: v.parent_id || null });
+      await orgApi.create(payload);
       message.success('已创建');
     }
     setDeptOpen(false);
