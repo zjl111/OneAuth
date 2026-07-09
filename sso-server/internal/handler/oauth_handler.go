@@ -423,29 +423,17 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 		subType = client.SubjectType
 	}
 	resp := gin.H{"sub": resolveSubject(user, subType)}
+	addBaseOIDCClaims(resp, user, pick)
 
 	scopes := strings.Fields(claims.Scope)
 	for _, s := range scopes {
 		switch s {
 		case "profile":
-			if pick("name") {
-				if user.Nickname != "" {
-					resp["name"] = user.Nickname
-				} else {
-					resp["name"] = user.Username
-				}
-			}
-			resp["preferred_username"] = user.Username
 			if user.Avatar != "" {
 				resp["picture"] = user.Avatar
 			}
 			if pick("department") && user.Department != nil {
 				resp["department"] = user.Department.Name
-			}
-		case "email":
-			if pick("email") && user.Email != nil {
-				resp["email"] = *user.Email
-				resp["email_verified"] = true
 			}
 		case "phone":
 			if pick("phone") && user.Phone != nil {
@@ -622,7 +610,7 @@ func resolveSubject(user *model.User, subjectType string) string {
 }
 
 func userToInfo(user *model.User) *oauth.UserInfo {
-	info := &oauth.UserInfo{IsStaff: user.IsStaff}
+	info := &oauth.UserInfo{Username: user.Username, IsStaff: user.IsStaff}
 	if user.Nickname != "" {
 		info.Name = user.Nickname
 	} else {
@@ -638,4 +626,21 @@ func userToInfo(user *model.User) *oauth.UserInfo {
 		info.Roles = append(info.Roles, r.Code)
 	}
 	return info
+}
+
+func addBaseOIDCClaims(resp gin.H, user *model.User, allow func(string) bool) {
+	if allow == nil || allow("preferred_username") {
+		resp["preferred_username"] = user.Username
+	}
+	if allow == nil || allow("name") {
+		if user.Nickname != "" {
+			resp["name"] = user.Nickname
+		} else {
+			resp["name"] = user.Username
+		}
+	}
+	if user.Email != nil && *user.Email != "" && (allow == nil || allow("email")) {
+		resp["email"] = *user.Email
+		resp["email_verified"] = true
+	}
 }

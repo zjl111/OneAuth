@@ -76,10 +76,10 @@ func (h *DepartmentHandler) Update(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Name        *string    `json:"name"`
-		ParentID    *uuid.UUID `json:"parent_id"`
-		SortOrder   *int       `json:"sort_order"`
-		Description *string    `json:"description"`
+		Name        *string `json:"name"`
+		ParentID    *string `json:"parent_id"`
+		SortOrder   *int    `json:"sort_order"`
+		Description *string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
@@ -89,7 +89,17 @@ func (h *DepartmentHandler) Update(c *gin.Context) {
 		d.Name = *in.Name
 	}
 	if in.ParentID != nil {
-		d.ParentID = in.ParentID
+		parent := strings.TrimSpace(*in.ParentID)
+		if parent == "" {
+			d.ParentID = nil
+		} else {
+			pid, err := uuid.Parse(parent)
+			if err != nil {
+				response.BadRequest(c, "parent_id 格式错误")
+				return
+			}
+			d.ParentID = &pid
+		}
 	}
 	if in.SortOrder != nil {
 		d.SortOrder = *in.SortOrder
@@ -117,10 +127,11 @@ func (h *DepartmentHandler) Delete(c *gin.Context) {
 }
 
 // Move 移动部门：变更 parent_id 并校验不形成环
-//   POST /api/v1/departments/:id/move  body={"parent_id":"<uuid|null>"}
-//   parent_id == null  → 移到根
-//   parent_id == self  → 拒绝
-//   parent_id 是 self 的子孙 → 拒绝
+//
+//	POST /api/v1/departments/:id/move  body={"parent_id":"<uuid|null>"}
+//	parent_id == null  → 移到根
+//	parent_id == self  → 拒绝
+//	parent_id 是 self 的子孙 → 拒绝
 func (h *DepartmentHandler) Move(c *gin.Context) {
 	id, ok := parseIDParam(c, "id")
 	if !ok {
@@ -132,7 +143,7 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 		return
 	}
 	var in struct {
-		ParentID *uuid.UUID `json:"parent_id"`
+		ParentID *string `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
@@ -148,8 +159,23 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 		response.OK(c, d)
 		return
 	}
+	parentStr := strings.TrimSpace(*in.ParentID)
+	if parentStr == "" {
+		d.ParentID = nil
+		if err := h.Repo.Update(d); err != nil {
+			response.ServerError(c, err.Error())
+			return
+		}
+		response.OK(c, d)
+		return
+	}
+	parentID, err := uuid.Parse(parentStr)
+	if err != nil {
+		response.BadRequest(c, "parent_id 格式错误")
+		return
+	}
 	// 不允许设为自己
-	if *in.ParentID == id {
+	if parentID == id {
 		response.BadRequest(c, "不能将部门移动到自身下")
 		return
 	}
@@ -163,7 +189,7 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 	for i := range all {
 		parents[all[i].ID] = all[i].ParentID
 	}
-	cursor := in.ParentID
+	cursor := &parentID
 	for cursor != nil {
 		if *cursor == id {
 			response.BadRequest(c, "不能将部门移动到其子部门下")
@@ -175,7 +201,7 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 		}
 		cursor = next
 	}
-	d.ParentID = in.ParentID
+	d.ParentID = &parentID
 	if err := h.Repo.Update(d); err != nil {
 		response.ServerError(c, err.Error())
 		return

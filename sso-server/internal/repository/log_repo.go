@@ -23,7 +23,8 @@ type LoginLogView struct {
 
 type OperationLogView struct {
 	model.OperationLog
-	DisplayName string `gorm:"column:display_name" json:"display_name"`
+	DisplayName  string `gorm:"column:display_name" json:"display_name"`
+	ResourceName string `gorm:"column:resource_name" json:"resource_name"`
 }
 
 type AccessLogView struct {
@@ -74,7 +75,7 @@ func (r *LogRepository) LoginMethodDistribution(days int) ([]LoginMethodStat, er
 	return items, err
 }
 
-func (r *LogRepository) RecordOperation(userID *uuid.UUID, username, action, resourceType, resourceID, desc, ip string, statusCode int) {
+func (r *LogRepository) RecordOperation(userID *uuid.UUID, username, action, resourceType, resourceID, desc, output, ip string, statusCode int) {
 	log := &model.OperationLog{
 		UserID:       userID,
 		Username:     username,
@@ -82,6 +83,7 @@ func (r *LogRepository) RecordOperation(userID *uuid.UUID, username, action, res
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
 		Description:  desc,
+		Output:       output,
 		IPAddress:    ip,
 		Status:       statusCode,
 		CreatedAt:    time.Now(),
@@ -160,7 +162,7 @@ func (r *LogRepository) ListLoginLogs(q LogQuery) ([]LoginLogView, int64, error)
 		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
 		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
 	if q.Username != "" {
-		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
+		tx = tx.Where("l.username LIKE ?", "%"+q.Username+"%")
 	}
 	if q.StartTime != nil {
 		tx = tx.Where("l.created_at >= ?", q.StartTime)
@@ -183,10 +185,26 @@ func (r *LogRepository) ListLoginLogs(q LogQuery) ([]LoginLogView, int64, error)
 
 func (r *LogRepository) ListOperationLogs(q LogQuery) ([]OperationLogView, int64, error) {
 	tx := r.db.Table("sso_operation_log AS l").
-		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
-		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
+		Select(`
+			l.*,
+			COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name,
+			COALESCE(
+				user_t.name,
+				role_t.name,
+				dept_t.name,
+				app_t.client_name,
+				group_t.name,
+				l.resource_id
+			) AS resource_name
+		`).
+		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username").
+		Joins("LEFT JOIN sso_user user_t ON l.resource_type = 'users' AND user_t.id = l.resource_id").
+		Joins("LEFT JOIN sso_role role_t ON l.resource_type = 'roles' AND role_t.id = l.resource_id").
+		Joins("LEFT JOIN sso_department dept_t ON l.resource_type = 'departments' AND dept_t.id = l.resource_id").
+		Joins("LEFT JOIN sso_oauth2_client app_t ON l.resource_type = 'apps' AND app_t.id = l.resource_id").
+		Joins("LEFT JOIN sso_user_group group_t ON l.resource_type IN ('user-groups','groups') AND group_t.id = l.resource_id")
 	if q.Username != "" {
-		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
+		tx = tx.Where("l.username LIKE ?", "%"+q.Username+"%")
 	}
 	if q.StartTime != nil {
 		tx = tx.Where("l.created_at >= ?", q.StartTime)
@@ -217,7 +235,7 @@ func (r *LogRepository) ListAccessLogs(q LogQuery) ([]AccessLogView, int64, erro
 		Select("l.*, COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name").
 		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username")
 	if q.Username != "" {
-		tx = tx.Where("l.username LIKE ? OR u.nickname LIKE ? OR u.username LIKE ?", "%"+q.Username+"%", "%"+q.Username+"%", "%"+q.Username+"%")
+		tx = tx.Where("l.username LIKE ?", "%"+q.Username+"%")
 	}
 	if q.StartTime != nil {
 		tx = tx.Where("l.created_at >= ?", q.StartTime)

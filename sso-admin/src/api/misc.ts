@@ -50,7 +50,10 @@ export interface OperationLog {
   display_name?: string;
   action: string;
   resource_type: string;
+  resource_id?: string;
+  resource_name?: string;
   description: string;
+  output?: string;
   ip_address: string;
   status: number;
   created_at: string;

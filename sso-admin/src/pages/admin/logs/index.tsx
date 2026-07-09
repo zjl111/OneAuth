@@ -106,9 +106,9 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [filterVals, setFilterVals] = useState<Record<string, string>>({});
 
-  const load = () => {
+  const load = (nextPagination = pagination, nextFilters = filterVals) => {
     setLoading(true);
-    fetcher({ page: pagination.current, page_size: pagination.pageSize, ...filterVals })
+    fetcher({ page: nextPagination.current, page_size: nextPagination.pageSize, ...nextFilters })
       .then((d) => {
         setData(d.items || []);
         setTotal(d.total);
@@ -132,9 +132,12 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
                 placeholder={f.placeholder}
                 value={filterVals[f.key] || undefined}
                 onChange={(v) => {
-                  setFilterVals({ ...filterVals, [f.key]: v || '' });
+                  const next = { ...filterVals, [f.key]: v || '' };
+                  const nextPagination = { ...pagination, current: 1 };
+                  setFilterVals(next);
+                  setPagination(nextPagination);
+                  load(nextPagination, next);
                   // 下拉切换自动查询，无需再点查询
-                  setTimeout(load, 0);
                 }}
                 allowClear
                 style={{ width: 200 }}
@@ -146,13 +149,18 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
                 placeholder={f.placeholder}
                 value={filterVals[f.key] || ''}
                 onChange={(e) => setFilterVals({ ...filterVals, [f.key]: e.target.value })}
-                onPressEnter={load}
+                onPressEnter={() => {
+                  const next = { ...filterVals };
+                  const nextPagination = { ...pagination, current: 1 };
+                  setPagination(nextPagination);
+                  load(nextPagination, next);
+                }}
                 style={{ width: 200 }}
                 allowClear
               />
             ),
           )}
-          <Button onClick={load} icon={<ReloadOutlined />} style={{ marginLeft: 'auto' }}>
+          <Button onClick={() => load()} icon={<ReloadOutlined />} style={{ marginLeft: 'auto' }}>
             刷新
           </Button>
         </div>
@@ -168,7 +176,11 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
           total,
           showSizeChanger: true,
           showTotal: (t) => `共 ${t} 条`,
-          onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+          onChange: (page, pageSize) => {
+            const nextPagination = { current: page, pageSize };
+            setPagination(nextPagination);
+            load(nextPagination);
+          },
         }}
       />
     </>
@@ -288,11 +300,30 @@ const operationColumns: TableColumnsType<OperationLog> = [
     render: (v: string, r) => <span style={{ fontWeight: 500 }}>{translateAction(v, r.resource_type)}</span>,
   },
   {
-    title: '目标 ID',
+    title: '目标名称',
     dataIndex: 'resource_id',
-    width: 200,
+    width: 260,
     ellipsis: true,
-    render: (v: string) => (v ? <code style={{ fontSize: 12 }}>{v}</code> : '-'),
+    render: (_, r) => {
+      const name = (r as OperationLog & { resource_name?: string }).resource_name;
+      const id = r.resource_id;
+      if (!name && !id) return '-';
+      if (!name) return <code style={{ fontSize: 12 }}>{id}</code>;
+      if (name === id) return <code style={{ fontSize: 12 }}>{name}</code>;
+      return (
+        <div style={{ lineHeight: 1.2 }}>
+          <div style={{ fontWeight: 500 }}>{name}</div>
+          {id && <div style={{ color: '#94a3b8', fontSize: 12 }}><code>{id}</code></div>}
+        </div>
+      );
+    },
+  },
+  {
+    title: '输出',
+    dataIndex: 'output',
+    width: 280,
+    ellipsis: true,
+    render: (v: string) => v || '—',
   },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
   {

@@ -32,23 +32,25 @@ type AccessTokenClaims struct {
 
 type IDTokenClaims struct {
 	jwt.RegisteredClaims
-	Nonce    string   `json:"nonce,omitempty"`
-	AuthTime int64    `json:"auth_time,omitempty"`
-	Acr      string   `json:"acr,omitempty"`
-	Amr      []string `json:"amr,omitempty"`
-	Name     string   `json:"name,omitempty"`
-	Email    string   `json:"email,omitempty"`
-	Phone    string   `json:"phone_number,omitempty"`
-	Roles    []string `json:"roles,omitempty"`
-	IsStaff  bool     `json:"is_staff,omitempty"`
+	Nonce             string   `json:"nonce,omitempty"`
+	AuthTime          int64    `json:"auth_time,omitempty"`
+	Acr               string   `json:"acr,omitempty"`
+	Amr               []string `json:"amr,omitempty"`
+	PreferredUsername string   `json:"preferred_username,omitempty"`
+	Name              string   `json:"name,omitempty"`
+	Email             string   `json:"email,omitempty"`
+	Phone             string   `json:"phone_number,omitempty"`
+	Roles             []string `json:"roles,omitempty"`
+	IsStaff           bool     `json:"is_staff,omitempty"`
 }
 
 type UserInfo struct {
-	Name    string
-	Email   string
-	Phone   string
-	Roles   []string
-	IsStaff bool
+	Username string
+	Name     string
+	Email    string
+	Phone    string
+	Roles    []string
+	IsStaff  bool
 }
 
 func NewTokenService(km *KeyManager, store Store, issuer string, accessTTL, refreshTTL time.Duration) *TokenService {
@@ -127,9 +129,9 @@ func (ts *TokenService) Issuer() string {
 	}
 	return ts.issuer
 }
-func (ts *TokenService) AccessTTL() time.Duration   { return ts.accessTTL }
-func (ts *TokenService) RefreshTTL() time.Duration  { return ts.refreshTTL }
-func (ts *TokenService) KeyManager() *KeyManager    { return ts.keyManager }
+func (ts *TokenService) AccessTTL() time.Duration  { return ts.accessTTL }
+func (ts *TokenService) RefreshTTL() time.Duration { return ts.refreshTTL }
+func (ts *TokenService) KeyManager() *KeyManager   { return ts.keyManager }
 
 // IssueAccessToken 签发 access token。ttl<=0 时回退到全局默认 accessTTL。
 func (ts *TokenService) IssueAccessToken(subject, userID, clientID, username, scope string, ttl time.Duration) (string, error) {
@@ -161,10 +163,10 @@ func (ts *TokenService) IssueAccessToken(subject, userID, clientID, username, sc
 
 // IDTokenOptions 控制 id_token 签发的 client 级行为
 type IDTokenOptions struct {
-	Issuer       string   // 空则用全局 issuer
-	Audience     string   // 空则用 clientID
-	SigningAlg   string   // 空 / RS256 / RS384 / RS512
-	AllowClaims  []string // 空 = 全部下发；否则按白名单过滤
+	Issuer      string   // 空则用全局 issuer
+	Audience    string   // 空则用 clientID
+	SigningAlg  string   // 空 / RS256 / RS384 / RS512
+	AllowClaims []string // 空 = 全部下发；否则按白名单过滤
 }
 
 func pickRSAlg(alg string) jwt.SigningMethod {
@@ -254,6 +256,9 @@ func (ts *TokenService) IssueIDToken(subject, userID, clientID, nonce string, au
 	if info != nil {
 		// allow==nil 表示全发；非空则按白名单
 		pick := func(key string) bool { return allow == nil || allow[key] }
+		if pick("preferred_username") {
+			claims.PreferredUsername = info.Username
+		}
 		if pick("name") {
 			claims.Name = info.Name
 		}

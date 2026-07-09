@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -14,6 +16,8 @@ import (
 // 必须挂在 JWTAuth 之后，能从 ctx 拿到 user_id / username。
 func Audit(logRepo *repository.LogRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		w := &captureWriter{ResponseWriter: c.Writer, limit: 2048}
+		c.Writer = w
 		c.Next()
 		method := c.Request.Method
 		if method == "GET" || method == "OPTIONS" || method == "HEAD" {
@@ -51,10 +55,64 @@ func Audit(logRepo *repository.LogRepository) gin.HandlerFunc {
 			resourceType,
 			resourceID,
 			describeAction(method, resourceType, resourceID, path),
+			normalizeOutput(w.body.String(), c.Writer.Header().Get("Content-Type")),
 			c.ClientIP(),
 			c.Writer.Status(),
 		)
 	}
+}
+
+type captureWriter struct {
+	gin.ResponseWriter
+	body  bytes.Buffer
+	limit int
+}
+
+func (w *captureWriter) Write(data []byte) (int, error) {
+	if w.limit > 0 && w.body.Len() < w.limit {
+		remain := w.limit - w.body.Len()
+		if remain > len(data) {
+			remain = len(data)
+		}
+		_, _ = w.body.Write(data[:remain])
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *captureWriter) WriteString(s string) (int, error) {
+	return w.Write([]byte(s))
+}
+
+func normalizeOutput(body, contentType string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	ct := strings.ToLower(contentType)
+	if !strings.Contains(ct, "json") && !strings.Contains(ct, "text") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "html") {
+		return body
+	}
+	var anyVal any
+	if err := json.Unmarshal([]byte(body), &anyVal); err != nil {
+		return body
+	}
+	switch v := anyVal.(type) {
+	case map[string]any:
+		if msg, ok := v["message"]; ok {
+			if s, ok := msg.(string); ok && s != "" {
+				return s
+			}
+		}
+		if data, ok := v["data"]; ok {
+			if b, err := json.Marshal(data); err == nil {
+				return string(b)
+			}
+		}
+		if b, err := json.Marshal(v); err == nil {
+			return string(b)
+		}
+	}
+	return body
 }
 
 // 把 /api/v1/users/:id/roles 这种路径切成 (resourceType, resourceID, action)

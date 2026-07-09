@@ -34,6 +34,7 @@ type OperationLog struct {
 	ResourceType string     `gorm:"size:50" json:"resource_type"`
 	ResourceID   string     `gorm:"size:128" json:"resource_id"`
 	Description  string     `gorm:"size:512" json:"description"`
+	Output       string     `gorm:"size:2048" json:"output"`
 	IPAddress    string     `gorm:"size:45" json:"ip_address"`
 	Status       int        `gorm:"default:200" json:"status"`
 	CreatedAt    time.Time  `gorm:"index" json:"created_at"`

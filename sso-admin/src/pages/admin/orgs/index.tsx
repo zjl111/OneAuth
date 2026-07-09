@@ -175,7 +175,7 @@ export default function OrgPage() {
     setTimeout(() => {
       deptForm.setFieldsValue({
         name: d.name,
-        parent_id: d.parent_id || '',
+        parent_id: d.parent_id || null,
         sort_order: d.sort_order ?? 0,
         description: d.description || '',
       });
