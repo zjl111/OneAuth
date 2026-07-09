@@ -2,7 +2,9 @@ package repository
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -76,6 +78,18 @@ func (r *LogRepository) LoginMethodDistribution(days int) ([]LoginMethodStat, er
 }
 
 func (r *LogRepository) RecordOperation(userID *uuid.UUID, username, action, resourceType, resourceID, desc, output, ip string, statusCode int) {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		switch {
+		case statusCode >= 200 && statusCode < 300:
+			output = "ok"
+		case statusCode > 0:
+			output = http.StatusText(statusCode)
+			if output == "" {
+				output = strconv.Itoa(statusCode)
+			}
+		}
+	}
 	log := &model.OperationLog{
 		UserID:       userID,
 		Username:     username,
@@ -189,12 +203,11 @@ func (r *LogRepository) ListOperationLogs(q LogQuery) ([]OperationLogView, int64
 			l.*,
 			COALESCE(NULLIF(u.nickname, ''), u.username, l.username) AS display_name,
 			COALESCE(
-				user_t.name,
+				COALESCE(NULLIF(user_t.nickname, ''), user_t.username),
 				role_t.name,
 				dept_t.name,
 				app_t.client_name,
-				group_t.name,
-				l.resource_id
+				group_t.name
 			) AS resource_name
 		`).
 		Joins("LEFT JOIN sso_user u ON u.id = l.user_id OR u.username = l.username").

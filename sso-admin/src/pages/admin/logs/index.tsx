@@ -306,16 +306,7 @@ const operationColumns: TableColumnsType<OperationLog> = [
     ellipsis: true,
     render: (_, r) => {
       const name = (r as OperationLog & { resource_name?: string }).resource_name;
-      const id = r.resource_id;
-      if (!name && !id) return '-';
-      if (!name) return <code style={{ fontSize: 12 }}>{id}</code>;
-      if (name === id) return <code style={{ fontSize: 12 }}>{name}</code>;
-      return (
-        <div style={{ lineHeight: 1.2 }}>
-          <div style={{ fontWeight: 500 }}>{name}</div>
-          {id && <div style={{ color: '#94a3b8', fontSize: 12 }}><code>{id}</code></div>}
-        </div>
-      );
+      return name || '—';
     },
   },
   {
@@ -323,7 +314,7 @@ const operationColumns: TableColumnsType<OperationLog> = [
     dataIndex: 'output',
     width: 280,
     ellipsis: true,
-    render: (v: string) => v || '—',
+    render: (v: string) => <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{(v || '').trim() || '—'}</span>,
   },
   { title: 'IP', dataIndex: 'ip_address', width: 140 },
   {
