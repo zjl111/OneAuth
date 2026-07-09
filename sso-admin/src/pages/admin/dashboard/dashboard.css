@@ -242,3 +242,96 @@
   background: linear-gradient(90deg, #60a5fa, var(--primary-color));
 }
 .region-bars .rb-count { width: 60px; text-align: right; color: #1d2c5b; font-size: 13px; }
+
+/* ─ Tab 切换卡片 ───────────────────── */
+.dash-tabs .ant-tabs-nav {
+  margin: 0;
+  padding: 0 22px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.dash-tabs .ant-tabs-tab {
+  padding: 14px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  transition: color 0.2s;
+}
+.dash-tabs .ant-tabs-tab:hover {
+  color: #1d2c5b;
+}
+.dash-tabs .ant-tabs-tab-active {
+  color: #1d2c5b;
+  font-weight: 600;
+}
+.dash-tabs .ant-tabs-ink-bar {
+  height: 2px;
+  background: var(--primary-color);
+}
+.dash-tab-body {
+  padding: 18px 22px;
+  min-height: 460px;
+}
+
+/* ── 日期范围选择器（Tab 右侧） ───── */
+.dash-range-seg {
+  margin-right: 16px;
+}
+.dash-range-seg .ant-segmented-item {
+  font-size: 13px;
+  border-radius: 6px !important;
+}
+.dash-range-seg .ant-segmented-item-selected {
+  font-weight: 600;
+}
+
+/* ── 安全预警卡片 ───────────────────── */
+.security-card .ant-card-head {
+  border-bottom: 1px solid #f3f4f6;
+  padding: 14px 22px;
+}
+.security-card .ant-card-body {
+  padding: 14px 18px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.security-card .ant-card-body::-webkit-scrollbar {
+  width: 4px;
+}
+.security-card .ant-card-body::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+/* ── 预警列表 ───────────────────────── */
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.alert-item {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border-left: 3px solid;
+  transition: transform 0.15s;
+}
+.alert-item:hover {
+  transform: translateX(2px);
+}
+.alert-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2c5b;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.alert-type-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.alert-desc {
+  font-size: 12.5px;
+  color: #4b5563;
+  line-height: 1.5;
+}

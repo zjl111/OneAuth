@@ -190,7 +190,7 @@ export const dashboardApi = {
   loginTrends: (days = 30) =>
     get<Array<{ date: string; count: number }>>('/dashboard/login-trends', { days }),
   appDistribution: (days = 30) =>
-    get<Array<{ client_id: string; client_name: string; count: number }>>(
+    get<Array<{ client_id: string; client_name: string; logo_url: string; count: number }>>(
       '/dashboard/app-distribution',
       { days }
     ),
@@ -200,6 +200,25 @@ export const dashboardApi = {
     get<Array<{ method: string; count: number }>>('/dashboard/login-methods', { days }),
   regionTop10: (days = 30) =>
     get<Array<{ province: string; count: number }>>('/dashboard/region-top10', { days }),
+  hourlyTrends: (range: 'day' | 'week' | 'month' = 'day') =>
+    get<Array<{ label: string; login_count: number; access_count: number }>>('/dashboard/hourly-trends', { range }),
+  securityAlerts: () =>
+    get<Array<{
+      type: string;
+      title: string;
+      description: string;
+      severity: string;
+      username: string;
+      display_name: string;
+      ip: string;
+      created_at: string;
+      unknown_user: boolean;
+    }>>('/dashboard/security-alerts'),
+  topUsers: (days = 30, limit = 5) =>
+    get<Array<{ username: string; display_name: string; login_count: number }>>(
+      '/dashboard/top-users',
+      { days, limit }
+    ),
 };
 
 export const portalApi = {

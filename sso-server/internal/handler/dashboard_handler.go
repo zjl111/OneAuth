@@ -92,3 +92,24 @@ func (h *DashboardHandler) RegionTop10(c *gin.Context) {
 	data, _ := h.LogRepo.RegionTop10(days)
 	response.OK(c, data)
 }
+
+// HourlyTrends 仪表盘"流量趋势"，支持 range=day(24h按小时)|week(7天按天)|month(30天按天)
+func (h *DashboardHandler) HourlyTrends(c *gin.Context) {
+	rangeParam := c.DefaultQuery("range", "day")
+	data, _ := h.LogRepo.TrafficTrendByRange(rangeParam)
+	response.OK(c, data)
+}
+
+// SecurityAlerts 仪表盘"实时安全风险预警"
+func (h *DashboardHandler) SecurityAlerts(c *gin.Context) {
+	data, _ := h.LogRepo.RecentSecurityAlerts()
+	response.OK(c, data)
+}
+
+// TopLoginUsers 仪表盘"Top 登录用户"
+func (h *DashboardHandler) TopLoginUsers(c *gin.Context) {
+	days := parseInt(c.Query("days"), 30)
+	limit := parseInt(c.Query("limit"), 5)
+	data, _ := h.LogRepo.TopLoginUsers(days, limit)
+	response.OK(c, data)
+}

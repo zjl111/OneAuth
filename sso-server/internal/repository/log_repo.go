@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -382,6 +383,374 @@ func (r *LogRepository) AppAccessDistribution(days int) ([]AppAccessCount, error
 		Group("a.client_id, c.client_name, a.client_name, c.logo_url").
 		Order("count DESC").
 		Limit(10).
+		Scan(&results)
+	return results, nil
+}
+
+// ── 仪表盘新增：流量趋势（支持天/周/月） ────────────────────────────────
+
+// TrafficPoint 流量数据点
+type TrafficPoint struct {
+	Label       string `json:"label"`        // 时间标签："14:00" 或 "07-09"
+	LoginCount  int64  `json:"login_count"`  // 成功登录次数
+	AccessCount int64  `json:"access_count"` // 应用访问次数
+}
+
+// TrafficTrendByRange 根据 range 参数返回不同粒度的流量趋势。
+// day:   过去 24 小时，按小时聚合，label="HH:00"
+// week:  过去 7 天，按天聚合，label="MM-DD"
+// month: 过去 30 天，按天聚合，label="MM-DD"
+func (r *LogRepository) TrafficTrendByRange(rangeParam string) ([]TrafficPoint, error) {
+	now := time.Now()
+
+	switch rangeParam {
+	case "week":
+		return r.trafficTrendDaily(now, 7)
+	case "month":
+		return r.trafficTrendDaily(now, 30)
+	default: // "day"
+		return r.trafficTrendHourly(now)
+	}
+}
+
+// trafficTrendHourly 按小时聚合最近 24 小时
+func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error) {
+	cutoff := now.Add(-24 * time.Hour)
+
+	type timeCount struct{ CreatedAt time.Time }
+	var loginRows []timeCount
+	r.db.Model(&model.LoginLog{}).Select("created_at").
+		Where("created_at >= ? AND status = ?", cutoff, "success").Scan(&loginRows)
+	var accessRows []timeCount
+	r.db.Model(&model.AccessLog{}).Select("created_at").
+		Where("created_at >= ?", cutoff).Scan(&accessRows)
+
+	loginMap := make(map[string]int64)
+	for _, row := range loginRows {
+		loginMap[row.CreatedAt.Format("15:04")]++
+	}
+	accessMap := make(map[string]int64)
+	for _, row := range accessRows {
+		accessMap[row.CreatedAt.Format("15:04")]++
+	}
+
+	out := make([]TrafficPoint, 0, 24)
+	currentHour := now.Truncate(time.Hour)
+	for i := 23; i >= 0; i-- {
+		h := currentHour.Add(-time.Duration(i) * time.Hour)
+		key := h.Format("15:04")
+		out = append(out, TrafficPoint{Label: key, LoginCount: loginMap[key], AccessCount: accessMap[key]})
+	}
+	return out, nil
+}
+
+// trafficTrendDaily 按天聚合最近 N 天
+func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoint, error) {
+	cutoff := now.AddDate(0, 0, -days+1).Truncate(24 * time.Hour)
+
+	type timeCount struct{ CreatedAt time.Time }
+	var loginRows []timeCount
+	r.db.Model(&model.LoginLog{}).Select("created_at").
+		Where("created_at >= ? AND status = ?", cutoff, "success").Scan(&loginRows)
+	var accessRows []timeCount
+	r.db.Model(&model.AccessLog{}).Select("created_at").
+		Where("created_at >= ?", cutoff).Scan(&accessRows)
+
+	loginMap := make(map[string]int64)
+	for _, row := range loginRows {
+		loginMap[row.CreatedAt.Format("01-02")]++
+	}
+	accessMap := make(map[string]int64)
+	for _, row := range accessRows {
+		accessMap[row.CreatedAt.Format("01-02")]++
+	}
+
+	out := make([]TrafficPoint, 0, days)
+	today := now.Truncate(24 * time.Hour)
+	for i := days - 1; i >= 0; i-- {
+		d := today.AddDate(0, 0, -i)
+		key := d.Format("01-02")
+		out = append(out, TrafficPoint{Label: key, LoginCount: loginMap[key], AccessCount: accessMap[key]})
+	}
+	return out, nil
+}
+
+// ── 仪表盘新增：实时安全风险预警 ─────────────────────────────────────────
+
+// SecurityAlert 单条安全预警
+type SecurityAlert struct {
+	Type        string `json:"type"`         // failed_login / brute_force / unusual_location / user_locked / operation_failure
+	Title       string `json:"title"`        // 简短标题
+	Description string `json:"description"`  // 详细描述
+	Severity    string `json:"severity"`     // high / medium / low
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"` // 用户姓名（来自 sso_user.nickname）
+	IP          string `json:"ip"`
+	CreatedAt   string `json:"created_at"`
+	UnknownUser bool   `json:"unknown_user"` // 用户不在 sso_user 中
+}
+
+// RecentSecurityAlerts 返回最近的安全风险事件。
+// 包含：失败登录(1h)、暴力破解(24h)、异地登录(24h)、用户锁定、操作失败(1h)。
+func (r *LogRepository) RecentSecurityAlerts() ([]SecurityAlert, error) {
+	now := time.Now()
+	oneHourAgo := now.Add(-1 * time.Hour)
+	oneDayAgo := now.Add(-24 * time.Hour)
+	var alerts []SecurityAlert
+
+	// 预加载系统用户集合（用于标记非系统用户 + 获取姓名）
+	type userInfo struct {
+		Username string
+		Nickname string
+	}
+	var knownUsers []userInfo
+	r.db.Table("sso_user").Select("username, nickname").Scan(&knownUsers)
+	nicknameMap := make(map[string]string, len(knownUsers))
+	for _, u := range knownUsers {
+		nicknameMap[u.Username] = u.Nickname
+	}
+	isKnown := func(username string) bool {
+		_, ok := nicknameMap[username]
+		return ok
+	}
+	getDisplayName := func(username string) string {
+		if nick, ok := nicknameMap[username]; ok && nick != "" {
+			return nick
+		}
+		return username
+	}
+
+	// 1) 最近 1 小时失败登录（取最近 10 条）
+	var failed []struct {
+		Username  string
+		IPAddress string
+		Message   string
+		CreatedAt time.Time
+	}
+	r.db.Model(&model.LoginLog{}).
+		Select("username, ip_address, message, created_at").
+		Where("created_at >= ? AND status = ?", oneHourAgo, "failure").
+		Order("created_at DESC").
+		Limit(10).
+		Scan(&failed)
+	for _, f := range failed {
+		msg := f.Message
+		if msg == "" {
+			msg = "登录失败"
+		}
+		unknown := !isKnown(f.Username)
+		displayName := getDisplayName(f.Username)
+		title := "登录失败"
+		desc := fmt.Sprintf("%s（%s）登录失败：%s (IP: %s)", displayName, f.Username, msg, f.IPAddress)
+		if unknown {
+			title = "登录失败（非系统用户）"
+			desc = fmt.Sprintf("非系统账号 %s 尝试登录失败：%s (IP: %s)", f.Username, msg, f.IPAddress)
+		}
+		alerts = append(alerts, SecurityAlert{
+			Type:        "failed_login",
+			Title:       title,
+			Description: desc,
+			Severity:    "medium",
+			Username:    f.Username,
+			DisplayName: displayName,
+			IP:          f.IPAddress,
+			CreatedAt:   f.CreatedAt.Format("2006-01-02 15:04:05"),
+			UnknownUser: unknown,
+		})
+	}
+
+	// 2) 最近 24h 内失败 >= 3 次的账号（暴力破解嫌疑）
+	type bruteItem struct {
+		Username  string
+		FailCount int64
+		LastIP    string
+		LastAt    time.Time
+	}
+	var brutes []bruteItem
+	r.db.Raw(`
+		SELECT username, COUNT(*) as fail_count,
+		       MAX(ip_address) as last_ip, MAX(created_at) as last_at
+		FROM sso_login_log
+		WHERE created_at >= ? AND status = 'failure'
+		GROUP BY username
+		HAVING COUNT(*) >= 3
+		ORDER BY fail_count DESC
+		LIMIT 10
+	`, oneDayAgo).Scan(&brutes)
+	for _, b := range brutes {
+		unknown := !isKnown(b.Username)
+		displayName := getDisplayName(b.Username)
+		title := "密码连续错误"
+		desc := fmt.Sprintf("%s（%s）尝试登录连续失败 %d 次 (IP: %s)", displayName, b.Username, b.FailCount, b.LastIP)
+		if unknown {
+			title = "密码连续错误（非系统用户）"
+			desc = fmt.Sprintf("非系统账号 %s 尝试登录连续失败 %d 次 (IP: %s)", b.Username, b.FailCount, b.LastIP)
+		}
+		alerts = append(alerts, SecurityAlert{
+			Type:        "brute_force",
+			Title:       title,
+			Description: desc,
+			Severity:    "high",
+			Username:    b.Username,
+			DisplayName: displayName,
+			IP:          b.LastIP,
+			CreatedAt:   b.LastAt.Format("2006-01-02 15:04:05"),
+			UnknownUser: unknown,
+		})
+	}
+
+	// 3) 最近 24h 内同一账号从不同省份登录（异地登录）
+	// 用数据库无关的方式：先取所有成功登录记录，在 Go 中按 username 分组
+	type locRaw struct {
+		Username  string
+		Province  string
+		IPAddress string
+		CreatedAt time.Time
+	}
+	var locRows []locRaw
+	r.db.Model(&model.LoginLog{}).
+		Select("username, province, ip_address, created_at").
+		Where("created_at >= ? AND status = 'success' AND province <> ''", oneDayAgo).
+		Order("created_at DESC").
+		Limit(500).
+		Scan(&locRows)
+
+	// 按 username 分组，统计不同省份数
+	type userLoc struct {
+		provinces map[string]struct{}
+		provList  []string
+		lastIP    string
+		lastAt    time.Time
+	}
+	userLocs := make(map[string]*userLoc)
+	for _, row := range locRows {
+		ul, ok := userLocs[row.Username]
+		if !ok {
+			ul = &userLoc{provinces: make(map[string]struct{})}
+			userLocs[row.Username] = ul
+		}
+		if _, exists := ul.provinces[row.Province]; !exists {
+			ul.provinces[row.Province] = struct{}{}
+			ul.provList = append(ul.provList, row.Province)
+		}
+		if ul.lastAt.IsZero() || row.CreatedAt.After(ul.lastAt) {
+			ul.lastAt = row.CreatedAt
+			ul.lastIP = row.IPAddress
+		}
+	}
+	for username, ul := range userLocs {
+		if len(ul.provinces) >= 2 {
+			unknown := !isKnown(username)
+			displayName := getDisplayName(username)
+			alerts = append(alerts, SecurityAlert{
+				Type:        "unusual_location",
+				Title:       "异地登录",
+				Description: fmt.Sprintf("%s（%s）从多个地区登录 (%s) (IP: %s)", displayName, username, strings.Join(ul.provList, "、"), ul.lastIP),
+				Severity:    "medium",
+				Username:    username,
+				DisplayName: displayName,
+				IP:          ul.lastIP,
+				CreatedAt:   ul.lastAt.Format("2006-01-02 15:04:05"),
+				UnknownUser: unknown,
+			})
+		}
+	}
+
+	// 4) 当前被锁定的用户
+	type lockedUser struct {
+		Username  string
+		Nickname  string
+		LockUntil *time.Time
+	}
+	var lockedUsers []lockedUser
+	r.db.Table("sso_user").
+		Select("username, nickname, lock_until").
+		Where("is_locked = ? AND is_active = ?", true, true).
+		Scan(&lockedUsers)
+	for _, lu := range lockedUsers {
+		desc := fmt.Sprintf("用户 %s（%s）已被锁定", lu.Username, lu.Nickname)
+		if lu.LockUntil != nil && lu.LockUntil.After(now) {
+			desc = fmt.Sprintf("用户 %s（%s）已被临时锁定，至 %s", lu.Username, lu.Nickname, lu.LockUntil.Format("2006-01-02 15:04"))
+		}
+		alerts = append(alerts, SecurityAlert{
+			Type:        "user_locked",
+			Title:       "账号已锁定",
+			Description: desc,
+			Severity:    "high",
+			Username:    lu.Username,
+			CreatedAt:   now.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	// 5) 最近 1 小时操作失败（status >= 400）
+	type opFail struct {
+		Username     string
+		Action       string
+		ResourceType string
+		Description  string
+		Status       int
+		IPAddress    string
+		CreatedAt    time.Time
+	}
+	var opFails []opFail
+	r.db.Table("sso_operation_log").
+		Select("username, action, resource_type, description, status, ip_address, created_at").
+		Where("created_at >= ? AND status >= ?", oneHourAgo, 400).
+		Order("created_at DESC").
+		Limit(10).
+		Scan(&opFails)
+	for _, of := range opFails {
+		unknown := !isKnown(of.Username)
+		displayName := getDisplayName(of.Username)
+		title := "操作失败"
+		desc := fmt.Sprintf("%s（%s）执行 %s 失败 (HTTP %d, IP: %s)", displayName, of.Username, of.Action, of.Status, of.IPAddress)
+		if unknown {
+			title = "操作失败（非系统用户）"
+			desc = fmt.Sprintf("非系统用户 %s 执行 %s 失败 (HTTP %d, IP: %s)", of.Username, of.Action, of.Status, of.IPAddress)
+		}
+		alerts = append(alerts, SecurityAlert{
+			Type:        "operation_failure",
+			Title:       title,
+			Description: desc,
+			Severity:    "medium",
+			Username:    of.Username,
+			DisplayName: displayName,
+			IP:          of.IPAddress,
+			CreatedAt:   of.CreatedAt.Format("2006-01-02 15:04:05"),
+			UnknownUser: unknown,
+		})
+	}
+
+	// 按时间倒序，取最近 6 条
+	sort.Slice(alerts, func(i, j int) bool {
+		return alerts[i].CreatedAt > alerts[j].CreatedAt
+	})
+	if len(alerts) > 6 {
+		alerts = alerts[:6]
+	}
+	return alerts, nil
+}
+
+// ── 仪表盘新增：Top 登录用户 ─────────────────────────────────────────────
+
+// UserLoginCount 用户登录次数统计
+type UserLoginCount struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	LoginCount  int64  `json:"login_count"`
+}
+
+// TopLoginUsers 返回指定天数内登录次数最多的前 limit 个用户（仅包含 sso_user 中存在的用户）。
+func (r *LogRepository) TopLoginUsers(days int, limit int) ([]UserLoginCount, error) {
+	start := time.Now().AddDate(0, 0, -days)
+	var results []UserLoginCount
+	r.db.Table("sso_login_log AS l").
+		Select("l.username, COALESCE(u.nickname, l.username) as display_name, COUNT(*) as login_count").
+		Joins("INNER JOIN sso_user AS u ON u.username = l.username").
+		Where("l.created_at >= ? AND l.status = ?", start, "success").
+		Group("l.username, u.nickname").
+		Order("login_count DESC").
+		Limit(limit).
 		Scan(&results)
 	return results, nil
 }

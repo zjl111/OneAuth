@@ -98,14 +98,14 @@ export default function ChinaMap({ data, height = 460 }: { data: ProvinceCount[]
       }
       const mapped = data.map((d) => ({ name: FULL_NAME[d.province] || d.province, value: d.count }));
 
-      // 固定分档，颜色从深到浅
+      // 固定分档，颜色从深到浅（适配内部系统较低数据量）
       const pieces = [
-        { gt: 2000,             label: '2000 以上',     color: '#1e40af' },
-        { gte: 1001, lte: 2000, label: '1001 - 2000',  color: '#3b82f6' },
-        { gte: 501,  lte: 1000, label: '501 - 1000',   color: '#60a5fa' },
-        { gte: 301,  lte: 500,  label: '301 - 500',    color: '#7dd3fc' },
-        { gte: 101,  lte: 300,  label: '101 - 300',    color: '#bae6fd' },
-        { gte: 1,    lte: 100,  label: '1 - 100',      color: '#e0f2fe' },
+        { gt: 500,             label: '500 以上',     color: '#1e40af' },
+        { gte: 200, lte: 500,  label: '200 - 500',   color: '#3b82f6' },
+        { gte: 100, lte: 200,  label: '100 - 200',   color: '#60a5fa' },
+        { gte: 50,  lte: 100,  label: '50 - 100',    color: '#7dd3fc' },
+        { gte: 20,  lte: 50,   label: '20 - 50',     color: '#bae6fd' },
+        { gte: 1,   lte: 20,   label: '1 - 20',      color: '#e0f2fe' },
       ];
 
       const option: any = {
