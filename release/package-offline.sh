@@ -57,7 +57,8 @@ sed -i '' "s|oneauth/gateway:v[0-9]*\.[0-9]*\.[0-9]*|oneauth/gateway:v${VERSION}
 sed -i '' "s|oneauth/backend:v[0-9]*\.[0-9]*\.[0-9]*|oneauth/backend:v${VERSION}|g" release/install.sh
 
 echo "Packaging..."
-COPYFILE_DISABLE=1 tar -czf "${PKG_NAME}.tar.gz" \
+COPYFILE_DISABLE=1 bsdtar -czf "${PKG_NAME}.tar.gz" \
+  -s "|^\\./|${PKG_NAME}/|" \
   --exclude='build' \
   --exclude='package' \
   --exclude='gateway' \
@@ -77,3 +78,10 @@ NEXT_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
 printf '%s\n' "$NEXT_VERSION" > release/VERSION
 
 echo "Version bumped: v${VERSION} -> v${NEXT_VERSION}"
+
+# ── Cleanup: remove all oneauth Docker images and build artifacts ─
+echo "Cleaning up..."
+docker images --format '{{.Repository}}:{{.Tag}}' | grep '^oneauth/' | xargs -r docker rmi 2>/dev/null || true
+rm -rf "$OUT_DIR" "release/images" "release/data"
+
+echo "Done."

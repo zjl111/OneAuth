@@ -179,6 +179,25 @@ make docker-up
 - Nginx 反代 `/oauth/*`, `/api/*`, `/.well-known/*` → backend
 - 其他路径 → 前端 SPA
 
+## 📦 离线打包
+
+如需生成离线安装包（含 Docker 镜像），详见 [release/PACKAGING.md](release/PACKAGING.md)。
+
+快速打包：
+
+```bash
+# 1. 查看当前版本
+cat release/VERSION
+
+# 2. 执行打包（自动构建、打包、清理）
+bash release/package-offline.sh
+
+# 3. 生成的安装包
+ls -lh oneauth-v*.tar.gz
+```
+
+打包后生成 `oneauth-vX.X.X.tar.gz`，解压后执行 `install.sh` 即可部署。
+
 ## 📑 主要 API
 
 ### OIDC 协议端点
