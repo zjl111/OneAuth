@@ -11,6 +11,7 @@ import {
   FileTextOutlined,
   TeamOutlined,
   UsergroupAddOutlined,
+  ApiOutlined,
   LogoutOutlined,
   SwapOutlined,
   MenuFoldOutlined,
@@ -51,6 +52,7 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
+  { key: '/admin/integrations', icon: <ApiOutlined />, label: '第三方平台' },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
 ];
 
@@ -63,6 +65,7 @@ const labelMap: Record<string, string> = {
   '/admin/access/login-rules': '登录控制',
   '/admin/access/sessions': '在线会话',
   '/admin/settings': '系统设置',
+  '/admin/integrations': '第三方平台',
   '/admin/monitor': '应用健康',
   '/admin/logs': '日志审计',
   '/admin/profile': '个人资料',

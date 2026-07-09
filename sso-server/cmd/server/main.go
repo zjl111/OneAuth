@@ -117,6 +117,7 @@ func main() {
 	clientService := service.NewClientService(clientRepo, monitorRepo, appGrantRepo)
 	ldapService := service.NewLDAPService(configRepo, userRepo)
 	wecomService := service.NewWeComService(configRepo, userRepo)
+	directorySyncService := service.NewDirectorySyncService(configRepo, userRepo, deptRepo)
 
 	// 启动时把所有应用同步到监控表，避免内置/历史应用缺监控
 	if allClients, err := clientRepo.ListAll(); err == nil {
@@ -284,6 +285,7 @@ func main() {
 		Session:   &handler.SessionHandler{SessionMgr: sessionMgr},
 		UserGroup: &handler.UserGroupHandler{Repo: userGroupRepo},
 		LoginRule: &handler.LoginRuleHandler{Repo: loginRuleRepo},
+		DirectorySync: &handler.DirectorySyncHandler{Service: directorySyncService},
 		CAS: &handler.CASHandler{
 			Store:         store,
 			TokenService:  tokenService,

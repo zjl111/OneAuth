@@ -79,6 +79,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.StatusProbe{},
 		&model.StatusDaily{},
 		&model.Incident{},
+		&model.DirectorySyncBinding{},
+		&model.DirectorySyncLog{},
 	); err != nil {
 		return err
 	}

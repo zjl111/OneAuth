@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +21,28 @@ import (
 // DepartmentHandler ---------------------------
 type DepartmentHandler struct {
 	Repo *repository.DepartmentRepository
+}
+
+func parseNullableUUIDJSON(raw json.RawMessage) (*uuid.UUID, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return nil, nil
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
 }
 
 func (h *DepartmentHandler) Tree(c *gin.Context) {
@@ -76,10 +99,10 @@ func (h *DepartmentHandler) Update(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Name        *string `json:"name"`
-		ParentID    *string `json:"parent_id"`
-		SortOrder   *int    `json:"sort_order"`
-		Description *string `json:"description"`
+		Name        *string         `json:"name"`
+		ParentID    json.RawMessage `json:"parent_id"`
+		SortOrder   *int            `json:"sort_order"`
+		Description *string         `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
@@ -88,18 +111,13 @@ func (h *DepartmentHandler) Update(c *gin.Context) {
 	if in.Name != nil {
 		d.Name = *in.Name
 	}
-	if in.ParentID != nil {
-		parent := strings.TrimSpace(*in.ParentID)
-		if parent == "" {
-			d.ParentID = nil
-		} else {
-			pid, err := uuid.Parse(parent)
-			if err != nil {
-				response.BadRequest(c, "parent_id 格式错误")
-				return
-			}
-			d.ParentID = &pid
+	if len(in.ParentID) > 0 {
+		parentID, err := parseNullableUUIDJSON(in.ParentID)
+		if err != nil {
+			response.BadRequest(c, err.Error())
+			return
 		}
+		d.ParentID = parentID
 	}
 	if in.SortOrder != nil {
 		d.SortOrder = *in.SortOrder
@@ -143,39 +161,29 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 		return
 	}
 	var in struct {
-		ParentID *string `json:"parent_id"`
+		ParentID json.RawMessage `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	// 移到根
-	if in.ParentID == nil {
-		d.ParentID = nil
-		if err := h.Repo.Update(d); err != nil {
-			response.ServerError(c, err.Error())
-			return
-		}
-		response.OK(c, d)
-		return
-	}
-	parentStr := strings.TrimSpace(*in.ParentID)
-	if parentStr == "" {
-		d.ParentID = nil
-		if err := h.Repo.Update(d); err != nil {
-			response.ServerError(c, err.Error())
-			return
-		}
-		response.OK(c, d)
-		return
-	}
-	parentID, err := uuid.Parse(parentStr)
+	parentID, err := parseNullableUUIDJSON(in.ParentID)
 	if err != nil {
-		response.BadRequest(c, "parent_id 格式错误")
+		response.BadRequest(c, err.Error())
+		return
+	}
+	// 移到根
+	if parentID == nil {
+		d.ParentID = nil
+		if err := h.Repo.Update(d); err != nil {
+			response.ServerError(c, err.Error())
+			return
+		}
+		response.OK(c, d)
 		return
 	}
 	// 不允许设为自己
-	if parentID == id {
+	if *parentID == id {
 		response.BadRequest(c, "不能将部门移动到自身下")
 		return
 	}
@@ -189,7 +197,7 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 	for i := range all {
 		parents[all[i].ID] = all[i].ParentID
 	}
-	cursor := &parentID
+	cursor := parentID
 	for cursor != nil {
 		if *cursor == id {
 			response.BadRequest(c, "不能将部门移动到其子部门下")
@@ -201,7 +209,7 @@ func (h *DepartmentHandler) Move(c *gin.Context) {
 		}
 		cursor = next
 	}
-	d.ParentID = &parentID
+	d.ParentID = parentID
 	if err := h.Repo.Update(d); err != nil {
 		response.ServerError(c, err.Error())
 		return

@@ -19,6 +19,8 @@ func NewDepartmentRepository(db *gorm.DB) *DepartmentRepository {
 	return &DepartmentRepository{db: db}
 }
 
+func (r *DepartmentRepository) DB() *gorm.DB { return r.db }
+
 func (r *DepartmentRepository) ListAll() ([]model.Department, error) {
 	var items []model.Department
 	err := r.db.Order("sort_order").Find(&items).Error

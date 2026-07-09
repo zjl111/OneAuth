@@ -33,6 +33,7 @@ type Handlers struct {
 	UserGroup  *handler.UserGroupHandler
 	LoginRule  *handler.LoginRuleHandler
 	WeCom      *handler.WeComHandler
+	DirectorySync *handler.DirectorySyncHandler
 	CAS        *handler.CASHandler
 	SAML       *handler.SAMLHandler
 }
@@ -250,6 +251,16 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/dictionaries", h.Config.CreateDict)
 		admin.PUT("/dictionaries/:id", h.Config.UpdateDict)
 		admin.DELETE("/dictionaries/:id", h.Config.DeleteDict)
+
+		// 第三方通讯录同步
+		if h.DirectorySync != nil {
+			admin.GET("/directory-sync/config", h.DirectorySync.Config)
+			admin.PUT("/directory-sync/config", h.DirectorySync.SaveConfig)
+			admin.GET("/directory-sync/departments", h.DirectorySync.Departments)
+			admin.POST("/directory-sync/preview", h.DirectorySync.Preview)
+			admin.POST("/directory-sync/run", h.DirectorySync.Run)
+			admin.GET("/directory-sync/logs", h.DirectorySync.Logs)
+		}
 
 		// 访问控制
 		admin.GET("/access/ip", h.Access.List)
