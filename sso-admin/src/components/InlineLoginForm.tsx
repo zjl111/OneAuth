@@ -60,6 +60,10 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
       }
       return '账号已锁定，请稍后再试';
     }
+    // 后端已返回具体锁定原因（如"账号已锁定：超过30天未登录…"），直接使用
+    if (typeof msg === 'string' && msg.startsWith('账号已锁定：')) {
+      return msg;
+    }
     try {
       const status = await authApi.captchaStatus(username);
       if (status.locked) {

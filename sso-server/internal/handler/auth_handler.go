@@ -332,7 +332,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 						lockUntil = time.Now().Add(dur)
 						untilPtr = &lockUntil
 					}
-					if lockErr := h.UserService.LockUntil(lookupUser.ID, untilPtr); lockErr == nil {
+					if lockErr := h.UserService.LockUntil(lookupUser.ID, untilPtr, "login_failure"); lockErr == nil {
 						data := LoginFailureData{
 							LockMinutes: h.loginLockMinutes(),
 						}
@@ -862,6 +862,11 @@ func (h *AuthHandler) clearUserFail(ctx context.Context, loginName string) {
 func (h *AuthHandler) lockedMessage(u *model.User) string {
 	if u != nil && u.LockUntil != nil && time.Now().Before(*u.LockUntil) {
 		return fmt.Sprintf("账号已锁定，请于 %s 后重试", u.LockUntil.Format("2006-01-02 15:04"))
+	}
+	if u != nil && u.LockReason != "" {
+		if reasonText := service.LockReasonText(u.LockReason); reasonText != "" {
+			return "账号已锁定：" + reasonText + "，请联系管理员解锁"
+		}
 	}
 	return "账号已锁定，请联系管理员解锁"
 }

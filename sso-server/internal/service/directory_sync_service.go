@@ -547,6 +547,8 @@ func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyn
 		}
 		user.IsActive = false
 		user.HireStatus = "resigned"
+		user.IsLocked = true
+		user.LockReason = "wecom_missing"
 		if err := tx.Save(&user).Error; err != nil {
 			return err
 		}

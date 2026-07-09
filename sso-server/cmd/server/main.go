@@ -151,6 +151,15 @@ func main() {
 		log.Printf("[startup] monitor scheduler started (interval=%ds)", intervalSec)
 	}
 
+	// 用户自动锁定调度器：超过 N 天未登录的用户自动锁定（admin 除外）
+	userLockScheduler := monitor.NewUserLockScheduler(db, 30)
+	if v := configRepo.Get("security", "user_inactive_days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			userLockScheduler.SetInactiveDays(n)
+		}
+	}
+	userLockScheduler.Start(context.Background())
+
 	// 日志清理：按系统配置中的保留天数，每小时清理一次
 	go func() {
 		t := time.NewTicker(time.Hour)
@@ -267,6 +276,11 @@ func main() {
 						scheduler.SetInterval(n)
 					}
 				}
+				if category == "security" && key == "user_inactive_days" {
+					if n, err := strconv.Atoi(value); err == nil && n > 0 {
+						userLockScheduler.SetInactiveDays(n)
+					}
+				}
 			},
 		},
 		Access:  &handler.AccessHandler{Repo: ipRepo},
@@ -328,6 +342,7 @@ func main() {
 	if scheduler != nil {
 		scheduler.Stop()
 	}
+	userLockScheduler.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)

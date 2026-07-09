@@ -58,6 +58,13 @@ export default function SecurityPanel() {
           <Form.Item label="锁定时长（分钟）" name="security.login_lockout_duration">
             <InputNumber min={1} max={1440} style={{ width: '100%' }} addonAfter="分钟" />
           </Form.Item>
+          <Form.Item
+            label="长时间未登录账号自动锁定（天）"
+            name="security.user_inactive_days"
+            extra="超过该天数未登录的用户将被自动锁定（admin 除外）；默认 30 天；修改后实时生效"
+          >
+            <InputNumber min={1} max={365} style={{ width: '100%' }} addonAfter="天" />
+          </Form.Item>
         </div>
       </div>
 

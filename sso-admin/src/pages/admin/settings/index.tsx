@@ -22,6 +22,7 @@ const NUMERIC_SECURITY_KEYS = new Set([
   'captcha_threshold',
   'ip_ban_threshold',
   'ip_ban_duration',
+  'user_inactive_days',
 ]);
 const MINUTE_VALUE_FIELDS = new Set([
   'oauth.session_ttl',

@@ -169,7 +169,11 @@ func (h *UserHandler) Lock(c *gin.Context) {
 		Lock bool `json:"lock"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	if err := h.Service.Lock(id, req.Lock); err != nil {
+	reason := ""
+	if req.Lock {
+		reason = "manual"
+	}
+	if err := h.Service.Lock(id, req.Lock, reason); err != nil {
 		response.ServerError(c, err.Error())
 		return
 	}

@@ -311,6 +311,7 @@ func seedSystemConfigs(db *gorm.DB) error {
 		{Category: "security", Key: "ip_ban_enabled", Value: "false", Description: "启用 IP 自动封禁"},
 		{Category: "security", Key: "ip_ban_threshold", Value: "20", Description: "同一 IP 失败 N 次后自动加入黑名单（30 分钟滚动窗口）"},
 		{Category: "security", Key: "ip_ban_duration", Value: "3600", Description: "封禁时长（秒），0 = 永久"},
+		{Category: "security", Key: "user_inactive_days", Value: "30", Description: "超过N天未登录自动锁定（admin除外）"},
 		{Category: "monitor", Key: "interval", Value: "30", Description: "监控周期(秒)"},
 		{Category: "monitor", Key: "public_status_page", Value: "true", Description: "状态页是否公开"},
 		{Category: "logs", Key: "login_retention_days", Value: "180", Description: "登录日志保留天数（单位：天）"},

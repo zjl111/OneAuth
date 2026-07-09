@@ -77,6 +77,21 @@ interface ImportPreviewRow {
   errorDetail?: string;
 }
 
+function lockReasonText(reason?: string): string {
+  switch (reason) {
+    case 'inactivity':
+      return '超过30天未登录，系统自动锁定';
+    case 'login_failure':
+      return '登录失败次数过多，被自动锁定';
+    case 'wecom_missing':
+      return '企业微信同步时账号不存在，被自动锁定';
+    case 'manual':
+      return '管理员手动锁定';
+    default:
+      return '已锁定';
+  }
+}
+
 export default function UserListPage() {
   const { message, modal } = AntdApp.useApp();
   const [data, setData] = useState<User[]>([]);
@@ -155,6 +170,8 @@ export default function UserListPage() {
     form.setFieldsValue({
       ...u,
       is_admin: !!superAdminRoleID && userRoles.some((r) => r.id === superAdminRoleID),
+      // 锁定用户的状态开关显示为关闭，开启开关等同于解锁
+      is_active: u.is_locked ? false : u.is_active,
     });
     setAvatarUrl(u.avatar || '');
     setModalOpen(true);
@@ -173,6 +190,10 @@ export default function UserListPage() {
     }
     try {
       if (editing) {
+        // 锁定用户开启状态开关 → 等同于解锁
+        if (editing.is_locked && payload.is_active) {
+          await usersApi.lock(editing.id, false);
+        }
         await usersApi.update(editing.id, payload);
         message.success('已更新');
       } else {
@@ -583,12 +604,14 @@ export default function UserListPage() {
             width: 100,
             render: (_, r) =>
               r.is_locked ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span className="user-tag user-tag--red">已锁定</span>
-                  <span className="act-link" onClick={() => handleLock(r)} style={{ whiteSpace: 'nowrap' }}>
-                    解锁
+                <Tooltip title={lockReasonText(r.lock_reason)}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
+                    <span className="user-tag user-tag--red">已锁定</span>
+                    <span className="act-link" onClick={(e) => { e.stopPropagation(); handleLock(r); }} style={{ whiteSpace: 'nowrap' }}>
+                      解锁
+                    </span>
                   </span>
-                </span>
+                </Tooltip>
               ) : r.is_active ? (
                 <span className="user-tag user-tag--green">正常</span>
               ) : (

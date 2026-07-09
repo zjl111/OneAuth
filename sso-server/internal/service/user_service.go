@@ -321,6 +321,7 @@ func (s *UserService) FindLoginUser(loginName string) (*model.User, error) {
 	if u.IsLocked && u.LockUntil != nil && time.Now().After(*u.LockUntil) {
 		u.IsLocked = false
 		u.LockUntil = nil
+		u.LockReason = ""
 		if err := s.repo.Update(u); err != nil {
 			return nil, err
 		}
@@ -352,6 +353,7 @@ func (s *UserService) Authenticate(username, plain string) (*model.User, error) 
 			if time.Now().After(*u.LockUntil) {
 				u.IsLocked = false
 				u.LockUntil = nil
+				u.LockReason = ""
 				if err := s.repo.Update(u); err != nil {
 					return nil, err
 				}
@@ -359,6 +361,10 @@ func (s *UserService) Authenticate(username, plain string) (*model.User, error) 
 				return nil, errors.New(fmt.Sprintf("账号已锁定，请于 %s 后重试", u.LockUntil.Format("2006-01-02 15:04")))
 			}
 		} else {
+			// 永久锁定：附带原因
+			if reasonText := LockReasonText(u.LockReason); reasonText != "" {
+				return nil, errors.New("账号已锁定：" + reasonText + "，请联系管理员解锁")
+			}
 			return nil, errors.New("账号已锁定，请联系管理员解锁")
 		}
 	}
@@ -401,24 +407,46 @@ func (s *UserService) ChangePassword(id uuid.UUID, oldPlain, newPlain string) er
 	return s.ResetPassword(id, newPlain)
 }
 
-func (s *UserService) Lock(id uuid.UUID, lock bool) error {
+func (s *UserService) Lock(id uuid.UUID, lock bool, reason string) error {
 	u, err := s.repo.GetByID(id)
 	if err != nil {
 		return err
 	}
 	u.IsLocked = lock
+	if lock {
+		u.LockReason = reason
+	} else {
+		u.LockReason = ""
+	}
 	u.LockUntil = nil
 	return s.repo.Update(u)
 }
 
-func (s *UserService) LockUntil(id uuid.UUID, until *time.Time) error {
+func (s *UserService) LockUntil(id uuid.UUID, until *time.Time, reason string) error {
 	u, err := s.repo.GetByID(id)
 	if err != nil {
 		return err
 	}
 	u.IsLocked = true
 	u.LockUntil = until
+	u.LockReason = reason
 	return s.repo.Update(u)
+}
+
+// LockReasonText 返回锁定原因的可读中文描述
+func LockReasonText(reason string) string {
+	switch reason {
+	case "inactivity":
+		return "超过30天未登录，系统自动锁定"
+	case "login_failure":
+		return "登录失败次数过多，被自动锁定"
+	case "wecom_missing":
+		return "企业微信同步时账号不存在，被自动锁定"
+	case "manual":
+		return "管理员手动锁定"
+	default:
+		return ""
+	}
 }
 
 func (s *UserService) Permissions(u *model.User) []string {

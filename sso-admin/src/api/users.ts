@@ -19,6 +19,7 @@ export interface User {
   is_active: boolean;
   is_staff: boolean;
   is_locked: boolean;
+  lock_reason?: string;
   last_login: string | null;
   created_at: string;
   roles: Array<{ id: string; code: string; name: string }>;

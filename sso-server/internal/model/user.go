@@ -27,6 +27,7 @@ type User struct {
 	IsStaff       bool       `gorm:"default:false" json:"is_staff"`
 	IsLocked      bool       `gorm:"default:false" json:"is_locked"`
 	LockUntil     *time.Time `gorm:"index" json:"lock_until"`
+	LockReason    string     `gorm:"size:50" json:"lock_reason"` // "" | "manual" | "inactivity" | "login_failure" | "wecom_missing"
 	LastLogin     *time.Time `json:"last_login"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
