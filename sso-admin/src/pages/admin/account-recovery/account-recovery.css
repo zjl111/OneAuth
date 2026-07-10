@@ -1,0 +1,351 @@
+/* ============================================================
+   账号回收页面 — 视觉风格与登录规则页面统一
+   ============================================================ */
+
+/* ---- 页面容器 ---- */
+.ar-page .ant-tabs-nav {
+  margin-bottom: 16px !important;
+}
+
+.ar-page .ant-tabs-tab {
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 4px !important;
+}
+
+.ar-page .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--primary-color) !important;
+  font-weight: 600;
+}
+
+.ar-page .ant-tabs-ink-bar {
+  background: var(--primary-color) !important;
+}
+
+/* ---- 表格 ---- */
+.ar-page .ant-table-thead > tr > th {
+  padding: 14px 16px !important;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.ar-page .ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-bottom: 1px solid #f5f5f5 !important;
+  transition: background 0.2s ease;
+}
+
+.ar-page .ant-table-tbody > tr:hover > td {
+  background: #f8fafb !important;
+}
+
+.ar-page .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ---- Tag 软色胶囊 ---- */
+.ar-page .ant-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.ar-page .ant-tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.ar-page .ant-tag-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.ar-page .ant-tag-blue {
+  background: #e6f4ff;
+  color: var(--primary-color);
+}
+
+.ar-page .ant-tag-orange {
+  background: #fff7ed;
+  color: #d97706;
+}
+
+.ar-page .ant-tag-default {
+  background: #f5f5f5;
+  color: #9ca3af;
+}
+
+.ar-page .ant-tag-purple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+/* ---- Card ---- */
+.ar-page.ant-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+}
+
+/* ---- 操作链接 ---- */
+.ar-page .act-link {
+  cursor: pointer;
+  color: var(--primary-color);
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.ar-page .act-link:hover {
+  opacity: 0.7;
+}
+
+.ar-page .act-sep {
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  background: #e5e7eb;
+  margin: 0 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ---- Drawer 表单 ---- */
+.ar-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.ar-drawer .ant-drawer-header {
+  position: relative;
+}
+
+.ar-drawer .ant-drawer-close {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  z-index: 1;
+}
+
+.ar-form-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px 20px 16px;
+}
+
+.ar-form-container .ant-form {
+  width: 100%;
+  max-width: 720px;
+}
+
+.ar-drawer .ant-form-item {
+  margin-bottom: 10px !important;
+}
+
+.ar-drawer .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  padding-bottom: 4px !important;
+  height: auto !important;
+}
+
+.ar-drawer .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ef4444 !important;
+}
+
+.ar-drawer .ant-input,
+.ar-drawer .ant-input-number,
+.ar-drawer .ant-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 14px;
+}
+
+.ar-drawer .ant-select .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.ar-drawer .ant-select .ant-select-selection-item {
+  line-height: 34px !important;
+}
+
+.ar-drawer .ant-input-number {
+  display: flex;
+  align-items: center;
+}
+
+.ar-drawer textarea.ant-input {
+  height: auto !important;
+  min-height: 80px !important;
+}
+
+/* ---- Section 分组标题 ---- */
+.ar-rule-section {
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px dashed #eef0f5;
+}
+
+.ar-rule-section:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.ar-rule-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d2c5b;
+}
+
+.ar-rule-section-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: var(--primary-color);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ---- 固底按钮栏 ---- */
+.ar-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.ar-drawer-footer .ant-btn {
+  min-width: 72px;
+  height: 36px;
+  font-size: 14px;
+  border-radius: 6px;
+}
+
+/* ---- 分页器 ---- */
+.ar-page .ant-table-pagination {
+  margin-top: 16px !important;
+  margin-bottom: 4px !important;
+}
+
+/* ---- 脚本编辑器 ---- */
+.ar-script-editor {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 200px !important;
+  height: auto !important;
+  tab-size: 4;
+}
+
+/* ---- 日志详情 ---- */
+.ar-log-detail .ant-descriptions-item-label {
+  font-weight: 500;
+  color: #6b7280;
+  width: 120px;
+}
+
+.ar-log-detail .ant-descriptions-item-content {
+  word-break: break-all;
+}
+
+.ar-log-stdout,
+.ar-log-stderr {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ar-log-stderr {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* ---- 统计卡片 ---- */
+.ar-stat-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px 24px;
+  min-width: 140px;
+  text-align: center;
+}
+
+.ar-stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1d2c5b;
+  margin-bottom: 4px;
+}
+
+.ar-stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ---- 脚本子 Tab ---- */
+.ar-script-tabs {
+  display: flex;
+  border: 1px solid #bbbfc4;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.ar-script-tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px 12px;
+  background: #f8f9fb;
+  font-size: 13px;
+  cursor: pointer;
+  border-right: 1px solid #bbbfc4;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.ar-script-tab:last-child {
+  border-right: none;
+}
+
+.ar-script-tab:hover {
+  background: #eef1f5;
+}
+
+.ar-script-tab.active {
+  background: var(--primary-color);
+  color: #fff;
+  font-weight: 600;
+}

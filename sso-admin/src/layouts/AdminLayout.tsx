@@ -16,6 +16,8 @@ import {
   SwapOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  RetweetOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -52,7 +54,15 @@ const menuItems: any[] = [
     ],
   },
   { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
-  { key: '/admin/integrations', icon: <ApiOutlined />, label: '第三方平台' },
+  {
+    key: 'sync',
+    icon: <SyncOutlined />,
+    label: '同步管理',
+    children: [
+      { key: '/admin/integrations', icon: <ApiOutlined />, label: '第三方平台' },
+      { key: '/admin/account-recovery', icon: <RetweetOutlined />, label: '用户清理' },
+    ],
+  },
   { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志审计' },
 ];
 
@@ -66,6 +76,7 @@ const labelMap: Record<string, string> = {
   '/admin/access/sessions': '在线会话',
   '/admin/settings': '系统设置',
   '/admin/integrations': '第三方平台',
+  '/admin/account-recovery': '用户清理',
   '/admin/monitor': '应用健康',
   '/admin/logs': '日志审计',
   '/admin/profile': '个人资料',
@@ -77,6 +88,8 @@ const breadcrumbExtra: Record<string, string> = {
   '/admin/user-groups': '身份目录',
   '/admin/access/login-rules': '访问控制',
   '/admin/access/sessions': '访问控制',
+  '/admin/integrations': '同步管理',
+  '/admin/account-recovery': '同步管理',
 };
 
 export default function AdminLayout() {
@@ -115,6 +128,9 @@ export default function AdminLayout() {
     }
     if (location.pathname.startsWith('/admin/access')) {
       keys.push('access');
+    }
+    if (['/admin/integrations', '/admin/account-recovery'].includes(location.pathname)) {
+      keys.push('sync');
     }
     return keys;
   }, [location.pathname]);

@@ -40,6 +40,18 @@
   color: var(--text-secondary) !important;
 }
 
+.admin-sider .ant-menu-submenu > .ant-menu-submenu-title {
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: var(--text-secondary) !important;
+}
+
+.admin-sider .ant-menu-submenu > .ant-menu-submenu-title:hover {
+  color: var(--text-main) !important;
+}
+
 .admin-sider .ant-menu-item:hover {
   color: var(--text-main) !important;
 }

@@ -4,6 +4,26 @@
   gap: 16px;
 }
 
+/* ---- Tabs（与系统设置风格统一）---- */
+.integrations-page .ant-tabs-tab {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 0 !important;
+}
+
+.integrations-page .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.integrations-page .ant-tabs-nav {
+  margin-bottom: 24px !important;
+}
+
+.integrations-page .ant-tabs-nav::before {
+  border-bottom-color: #f0f0f0 !important;
+}
+
 .integration-section {
   border-top: 1px solid #eef0f5;
   padding-top: 20px;
@@ -30,6 +50,28 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 32px;
+}
+
+/* ---- 表单控件（与系统设置统一）---- */
+.integrations-page .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.integrations-page .ant-input,
+.integrations-page .ant-select .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 14px;
+}
+
+.integrations-page .ant-select .ant-select-selection-search-input {
+  height: 34px !important;
+}
+
+.integrations-page .ant-select .ant-select-selection-item {
+  line-height: 34px !important;
 }
 
 .integration-actions {

@@ -87,7 +87,7 @@ if [ ! -f "$INSTALL_DIR/data/ip2region.xdb" ]; then
     echo "Copied ip2region.xdb to data/"
   else
     echo "Extracting ip2region.xdb from backend image..."
-    cid="$(docker create oneauth/backend:v1.0.12)"
+    cid="$(docker create oneauth/backend:v1.0.13)"
     docker cp "${cid}:/app/data/ip2region.xdb" "$INSTALL_DIR/data/ip2region.xdb"
     docker rm "$cid" >/dev/null
   fi

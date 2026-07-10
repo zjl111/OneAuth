@@ -238,6 +238,7 @@ const RESOURCE_LABEL: Record<string, string> = {
   dictionaries: '字典',
   auth: '账户',
   permissions: '权限',
+  'account-recovery': '用户清理',
 };
 const ACTION_LABEL: Record<string, string> = {
   create: '创建',
@@ -261,6 +262,8 @@ const SUFFIX_LABEL: Record<string, string> = {
   'upload-image': '上传图片',
   profile: '个人资料',
   'change-password': '修改密码',
+  toggle: '启用/禁用',
+  test: '测试运行',
 };
 
 function translateAction(action: string, resource: string): string {

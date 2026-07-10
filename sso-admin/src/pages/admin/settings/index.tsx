@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton, Space, Switch } from 'antd';
+import { Card, Form, Input, InputNumber, Button, App as AntdApp, Tabs, Skeleton, Switch } from 'antd';
 import { configApi, type SystemConfig } from '@/api/misc';
 import { invalidateSiteCache } from '@/hooks/useSite';
 import { useAuthStore } from '@/store/authStore';
@@ -10,8 +10,6 @@ import NoticePanel from './panels/Notice';
 import MonitorPanel from './panels/Monitor';
 import SecurityPanel from './panels/Security';
 import SmtpPanel from './panels/Smtp';
-import LdapPanel from './panels/Ldap';
-import WecomPanel from './panels/Wecom';
 import './settings.css';
 
 const NUMERIC_SECURITY_KEYS = new Set([
@@ -33,8 +31,6 @@ const MINUTE_VALUE_FIELDS = new Set([
 const NUMERIC_MONITOR_KEYS = new Set(['interval']);
 const NUMERIC_SMTP_KEYS = new Set(['port']);
 const PASSWORD_SMTP_KEYS = new Set(['password']);
-const PASSWORD_LDAP_KEYS = new Set(['bind_password']);
-const PASSWORD_WECOM_KEYS = new Set(['secret']);
 const PASSWORD_SECURITY_KEYS = new Set(['captcha_unsplash_key']);
 const BOOL_SECURITY_KEYS = new Set([
   'captcha_enabled',
@@ -51,8 +47,6 @@ const categoryLabel: Record<string, string> = {
   security: '安全策略',
   monitor: '监控设置',
   smtp: '邮件 (SMTP)',
-  ldap: 'LDAP / AD',
-  wecom: '企业微信',
 };
 
 function isNumeric(category: string, key: string) {
@@ -84,15 +78,11 @@ export default function SettingsPage() {
     d.forEach((c) => {
       const isPasswordField =
         (c.category === 'smtp' && PASSWORD_SMTP_KEYS.has(c.key)) ||
-        (c.category === 'ldap' && PASSWORD_LDAP_KEYS.has(c.key)) ||
-        (c.category === 'wecom' && PASSWORD_WECOM_KEYS.has(c.key)) ||
         (c.category === 'security' && PASSWORD_SECURITY_KEYS.has(c.key));
       const isBoolSwitch =
         (c.category === 'monitor' && c.key === 'public_status_page') ||
         (c.category === 'notice' && c.key === 'enabled') ||
         (c.category === 'smtp' && c.key === 'enabled') ||
-        (c.category === 'ldap' && (c.key === 'enabled' || c.key === 'start_tls')) ||
-        (c.category === 'wecom' && (c.key === 'enabled' || c.key === 'auto_create_user')) ||
         (c.category === 'security' && BOOL_SECURITY_KEYS.has(c.key)) ||
         c.value === 'true' || c.value === 'false';
       if (isPasswordField) {
@@ -119,7 +109,7 @@ export default function SettingsPage() {
   const grouped = useMemo(() => {
     // 强制 tab 顺序，且只展示白名单内的 category
     // 内部用的（_migration、临时迁移标记等）以下划线开头，从不暴露给用户
-    const order = ['platform', 'notice', 'monitor', 'security', 'smtp', 'ldap', 'wecom'];
+    const order = ['platform', 'notice', 'monitor', 'security', 'smtp'];
     const allowed = new Set(order);
     const g: Record<string, SystemConfig[]> = {};
     order.forEach((k) => (g[k] = []));
@@ -141,8 +131,6 @@ export default function SettingsPage() {
       const [category, ...rest] = k.split('.');
       const key = rest.join('.');
       if (category === 'smtp' && PASSWORD_SMTP_KEYS.has(key) && v === '') continue;
-      if (category === 'ldap' && PASSWORD_LDAP_KEYS.has(key) && v === '') continue;
-      if (category === 'wecom' && PASSWORD_WECOM_KEYS.has(key) && v === '') continue;
       if (category === 'security' && PASSWORD_SECURITY_KEYS.has(key) && v === '') continue;
       const fieldKey = `${category}.${key}`;
       const strVal =
@@ -183,7 +171,6 @@ export default function SettingsPage() {
   };
 
   const [activeTab, setActiveTab] = useState<string>('platform');
-  const [testingLdap, setTestingLdap] = useState(false);
 
   if (loading && data.length === 0) {
     return (
@@ -220,10 +207,8 @@ export default function SettingsPage() {
                 )}
                 {cat === 'security' && <SecurityPanel />}
                 {cat === 'monitor' && <MonitorPanel />}
-                {cat === 'ldap' && <LdapPanel />}
-                {cat === 'wecom' && <WecomPanel />}
                 {/* 其余分组（如未来新增）走兜底渲染 */}
-                {!['platform', 'notice', 'smtp', 'security', 'monitor', 'ldap', 'wecom'].includes(cat) && items.map((c) => {
+                {!['platform', 'notice', 'smtp', 'security', 'monitor'].includes(cat) && items.map((c) => {
                   const isBool = c.value === 'true' || c.value === 'false';
                   return (
                     <Form.Item key={c.id} label={c.description || c.key} name={`${c.category}.${c.key}`} valuePropName={isBool ? 'checked' : undefined}>
@@ -240,29 +225,9 @@ export default function SettingsPage() {
           }))}
         />
         {activeTab !== 'smtp' && (
-          <Space>
-            {activeTab === 'ldap' && (
-              <Button
-                loading={testingLdap}
-                onClick={async () => {
-                  setTestingLdap(true);
-                  try {
-                    await request.post('/configs/test-ldap');
-                    message.success('LDAP 连接成功');
-                  } catch (e: any) {
-                    message.error(e?.response?.data?.message || 'LDAP 连接失败');
-                  } finally {
-                    setTestingLdap(false);
-                  }
-                }}
-              >
-                测试连接
-              </Button>
-            )}
-            <Button type="primary" onClick={handleSave}>
-              保存
-            </Button>
-          </Space>
+          <Button type="primary" onClick={handleSave}>
+            保存
+          </Button>
         )}
       </Form>
     </Card>

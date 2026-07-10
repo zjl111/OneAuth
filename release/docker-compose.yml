@@ -1,6 +1,6 @@
 services:
   backend:
-    image: oneauth/backend:v1.0.12
+    image: oneauth/backend:v1.0.13
     environment:
       SSO_APP_DRIVER: "sqlite"
       SSO_APP_ENVIRONMENT: "production"
@@ -24,7 +24,7 @@ services:
       start_period: 10s
 
   gateway:
-    image: oneauth/gateway:v1.0.12
+    image: oneauth/gateway:v1.0.13
     depends_on:
       backend:
         condition: service_healthy

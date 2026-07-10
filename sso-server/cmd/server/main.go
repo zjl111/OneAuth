@@ -111,6 +111,7 @@ func main() {
 	userGroupRepo := repository.NewUserGroupRepository(db)
 	loginRuleRepo := repository.NewLoginRuleRepository(db)
 	appGrantRepo := repository.NewAppGrantRepository(db)
+	accountRecoveryRepo := repository.NewAccountRecoveryRepository(db)
 
 	// services
 	userService := service.NewUserService(userRepo, configRepo)
@@ -323,6 +324,12 @@ func main() {
 			ConfigRepo:    configRepo,
 			FrontendBase:  frontendBase,
 			Issuer:        cfg.OAuth.Issuer,
+		},
+		AccountRecovery: &handler.AccountRecoveryHandler{
+			Repo:       accountRecoveryRepo,
+			ClientRepo: clientRepo,
+			UserRepo:   userRepo,
+			ConfigRepo: configRepo,
 		},
 	}
 

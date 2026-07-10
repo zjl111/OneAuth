@@ -18,6 +18,7 @@ import SettingsPage from '@/pages/admin/settings';
 import LogsPage from '@/pages/admin/logs';
 import MonitorPage from '@/pages/admin/monitor';
 import IntegrationsPage from '@/pages/admin/integrations';
+import AccountRecoveryPage from '@/pages/admin/account-recovery';
 import ProfilePage from '@/pages/profile';
 import PortalProfileLayout from '@/pages/profile/PortalProfileLayout';
 import NotFoundPage from '@/pages/NotFound';
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
       { path: 'access/sessions', element: <OnlineSessionsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'integrations', element: <IntegrationsPage /> },
+      { path: 'account-recovery', element: <AccountRecoveryPage /> },
       { path: 'monitor', element: <MonitorPage /> },
       { path: 'logs', element: <LogsPage /> },
       { path: 'profile', element: <ProfilePage /> },

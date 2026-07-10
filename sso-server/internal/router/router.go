@@ -36,6 +36,7 @@ type Handlers struct {
 	DirectorySync *handler.DirectorySyncHandler
 	CAS        *handler.CASHandler
 	SAML       *handler.SAMLHandler
+	AccountRecovery *handler.AccountRecoveryHandler
 }
 
 func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserService, h *Handlers) *gin.Engine {
@@ -293,6 +294,28 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.GET("/sessions", h.Session.List)
 		admin.GET("/sessions/count", h.Session.Count)
 		admin.DELETE("/sessions/:sid", h.Session.Kick)
+
+		// 账号回收 - 规则 CRUD
+		admin.GET("/account-recovery", h.AccountRecovery.List)
+		admin.POST("/account-recovery", h.AccountRecovery.Create)
+		admin.GET("/account-recovery/rules/:id", h.AccountRecovery.Get)
+		admin.PUT("/account-recovery/rules/:id", h.AccountRecovery.Update)
+		admin.DELETE("/account-recovery/rules/:id", h.AccountRecovery.Delete)
+		admin.POST("/account-recovery/rules/:id/toggle", h.AccountRecovery.Toggle)
+		admin.POST("/account-recovery/rules/:id/test", h.AccountRecovery.TestRun)
+		// 账号回收 - 对账看板
+		admin.GET("/account-recovery/reconciliation", h.AccountRecovery.ListReconciliation)
+		admin.GET("/account-recovery/reconciliation/stats", h.AccountRecovery.ReconciliationStats)
+		admin.POST("/account-recovery/reconciliation/run", h.AccountRecovery.RunReconciliation)
+		admin.POST("/account-recovery/reconciliation/batch-cleanup", h.AccountRecovery.BatchCleanup)
+		admin.POST("/account-recovery/reconciliation/batch-disable", h.AccountRecovery.BatchDisableUser)
+		admin.POST("/account-recovery/reconciliation/batch-delete", h.AccountRecovery.BatchDeleteUser)
+		// 账号回收 - 日志
+		admin.GET("/account-recovery/logs", h.AccountRecovery.ListLogs)
+		admin.GET("/account-recovery/logs/:id", h.AccountRecovery.GetLog)
+		admin.GET("/account-recovery/logs/retention", h.AccountRecovery.GetRetentionConfig)
+		admin.POST("/account-recovery/logs/retention", h.AccountRecovery.SetRetentionConfig)
+		admin.POST("/account-recovery/logs/cleanup", h.AccountRecovery.CleanupLogs)
 	}
 
 	return r
