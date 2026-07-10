@@ -1,4 +1,5 @@
 FROM alpine:latest
+RUN apk add --no-cache go
 WORKDIR /app
 COPY release/build/backend/sso-server /app/sso-server
 COPY sso-server/configs /app/configs
