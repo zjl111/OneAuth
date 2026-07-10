@@ -1,4 +1,6 @@
-import { Form, Input, Select, Radio, InputNumber, Switch, Tag, Collapse } from 'antd';
+import { Form, Input, Select, Radio, InputNumber, Switch, Tag, Collapse, Tooltip } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
+import RedirectUriList from './RedirectUriList';
 
 export default function Step2OAuth2OIDC({ isOIDC, hasOpenId }: { isOIDC: boolean; hasOpenId: boolean }) {
   return (
@@ -13,17 +15,17 @@ export default function Step2OAuth2OIDC({ isOIDC, hasOpenId }: { isOIDC: boolean
     >
       <Form.Item
         name="redirect_uris"
-        label="回调地址"
-        tooltip="多个回调地址换行分隔，格式如 https://app.example.com/callback"
-        rules={[{ required: true, message: '请填写至少一个回调地址' }]}
-        getValueFromEvent={(e) =>
-          typeof e?.target?.value === 'string'
-            ? e.target.value.split('\n').map((s: string) => s.trim()).filter(Boolean)
-            : e
+        label={
+          <span>
+            回调地址
+            <Tooltip title="每行一个回调地址；填写 * 表示允许任意地址（仅开发环境推荐）" placement="top">
+              <InfoCircleOutlined style={{ marginLeft: 6, color: '#94a3b8', cursor: 'help' }} />
+            </Tooltip>
+          </span>
         }
-        getValueProps={(v) => ({ value: Array.isArray(v) ? v.join('\n') : v })}
+        rules={[{ required: true, message: '请填写至少一个回调地址' }]}
       >
-        <Input.TextArea rows={4} placeholder="https://app.example.com/callback" />
+        <RedirectUriList />
       </Form.Item>
 
       <Form.Item name="grant_types" label="授权方式" rules={[{ required: true }]}>

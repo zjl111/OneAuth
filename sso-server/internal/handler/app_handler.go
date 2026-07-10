@@ -160,6 +160,15 @@ func (h *AppHandler) ToggleStatus(c *gin.Context) {
 	response.OK(c, updated)
 }
 
+func (h *AppHandler) Categories(c *gin.Context) {
+	cats, err := h.Service.Categories()
+	if err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	response.OK(c, cats)
+}
+
 func (h *AppHandler) BatchSort(c *gin.Context) {
 	var req struct {
 		Items []struct {

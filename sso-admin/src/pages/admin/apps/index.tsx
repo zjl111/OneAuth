@@ -71,6 +71,7 @@ export default function AppListPage() {
   const [batchUpdateOpen, setBatchUpdateOpen] = useState(false);
   const [batchUpdateSubmitting, setBatchUpdateSubmitting] = useState(false);
   const [localCategories, setLocalCategories] = useState<string[]>([]);
+  const [serverCategories, setServerCategories] = useState<string[]>([]);
   const [batchCategoryModalOpen, setBatchCategoryModalOpen] = useState(false);
   const [batchCategoryDraft, setBatchCategoryDraft] = useState('');
 
@@ -95,6 +96,7 @@ export default function AppListPage() {
           }
           setSelectedIds([]);
           load();
+          loadCategories();
         } catch (e: any) {
           message.error(e?.response?.data?.message || '批量删除失败');
         }
@@ -129,6 +131,7 @@ export default function AppListPage() {
         setSelectedIds([]);
         batchForm.resetFields();
         load();
+        loadCategories();
       } catch (e: any) {
         message.error(e?.response?.data?.message || '批量操作失败');
       } finally {
@@ -150,12 +153,12 @@ export default function AppListPage() {
   const [handoffDiscovery, setHandoffDiscovery] = useState<Record<string, any> | null>(null);
   const categoryOptions = useMemo(() => {
     const items = new Set<string>();
-    [...data, ...localCategories.map((category) => ({ category }))].forEach((item) => {
-      const v = String(item.category || '').trim();
-      if (v) items.add(v);
+    [...serverCategories, ...localCategories].forEach((v) => {
+      const trimmed = String(v || '').trim();
+      if (trimmed) items.add(trimmed);
     });
     return Array.from(items).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  }, [data, localCategories]);
+  }, [serverCategories, localCategories]);
 
   const createBatchCategory = () => {
     const value = batchCategoryDraft.trim();
@@ -191,8 +194,13 @@ export default function AppListPage() {
       .finally(() => setLoading(false));
   };
 
+  const loadCategories = () => {
+    appsApi.categories().then((cats) => setServerCategories(cats || [])).catch(() => {});
+  };
+
   useEffect(() => {
     load();
+    loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current, pagination.pageSize]);
 
@@ -328,12 +336,14 @@ export default function AppListPage() {
       const r = await appsApi.update(editing.id, values);
       message.success('已更新');
       load();
+      loadCategories();
       return r;
     }
     const r = await appsApi.create(values);
     message.success(isDuplicate ? '已复制并创建' : '已创建');
     setIsDuplicate(false);
     load();
+    loadCategories();
     return r;
   };
 
@@ -432,6 +442,7 @@ export default function AppListPage() {
               await appsApi.delete(r.id);
               message.success('已删除');
               load();
+              loadCategories();
             } catch (e: any) {
               message.error(e?.response?.data?.message || '删除失败');
             }

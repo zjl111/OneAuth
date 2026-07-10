@@ -213,6 +213,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 
 		// 应用管理
 		admin.GET("/apps", h.App.List)
+		admin.GET("/apps/categories", h.App.Categories)
 		admin.POST("/apps", h.App.Create)
 		admin.GET("/apps/:id", h.App.Detail)
 		admin.PUT("/apps/:id", h.App.Update)

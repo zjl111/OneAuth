@@ -249,7 +249,9 @@ export default function AppWizard({
     };
     if (backendProtocol === 'oauth2' || backendProtocol === 'oidc') {
       Object.assign(base, {
-        redirect_uris: v.redirect_uris || [],
+        redirect_uris: Array.isArray(v.redirect_uris)
+          ? v.redirect_uris.filter((s: string) => s.trim())
+          : [],
         grant_types: v.grant_types || [],
         subject_type: v.subject_type,
         scope: (v.scope || []).join(' '),

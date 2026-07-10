@@ -93,4 +93,5 @@ export const appsApi = {
   rotateSecret: (id: string) => post<{ client_secret: string }>(`/apps/${id}/rotate-secret`),
   toggleStatus: (id: string) => post<OAuth2Client>(`/apps/${id}/toggle-status`),
   batchSort: (items: Array<{ id: string; sort_order: number }>) => post('/apps/sort', { items }),
+  categories: () => get<string[]>('/apps/categories'),
 };

@@ -89,6 +89,17 @@ func (r *ClientRepository) ListAll() ([]model.OAuth2Client, error) {
 	return items, nil
 }
 
+// DistinctCategories 返回所有非空分类（去重、排序）
+func (r *ClientRepository) DistinctCategories() ([]string, error) {
+	var categories []string
+	err := r.db.Model(&model.OAuth2Client{}).
+		Where("category IS NOT NULL AND category != ''").
+		Distinct("category").
+		Order("category ASC").
+		Pluck("category", &categories).Error
+	return categories, err
+}
+
 // SortItem 批量排序用的 id + sort_order 对
 type SortItem struct {
 	ID        uuid.UUID

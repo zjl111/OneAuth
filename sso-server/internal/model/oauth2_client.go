@@ -106,6 +106,12 @@ func (c *OAuth2Client) CheckSecret(secret string) bool {
 }
 
 func (c *OAuth2Client) CheckRedirectURI(uri string) bool {
+	// 通配符：任意一个条目为 "*" 则放行所有地址
+	for _, u := range c.RedirectURIs {
+		if u == "*" {
+			return true
+		}
+	}
 	// 规范化：去掉末尾无意义的 '?' 和 '/'（部分第三方应用会自动追加）
 	// 必须保持精确匹配语义，因为 token 端点也会用原始 redirect_uri 做校验
 	normalize := func(s string) string {

@@ -301,7 +301,8 @@ SELECT COUNT(*) FROM (
 
 func (r *LogRepository) CountLoginsToday() (int64, error) {
 	var c int64
-	today := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	err := r.db.Model(&model.LoginLog{}).
 		Where("created_at >= ? AND status = ?", today, "success").
 		Count(&c).Error
@@ -413,32 +414,32 @@ func (r *LogRepository) TrafficTrendByRange(rangeParam string) ([]TrafficPoint, 
 	}
 }
 
-// trafficTrendHourly 按小时聚合最近 24 小时
+// trafficTrendHourly 按小时聚合今日 00:00 ~ 23:00
 func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error) {
-	cutoff := now.Add(-24 * time.Hour)
+	loc := now.Location()
+	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc) // 今日 00:00 本地时间
 
 	type timeCount struct{ CreatedAt time.Time }
 	var loginRows []timeCount
 	r.db.Model(&model.LoginLog{}).Select("created_at").
-		Where("created_at >= ? AND status = ?", cutoff, "success").Scan(&loginRows)
+		Where("created_at >= ? AND status = ?", todayMidnight, "success").Scan(&loginRows)
 	var accessRows []timeCount
 	r.db.Model(&model.AccessLog{}).Select("created_at").
-		Where("created_at >= ?", cutoff).Scan(&accessRows)
+		Where("created_at >= ?", todayMidnight).Scan(&accessRows)
 
 	loginMap := make(map[string]int64)
 	for _, row := range loginRows {
-		loginMap[row.CreatedAt.Format("15:04")]++
+		loginMap[row.CreatedAt.In(loc).Format("15:00")]++
 	}
 	accessMap := make(map[string]int64)
 	for _, row := range accessRows {
-		accessMap[row.CreatedAt.Format("15:04")]++
+		accessMap[row.CreatedAt.In(loc).Format("15:00")]++
 	}
 
 	out := make([]TrafficPoint, 0, 24)
-	currentHour := now.Truncate(time.Hour)
-	for i := 23; i >= 0; i-- {
-		h := currentHour.Add(-time.Duration(i) * time.Hour)
-		key := h.Format("15:04")
+	for i := 0; i < 24; i++ {
+		h := todayMidnight.Add(time.Duration(i) * time.Hour)
+		key := h.Format("15:00")
 		out = append(out, TrafficPoint{Label: key, LoginCount: loginMap[key], AccessCount: accessMap[key]})
 	}
 	return out, nil
@@ -446,7 +447,9 @@ func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error
 
 // trafficTrendDaily 按天聚合最近 N 天
 func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoint, error) {
-	cutoff := now.AddDate(0, 0, -days+1).Truncate(24 * time.Hour)
+	loc := now.Location()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	cutoff := today.AddDate(0, 0, -days+1)
 
 	type timeCount struct{ CreatedAt time.Time }
 	var loginRows []timeCount
@@ -458,15 +461,14 @@ func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoi
 
 	loginMap := make(map[string]int64)
 	for _, row := range loginRows {
-		loginMap[row.CreatedAt.Format("01-02")]++
+		loginMap[row.CreatedAt.In(loc).Format("01-02")]++
 	}
 	accessMap := make(map[string]int64)
 	for _, row := range accessRows {
-		accessMap[row.CreatedAt.Format("01-02")]++
+		accessMap[row.CreatedAt.In(loc).Format("01-02")]++
 	}
 
 	out := make([]TrafficPoint, 0, days)
-	today := now.Truncate(24 * time.Hour)
 	for i := days - 1; i >= 0; i-- {
 		d := today.AddDate(0, 0, -i)
 		key := d.Format("01-02")

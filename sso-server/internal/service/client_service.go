@@ -548,6 +548,10 @@ func (s *ClientService) ListAll() ([]model.OAuth2Client, error) {
 	return s.repo.ListAll()
 }
 
+func (s *ClientService) Categories() ([]string, error) {
+	return s.repo.DistinctCategories()
+}
+
 func (s *ClientService) UpdateSortOrders(items []repository.SortItem) error {
 	return s.repo.UpdateSortOrders(items)
 }
