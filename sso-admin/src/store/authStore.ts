@@ -17,6 +17,59 @@ import { redirectToLogin } from '@/utils/redirect';
 
 const sessionOnlyStorage = createJSONStorage(() => sessionStorage);
 
+// ---------- 主动刷新 access_token ----------
+// 在 access_token 过期前 5 分钟自动 refresh，避免 token 过期后才走 401 → refresh 的被动流程。
+// 这也能防止浏览器标签被系统挂起后恢复时 token 已过期的竞态问题。
+const REFRESH_BUFFER_SEC = 5 * 60; // 提前 5 分钟刷新
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearRefreshTimer() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+/** 根据 access_token 的 exp 安排一次主动刷新 */
+function scheduleProactiveRefresh(accessToken: string | null) {
+  clearRefreshTimer();
+  if (!accessToken) return;
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload?.exp) return;
+  const now = Math.floor(Date.now() / 1000);
+  const delaySec = payload.exp - now - REFRESH_BUFFER_SEC;
+  if (delaySec <= 0) {
+    // 已经快到需要刷新了，立即刷
+    doProactiveRefresh();
+    return;
+  }
+  refreshTimer = setTimeout(doProactiveRefresh, delaySec * 1000);
+}
+
+async function doProactiveRefresh() {
+  const { refreshToken, refresh: doRefresh } = useAuthStore.getState();
+  if (!refreshToken) return;
+  try {
+    const newAT = await doRefresh();
+    if (newAT) {
+      // refresh 成功后 state 已更新，继续安排下一次
+      scheduleProactiveRefresh(newAT);
+    }
+  } catch {
+    // 刷新失败：不处理，等 401 拦截器兜底
+  }
+}
+
+function decodeJwtPayload(token: string): { exp?: number; [key: string]: unknown } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+  } catch {
+    return null;
+  }
+}
+
 interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
@@ -60,6 +113,7 @@ export const useAuthStore = create<AuthState>()(
           permissions: data.permissions || [],
           isAuthenticated: true,
         });
+        scheduleProactiveRefresh(data.access_token);
         // 兜底同步一次 SSO session cookie，避免浏览器偶发没有接住登录响应里的 Set-Cookie。
         await authApi.syncSsoSession().catch(() => null);
         return data.user;
@@ -80,6 +134,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const r = await authApi.refresh(rt);
           set({ accessToken: r.access_token, refreshToken: r.refresh_token });
+          scheduleProactiveRefresh(r.access_token);
           return r.access_token;
         } catch (e) {
           return null;
@@ -101,6 +156,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clear: () => {
+        clearRefreshTimer();
         set({
           accessToken: null,
           refreshToken: null,
@@ -124,14 +180,44 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // 有 accessToken 且已过期 → 清除登录态，跳转登录页
+          // 有 accessToken 且已过期 → 尝试用 refresh_token 续命，失败才清除
           if (state.accessToken && isTokenExpired(state.accessToken)) {
+            if (state.refreshToken) {
+              // 异步尝试刷新，不阻塞 rehydrate
+              const rt = state.refreshToken;
+              authApi
+                .refresh(rt)
+                .then((r) => {
+                  useAuthStore.setState({
+                    accessToken: r.access_token,
+                    refreshToken: r.refresh_token,
+                    isAuthenticated: true,
+                  });
+                  scheduleProactiveRefresh(r.access_token);
+                })
+                .catch(() => {
+                  // 刷新失败：清除登录态
+                  useAuthStore.getState().clear();
+                  const onPublicPage =
+                    location.pathname === '/' ||
+                    location.pathname.startsWith('/oauth/login') ||
+                    location.pathname.startsWith('/oauth/forgot-password') ||
+                    location.pathname.startsWith('/oauth/reset-password') ||
+                    location.pathname.startsWith('/status');
+                  if (!onPublicPage) {
+                    redirectToLogin(location.pathname + location.search);
+                  }
+                });
+              // 先保留当前 state，等异步刷新结果回来再更新
+              state.isAuthenticated = authed(state);
+              return;
+            }
+            // 没有 refresh_token：直接清除
             state.accessToken = null;
             state.refreshToken = null;
             state.user = null;
             state.permissions = [];
             state.isAuthenticated = false;
-            // 不在公共页时才跳转，避免循环
             const onPublicPage =
               location.pathname === '/' ||
               location.pathname.startsWith('/oauth/login') ||
@@ -144,6 +230,10 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
           state.isAuthenticated = authed(state);
+          // 页面加载时如果有有效 token，安排主动刷新
+          if (state.accessToken) {
+            scheduleProactiveRefresh(state.accessToken);
+          }
         }
       },
     }

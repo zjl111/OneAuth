@@ -387,7 +387,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.setSSOCookie(c, sd)
 	log.Printf("[session-debug] login: set cookie %s=%s (secure=%v, path=/)", session.CookieName, sd.SessionID, isHTTPSRequest(c))
 
-	access, _ := h.TokenService.IssueAccessToken(user.Username, user.ID.String(), AdminClientID, user.Username, AdminDefaultScope, 0)
+	access, _ := h.TokenService.IssueAccessToken(user.Username, user.ID.String(), AdminClientID, user.Username, AdminDefaultScope, h.SessionMgr.TTL())
 	refresh, err := h.TokenService.SaveRefreshToken(c.Request.Context(), user.ID.String(), AdminClientID, AdminDefaultScope, 0)
 	if err != nil {
 		response.ServerError(c, "签发刷新令牌失败")
@@ -452,7 +452,12 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		}
 	}
 	_ = h.TokenService.DeleteRefreshToken(c.Request.Context(), req.RefreshToken)
-	access, _ := h.TokenService.IssueAccessToken(user.Username, rt.UserID, rt.ClientID, user.Username, rt.Scope, 0)
+	// 管理后台（第一方）用会话级长 token；第三方客户端保持标准短 token
+	var tokenTTL time.Duration
+	if rt.ClientID == AdminClientID {
+		tokenTTL = h.SessionMgr.TTL()
+	}
+	access, _ := h.TokenService.IssueAccessToken(user.Username, rt.UserID, rt.ClientID, user.Username, rt.Scope, tokenTTL)
 	newRT, err := h.TokenService.SaveRefreshToken(c.Request.Context(), rt.UserID, rt.ClientID, rt.Scope, 0)
 	if err != nil {
 		response.ServerError(c, "签发刷新令牌失败")

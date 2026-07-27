@@ -301,8 +301,9 @@ SELECT COUNT(*) FROM (
 
 func (r *LogRepository) CountLoginsToday() (int64, error) {
 	var c int64
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	err := r.db.Model(&model.LoginLog{}).
 		Where("created_at >= ? AND status = ?", today, "success").
 		Count(&c).Error
@@ -316,7 +317,9 @@ type DailyLoginCount struct {
 
 func (r *LogRepository) LoginTrend(days int) ([]DailyLoginCount, error) {
 	results := []DailyLoginCount{}
-	start := time.Now().AddDate(0, 0, -days+1).Truncate(24 * time.Hour)
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -days+1)
 	rows, err := r.db.Model(&model.LoginLog{}).
 		Where("created_at >= ? AND status = ?", start, "success").
 		Select("date(created_at) as date, COUNT(*) as count").
@@ -414,10 +417,11 @@ func (r *LogRepository) TrafficTrendByRange(rangeParam string) ([]TrafficPoint, 
 	}
 }
 
-// trafficTrendHourly 按小时聚合今日 00:00 ~ 23:00
+// trafficTrendHourly 按小时聚合今日 00:00 ~ 23:00（北京时间）
 func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error) {
-	loc := now.Location()
-	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc) // 今日 00:00 本地时间
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now = now.In(loc)
+	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	type timeCount struct{ CreatedAt time.Time }
 	var loginRows []timeCount
@@ -445,9 +449,10 @@ func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error
 	return out, nil
 }
 
-// trafficTrendDaily 按天聚合最近 N 天
+// trafficTrendDaily 按天聚合最近 N 天（北京时间）
 func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoint, error) {
-	loc := now.Location()
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now = now.In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	cutoff := today.AddDate(0, 0, -days+1)
 
