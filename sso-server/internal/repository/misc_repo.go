@@ -40,6 +40,23 @@ func (r *DepartmentRepository) Get(id uuid.UUID) (*model.Department, error) {
 	return &d, nil
 }
 
+// GetChildIDs 递归获取部门及其所有子部门的 ID 列表
+func (r *DepartmentRepository) GetChildIDs(deptID uuid.UUID) ([]uuid.UUID, error) {
+	ids := []uuid.UUID{deptID}
+	var children []model.Department
+	if err := r.db.Where("parent_id = ?", deptID).Find(&children).Error; err != nil {
+		return nil, err
+	}
+	for _, child := range children {
+		childIDs, err := r.GetChildIDs(child.ID)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, childIDs...)
+	}
+	return ids, nil
+}
+
 // RoleRepository ---------------------------------------
 type RoleRepository struct{ db *gorm.DB }
 

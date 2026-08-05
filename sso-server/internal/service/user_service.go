@@ -209,6 +209,7 @@ type UpdateUserInput struct {
 	DepartmentID  *uuid.UUID  `json:"department_id"`
 	IsActive      *bool       `json:"is_active"`
 	RoleIDs       []uuid.UUID `json:"role_ids"`
+	GroupIDs      []uuid.UUID `json:"group_ids"`
 }
 
 func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, error) {
@@ -282,6 +283,9 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 	}
 	if in.RoleIDs != nil {
 		s.repo.SetRoles(u.ID, in.RoleIDs)
+	}
+	if in.GroupIDs != nil {
+		s.repo.SetGroups(u.ID, in.GroupIDs)
 	}
 	return s.repo.GetByID(u.ID)
 }

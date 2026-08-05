@@ -182,6 +182,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.POST("/users/:id/reset-password", h.User.ResetPassword)
 		admin.POST("/users/:id/lock", h.User.Lock)
 		admin.PUT("/users/:id/roles", h.User.SetRoles)
+		admin.PUT("/users/:id/groups", h.User.SetGroups)
 		admin.POST("/users/:id/avatar", h.User.UploadAvatar)
 		// 批量导入：上传 csv/xlsx
 		admin.POST("/users/import", h.User.ImportUsers)

@@ -24,6 +24,8 @@ import (
 type UserHandler struct {
 	Service       *service.UserService
 	ImportService *service.UserImportService
+	DeptRepo      *repository.DepartmentRepository
+	RoleRepo      *repository.RoleRepository
 }
 
 func (h *UserHandler) List(c *gin.Context) {
@@ -40,7 +42,17 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 	if v := c.Query("department_id"); v != "" {
 		if id, err := uuid.Parse(v); err == nil {
-			q.DepartmentID = &id
+			// 获取该部门及所有子部门的 ID
+			if h.DeptRepo != nil {
+				allIDs, err := h.DeptRepo.GetChildIDs(id)
+				if err != nil {
+					response.ServerError(c, "获取部门列表失败")
+					return
+				}
+				q.DepartmentIDs = allIDs
+			} else {
+				q.DepartmentID = &id
+			}
 		}
 	}
 	if v := c.Query("department_ids"); v != "" {
@@ -56,6 +68,28 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 	if v := c.Query("keyword"); v != "" {
 		q.Keyword = v
+	}
+	if v := c.Query("role_id"); v != "" {
+		if id, err := uuid.Parse(v); err == nil {
+			q.RoleID = &id
+			// 查找角色 code，用于特殊处理"普通用户"
+			if h.RoleRepo != nil {
+				if role, err := h.RoleRepo.Get(id); err == nil {
+					q.RoleCode = role.Code
+				}
+			}
+		}
+	}
+	if v := c.Query("group_id"); v != "" {
+		if id, err := uuid.Parse(v); err == nil {
+			q.GroupID = &id
+		}
+	}
+	if v := c.Query("status"); v != "" {
+		q.Status = v
+	}
+	if v := c.Query("ordering"); v != "" {
+		q.Ordering = v
 	}
 	items, total, err := h.Service.List(q)
 	if err != nil {
@@ -239,6 +273,28 @@ func (h *UserHandler) SetRoles(c *gin.Context) {
 		return
 	}
 	in := service.UpdateUserInput{RoleIDs: req.RoleIDs}
+	u, err := h.Service.Update(id, in)
+	if err != nil {
+		response.ServerError(c, err.Error())
+		return
+	}
+	response.OK(c, u)
+}
+
+// SetGroups PUT /api/v1/users/:id/groups
+func (h *UserHandler) SetGroups(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		GroupIDs []uuid.UUID `json:"group_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误")
+		return
+	}
+	in := service.UpdateUserInput{GroupIDs: req.GroupIDs}
 	u, err := h.Service.Update(id, in)
 	if err != nil {
 		response.ServerError(c, err.Error())

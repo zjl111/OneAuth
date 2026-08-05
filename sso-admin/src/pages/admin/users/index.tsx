@@ -17,6 +17,7 @@ import {
   Tooltip,
   App as AntdApp,
   Tag,
+  Popover,
 } from 'antd';
 import {
   PlusOutlined,
@@ -36,11 +37,12 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   WarningOutlined,
+  FilterOutlined,
 } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import './users.css';
 import { usersApi, type User, type ImportUsersResult, type ImportExisting } from '@/api/users';
-import { orgApi, roleApi, type Department, type Role } from '@/api/misc';
+import { orgApi, roleApi, userGroupApi, type Department, type Role, type UserGroup } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
 import UserAvatar from '@/components/UserAvatar';
 import { useAuthStore } from '@/store/authStore';
@@ -120,6 +122,22 @@ export default function UserListPage() {
 
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
+
+  // 筛选状态
+  const [filterDeptId, setFilterDeptId] = useState<string | undefined>(undefined);
+  const [filterRoleId, setFilterRoleId] = useState<string | undefined>(undefined);
+  const [filterGroupId, setFilterGroupId] = useState<string | undefined>(undefined);
+  const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
+
+  // 排序状态
+  const [sortField, setSortField] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'ascend' | 'descend' | null>(null);
+
+  // 批量修改状态
+  const [batchEditOpen, setBatchEditOpen] = useState(false);
+  const [batchEditForm] = Form.useForm();
+  const [batchEditing, setBatchEditing] = useState(false);
 
 
   const toDeptTreeData = (list: Department[]): any[] =>
@@ -132,12 +150,21 @@ export default function UserListPage() {
 
   const load = () => {
     setLoading(true);
+    const params: Record<string, unknown> = {
+      page: pagination.current,
+      page_size: pagination.pageSize,
+      keyword,
+    };
+    if (filterDeptId) params.department_id = filterDeptId;
+    if (filterRoleId) params.role_id = filterRoleId;
+    if (filterGroupId) params.group_id = filterGroupId;
+    if (filterStatus) params.status = filterStatus;
+    if (sortField && sortOrder) {
+      const order = sortOrder === 'ascend' ? '' : '-';
+      params.ordering = order + sortField;
+    }
     usersApi
-      .list({
-        page: pagination.current,
-        page_size: pagination.pageSize,
-        keyword,
-      })
+      .list(params)
       .then((d) => {
         setData(d.items || []);
         setTotal(d.total);
@@ -148,11 +175,12 @@ export default function UserListPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, pagination.pageSize]);
+  }, [pagination.current, pagination.pageSize, filterDeptId, filterRoleId, filterGroupId, filterStatus, sortField, sortOrder]);
 
   useEffect(() => {
     orgApi.tree().then(setDepts);
     roleApi.list().then(setRoles);
+    userGroupApi.list().then(setUserGroups);
   }, []);
 
   const openCreate = () => {
@@ -172,6 +200,7 @@ export default function UserListPage() {
       is_admin: !!superAdminRoleID && userRoles.some((r) => r.id === superAdminRoleID),
       // 锁定用户的状态开关显示为关闭，开启开关等同于解锁
       is_active: u.is_locked ? false : u.is_active,
+      group_ids: (u.groups || []).map((g) => g.id),
     });
     setAvatarUrl(u.avatar || '');
     setModalOpen(true);
@@ -183,6 +212,9 @@ export default function UserListPage() {
     const payload: any = { ...values };
     delete payload.is_admin;
     payload.role_ids = values.is_admin && superAdminRoleID ? [superAdminRoleID] : [];
+    // group_ids 走单独的 setGroups 接口，不进 create/update payload
+    const groupIds: string[] | undefined = payload.group_ids;
+    delete payload.group_ids;
     // Select allowClear 清空后 form 给的是 undefined → JSON 里直接缺字段 → 后端
     // *DepartmentID == nil 跳过更新。改用全零 UUID 当哨兵，后端识别后真清空。
     if (editing && payload.department_id === undefined) {
@@ -195,9 +227,15 @@ export default function UserListPage() {
           await usersApi.lock(editing.id, false);
         }
         await usersApi.update(editing.id, payload);
+        if (groupIds !== undefined) {
+          await usersApi.setGroups(editing.id, groupIds);
+        }
         message.success('已更新');
       } else {
-        await usersApi.create(payload);
+        const created = await usersApi.create(payload);
+        if (groupIds && groupIds.length > 0) {
+          await usersApi.setGroups(created.id, groupIds);
+        }
         message.success('已创建');
       }
       setModalOpen(false);
@@ -512,6 +550,83 @@ export default function UserListPage() {
           onClear={() => { setKeyword(''); load(); }}
           style={{ width: 280 }}
         />
+        <Popover
+          content={
+            <div style={{ width: 280 }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 6, fontSize: 12, color: '#8c8c8c' }}>部门</div>
+                <TreeSelect
+                  placeholder="选择部门"
+                  allowClear
+                  value={filterDeptId}
+                  onChange={(v) => setFilterDeptId(v)}
+                  treeData={toDeptTreeData(depts)}
+                  style={{ width: '100%' }}
+                  treeNodeFilterProp="title"
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 6, fontSize: 12, color: '#8c8c8c' }}>角色</div>
+                <Select
+                  placeholder="选择角色"
+                  allowClear
+                  value={filterRoleId}
+                  onChange={(v) => setFilterRoleId(v)}
+                  style={{ width: '100%' }}
+                  options={roles.map((r) => ({ label: r.name, value: r.id }))}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 6, fontSize: 12, color: '#8c8c8c' }}>用户组</div>
+                <Select
+                  placeholder="选择用户组"
+                  allowClear
+                  value={filterGroupId}
+                  onChange={(v) => setFilterGroupId(v)}
+                  style={{ width: '100%' }}
+                  options={userGroups.map((g) => ({ label: g.name, value: g.id }))}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 6, fontSize: 12, color: '#8c8c8c' }}>状态</div>
+                <Select
+                  placeholder="选择状态"
+                  allowClear
+                  value={filterStatus}
+                  onChange={(v) => setFilterStatus(v)}
+                  style={{ width: '100%' }}
+                  options={[
+                    { label: '活跃', value: 'active' },
+                    { label: '已锁定', value: 'locked' },
+                    { label: '已禁用', value: 'disabled' },
+                  ]}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setFilterDeptId(undefined);
+                    setFilterRoleId(undefined);
+                    setFilterGroupId(undefined);
+                    setFilterStatus(undefined);
+                  }}
+                >
+                  重置
+                </Button>
+                <Button size="small" type="primary" onClick={() => { load(); }}>
+                  应用筛选
+                </Button>
+              </div>
+            </div>
+          }
+          trigger="click"
+          placement="bottomLeft"
+        >
+          <Button icon={<FilterOutlined />} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
+            筛选
+          </Button>
+        </Popover>
         <Button icon={<ReloadOutlined />} onClick={load} style={{ borderColor: '#e5e7eb', color: '#6b7280' }}>
           刷新
         </Button>
@@ -524,6 +639,16 @@ export default function UserListPage() {
           onClick={handleBatchDelete}
         >
           批量删除{selectedRowKeys.length > 0 ? `（${selectedRowKeys.length}）` : ''}
+        </Button>
+        <Button
+          disabled={selectedRowKeys.length === 0}
+          onClick={() => {
+            batchEditForm.resetFields();
+            setBatchEditOpen(true);
+          }}
+          style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
+        >
+          批量修改{selectedRowKeys.length > 0 ? `（${selectedRowKeys.length}）` : ''}
         </Button>
         <Button
           type="primary"
@@ -553,9 +678,18 @@ export default function UserListPage() {
           showTotal: (t) => `共 ${t} 条`,
           onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
         }}
+        onChange={(pagination, filters, sorter) => {
+          if ('field' in sorter && sorter.field) {
+            setSortField(sorter.field as string);
+            setSortOrder(sorter.order || null);
+          } else {
+            setSortField('');
+            setSortOrder(null);
+          }
+        }}
         columns={[
-          { title: '登录账号', dataIndex: 'username', width: 140 },
-          { title: '姓名', dataIndex: 'nickname', width: 140 },
+          { title: '登录账号', dataIndex: 'username', width: 140, sorter: true },
+          { title: '姓名', dataIndex: 'nickname', width: 140, sorter: true },
           { title: '邮箱', dataIndex: 'email', width: 200, render: (v) => v || '-' },
           {
             title: '部门',
@@ -839,6 +973,18 @@ export default function UserListPage() {
                 </Form.Item>
               </div>
 
+              {/* Row 3b: 用户组 (full width) */}
+              <div className="grid-cell grid-cell-full">
+                <Form.Item name="group_ids" label="用户组">
+                  <Select
+                    mode="multiple"
+                    placeholder="选择用户组（可多选）"
+                    options={userGroups.map((g) => ({ label: g.name, value: g.id }))}
+                    getPopupContainer={() => document.body}
+                  />
+                </Form.Item>
+              </div>
+
               {/* Row 4: 用户类型 | 状态 */}
               <div className="grid-cell">
                 <Form.Item name="user_type" label="用户类型" rules={[{ required: true }]}>
@@ -1118,6 +1264,61 @@ export default function UserListPage() {
           )}
         </div>
       </Drawer>
+
+      {/* 批量修改弹窗 */}
+      <Modal
+        title={`批量修改用户（${selectedRowKeys.length}）`}
+        open={batchEditOpen}
+        onCancel={() => setBatchEditOpen(false)}
+        onOk={() => {
+          batchEditForm.validateFields().then(async (values) => {
+            setBatchEditing(true);
+            try {
+              const promises: Promise<unknown>[] = [];
+              if (values.group_ids) {
+                promises.push(...selectedRowKeys.map((id) =>
+                  usersApi.setGroups(id, values.group_ids)
+                ));
+              }
+              if (values.is_active !== undefined) {
+                promises.push(...selectedRowKeys.map((id) =>
+                  usersApi.lock(id, !values.is_active)
+                ));
+              }
+              await Promise.all(promises);
+              message.success('批量修改成功');
+              setBatchEditOpen(false);
+              load();
+            } catch (e: any) {
+              message.error(e?.response?.data?.message || '批量修改失败');
+            } finally {
+              setBatchEditing(false);
+            }
+          });
+        }}
+        confirmLoading={batchEditing}
+        width={480}
+      >
+        <Form form={batchEditForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item name="group_ids" label="设置用户组">
+            <Select
+              mode="multiple"
+              placeholder="选择用户组（不选则不修改）"
+              options={userGroups.map((g) => ({ label: g.name, value: g.id }))}
+            />
+          </Form.Item>
+          <Form.Item name="is_active" label="设置状态">
+            <Select
+              placeholder="选择状态（不选则不修改）"
+              allowClear
+              options={[
+                { label: '启用', value: true },
+                { label: '禁用', value: false },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       </Card>
     </>

@@ -253,6 +253,8 @@ func main() {
 		User: &handler.UserHandler{
 			Service:       userService,
 			ImportService: service.NewUserImportService(userService, deptRepo, roleRepo, userGroupRepo),
+			DeptRepo:      deptRepo,
+			RoleRepo:      roleRepo,
 		},
 		App: &handler.AppHandler{Service: clientService},
 		Dashboard: &handler.DashboardHandler{

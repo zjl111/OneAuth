@@ -62,6 +62,7 @@ export const usersApi = {
     post(`/users/${id}/reset-password`, { new_password }),
   lock: (id: string, lock: boolean) => post(`/users/${id}/lock`, { lock }),
   setRoles: (id: string, role_ids: string[]) => put(`/users/${id}/roles`, { role_ids }),
+  setGroups: (id: string, group_ids: string[]) => put(`/users/${id}/groups`, { group_ids }),
   // 批量导入：multipart 上传 .csv / .xlsx；走 axios 实例自动带 Authorization
   importFile: async (file: File, mode: 'create' | 'update' = 'create'): Promise<ImportUsersResult> => {
     const fd = new FormData();

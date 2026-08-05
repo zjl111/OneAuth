@@ -72,6 +72,10 @@ type UserQuery struct {
 	DepartmentID  *uuid.UUID
 	DepartmentIDs []uuid.UUID
 	IsActive      *bool
+	RoleID        *uuid.UUID
+	RoleCode      string // 特殊处理：code="user" 表示筛选无角色的普通用户
+	GroupID       *uuid.UUID
+	Status        string // "active" | "locked" | "disabled"
 	Page          int
 	PageSize      int
 	Ordering      string
@@ -99,6 +103,27 @@ func (r *UserRepository) List(q UserQuery) ([]model.User, int64, error) {
 	}
 	if q.IsActive != nil {
 		tx = tx.Where("is_active = ?", *q.IsActive)
+	}
+	if q.RoleID != nil {
+		if q.RoleCode == "user" {
+			// 普通用户：筛选没有角色的用户
+			tx = tx.Where("NOT EXISTS (SELECT 1 FROM sso_user_roles WHERE sso_user_roles.user_id = sso_user.id)")
+		} else {
+			tx = tx.Joins("JOIN sso_user_roles ON sso_user_roles.user_id = sso_user.id").
+				Where("sso_user_roles.role_id = ?", *q.RoleID)
+		}
+	}
+	if q.GroupID != nil {
+		tx = tx.Joins("JOIN sso_user_group_members ON sso_user_group_members.user_id = sso_user.id").
+			Where("sso_user_group_members.user_group_id = ?", *q.GroupID)
+	}
+	switch q.Status {
+	case "active":
+		tx = tx.Where("is_active = ? AND is_locked = ?", true, false)
+	case "locked":
+		tx = tx.Where("is_locked = ?", true)
+	case "disabled":
+		tx = tx.Where("is_active = ?", false)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -128,6 +153,15 @@ func (r *UserRepository) SetRoles(userID uuid.UUID, roleIDs []uuid.UUID) error {
 		return err
 	}
 	return r.db.Model(user).Association("Roles").Replace(&roles)
+}
+
+func (r *UserRepository) SetGroups(userID uuid.UUID, groupIDs []uuid.UUID) error {
+	user := &model.User{ID: userID}
+	var groups []model.UserGroup
+	if err := r.db.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return err
+	}
+	return r.db.Model(user).Association("Groups").Replace(&groups)
 }
 
 func (r *UserRepository) CountActive() (int64, error) {
