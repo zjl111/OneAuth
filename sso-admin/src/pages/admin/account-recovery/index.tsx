@@ -30,7 +30,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import CodeMirror from '@uiw/react-codemirror';
-import { go } from '@codemirror/lang-go';
+import { python } from '@codemirror/lang-python';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
   accountRecoveryApi,
@@ -1131,7 +1131,7 @@ export default function AccountRecoveryPage() {
 
               {/* 脚本标签 + 示例按钮 */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontWeight: 500, fontSize: 14 }}>Go 脚本代码</span>
+                <span style={{ fontWeight: 500, fontSize: 14 }}>Python 脚本代码</span>
                 <Space size={4}>
                   <Button type="text" size="small" icon={<CopyOutlined />} onClick={copyExample} title="复制示例代码">
                     示例
@@ -1146,7 +1146,7 @@ export default function AccountRecoveryPage() {
                     value={scriptValues[tab.scriptField] || ''}
                     height="260px"
                     theme={oneDark}
-                    extensions={[go()]}
+                    extensions={[python()]}
                     onChange={(val) => {
                       setScriptValues((prev) => ({ ...prev, [tab.scriptField]: val }));
                     }}
@@ -1179,7 +1179,7 @@ export default function AccountRecoveryPage() {
               {/* 提示文字，跟随当前 Tab 切换 */}
               {scriptTab === 0 ? (
                 <div style={{ color: '#2C6AA5', fontSize: 12, marginTop: 4 }}>
-                  提示：后端 Go 程序会将返回的 JSON 数据与 SSO 数据库做 Diff 交叉对比，并在应用用户管理展现"待清理"账号。
+                  提示：后端会将返回的 JSON 数据与 SSO 数据库做 Diff 交叉对比，并在应用用户管理展现"待清理"账号。
                 </div>
               ) : (
                 <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>
@@ -1309,7 +1309,7 @@ export default function AccountRecoveryPage() {
               value={scriptValues[tab.scriptField] || ''}
               height="calc(85vh - 120px)"
               theme={oneDark}
-              extensions={[go()]}
+              extensions={[python()]}
               onChange={(val) => {
                 setScriptValues((prev) => ({ ...prev, [tab.scriptField]: val }));
               }}

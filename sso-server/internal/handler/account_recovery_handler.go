@@ -510,52 +510,16 @@ func derefOrEmpty(s *string) string {
 	return *s
 }
 
-// executeFetchScript 执行 Go 脚本获取第三方系统用户列表
+// executeFetchScript 执行 Python 脚本获取第三方系统用户列表
 // 脚本必须输出符合 StandardUserDTO 格式的 JSON 数组
-// 注意：脚本可能有调试输出（fmt.Printf），只提取 JSON 数组部分
+// 注意：脚本可能有调试输出（print），只提取 JSON 数组部分
 func executeFetchScript(script string, timeout time.Duration) (string, error) {
-	// 创建临时目录
-	tmpDir, err := os.MkdirTemp("", "recovery-script-*")
+	output, err := evalPythonScript(script, timeout, nil)
 	if err != nil {
-		return "", fmt.Errorf("创建临时目录失败: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// 写入脚本文件
-	scriptPath := filepath.Join(tmpDir, "main.go")
-	if err := os.WriteFile(scriptPath, []byte(script), 0644); err != nil {
-		return "", fmt.Errorf("写入脚本文件失败: %w", err)
-	}
-
-	// 初始化 go.mod
-	modPath := filepath.Join(tmpDir, "go.mod")
-	modContent := "module fetchscript\n\ngo 1.21\n"
-	if err := os.WriteFile(modPath, []byte(modContent), 0644); err != nil {
-		return "", fmt.Errorf("写入 go.mod 失败: %w", err)
-	}
-
-	// 创建上下文设置超时
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// 执行脚本
-	cmd := exec.CommandContext(ctx, "go", "run", ".")
-	cmd.Dir = tmpDir
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("脚本执行超时: %v", err)
-		}
-		return "", fmt.Errorf("脚本执行失败: %v, stderr: %s", err, stderr.String())
+		return "", err
 	}
 
 	// 从 stdout 中提取 JSON 数组
-	// 脚本可能有调试输出，只取 JSON 部分（以 [ 开头的行开始）
-	output := stdout.String()
 	jsonStart := strings.Index(output, "[")
 	if jsonStart == -1 {
 		return "", fmt.Errorf("脚本输出中未找到 JSON 数组，输出: %s", output)
@@ -586,31 +550,48 @@ func parseScriptResult(stdout string) (success bool, message string) {
 }
 
 func executeScript(script string, timeout time.Duration, envVars map[string]string) (string, error) {
+	return evalPythonScript(script, timeout, envVars)
+}
+
+// certifiCAPath 缓存 certifi 证书路径，启动时探测一次
+var certifiCAPath string
+
+func init() {
+	// 尝试通过 python3 -c "import certifi; print(certifi.where())" 获取证书路径
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "python3", "-c", "import certifi; print(certifi.where())").Output()
+	if err == nil {
+		p := strings.TrimSpace(string(out))
+		if p != "" {
+			certifiCAPath = p
+		}
+	}
+}
+
+// evalPythonScript 将 Python 脚本写入临时文件并用 python3 执行。
+func evalPythonScript(script string, timeout time.Duration, envVars map[string]string) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "recovery-script-*")
 	if err != nil {
 		return "", fmt.Errorf("创建临时目录失败: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	scriptPath := filepath.Join(tmpDir, "main.go")
+	scriptPath := filepath.Join(tmpDir, "script.py")
 	if err := os.WriteFile(scriptPath, []byte(script), 0644); err != nil {
 		return "", fmt.Errorf("写入脚本文件失败: %w", err)
-	}
-
-	modPath := filepath.Join(tmpDir, "go.mod")
-	modContent := "module recoveryaction\n\ngo 1.21\n"
-	if err := os.WriteFile(modPath, []byte(modContent), 0644); err != nil {
-		return "", fmt.Errorf("写入 go.mod 失败: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "run", ".")
+	cmd := exec.CommandContext(ctx, "python3", scriptPath)
 	cmd.Dir = tmpDir
-
-	// 设置环境变量
 	cmd.Env = os.Environ()
+	// 注入 SSL 证书路径，解决 macOS 本地 CERTIFICATE_VERIFY_FAILED 问题
+	if certifiCAPath != "" {
+		cmd.Env = append(cmd.Env, "SSL_CERT_FILE="+certifiCAPath)
+	}
 	for k, v := range envVars {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -621,7 +602,7 @@ func executeScript(script string, timeout time.Duration, envVars map[string]stri
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("脚本执行超时: %v", err)
+			return "", fmt.Errorf("脚本执行超时（%v）", timeout)
 		}
 		return "", fmt.Errorf("脚本执行失败: %v, stderr: %s", err, stderr.String())
 	}
@@ -675,12 +656,22 @@ func (h *AccountRecoveryHandler) BatchCleanup(c *gin.Context) {
 	var successCount, failCount int
 	var failDetails []string
 
+	// 构建 username → SSO用户ID 映射，用于正确传递 RECOVERY_USER_ID
+	ssoUserIDMap := make(map[string]string)
+	for _, record := range records {
+		if _, ok := ssoUserIDMap[record.Username]; !ok {
+			if u, err := h.UserRepo.GetByUsername(record.Username); err == nil {
+				ssoUserIDMap[record.Username] = u.ID.String()
+			}
+		}
+	}
+
 	for _, record := range records {
 		// 准备环境变量
 		envVars := map[string]string{
-			"RECOVERY_USER_ID":      record.ThirdPartyUserID,
-			"RECOVERY_USERNAME":     record.Username,
-			"RECOVERY_EMAIL":        record.Email,
+			"RECOVERY_USER_ID":        ssoUserIDMap[record.Username],
+			"RECOVERY_USERNAME":       record.Username,
+			"RECOVERY_EMAIL":          record.Email,
 			"RECOVERY_THIRD_PARTY_ID": record.ThirdPartyUserID,
 		}
 
@@ -786,9 +777,19 @@ func (h *AccountRecoveryHandler) BatchDisableUser(c *gin.Context) {
 	// 获取当前操作人
 	operator := c.GetString("username")
 
+	// 构建 username → SSO用户ID 映射
+	ssoUserIDMap := make(map[string]string)
+	for _, record := range records {
+		if _, ok := ssoUserIDMap[record.Username]; !ok {
+			if u, err := h.UserRepo.GetByUsername(record.Username); err == nil {
+				ssoUserIDMap[record.Username] = u.ID.String()
+			}
+		}
+	}
+
 	for _, record := range records {
 		envVars := map[string]string{
-			"RECOVERY_USER_ID":        record.ThirdPartyUserID,
+			"RECOVERY_USER_ID":        ssoUserIDMap[record.Username],
 			"RECOVERY_USER_IDS":       allThirdPartyIDs,
 			"RECOVERY_USERNAME":       record.Username,
 			"RECOVERY_EMAIL":          record.Email,
@@ -890,9 +891,19 @@ func (h *AccountRecoveryHandler) BatchDeleteUser(c *gin.Context) {
 	var successCount, failCount int
 	var successIDs []string
 
+	// 构建 username → SSO用户ID 映射
+	ssoUserIDMap := make(map[string]string)
+	for _, record := range records {
+		if _, ok := ssoUserIDMap[record.Username]; !ok {
+			if u, err := h.UserRepo.GetByUsername(record.Username); err == nil {
+				ssoUserIDMap[record.Username] = u.ID.String()
+			}
+		}
+	}
+
 	for _, record := range records {
 		envVars := map[string]string{
-			"RECOVERY_USER_ID":        record.ThirdPartyUserID,
+			"RECOVERY_USER_ID":        ssoUserIDMap[record.Username],
 			"RECOVERY_USER_IDS":       allThirdPartyIDs,
 			"RECOVERY_USERNAME":       record.Username,
 			"RECOVERY_EMAIL":          record.Email,
