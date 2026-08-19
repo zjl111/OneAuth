@@ -435,11 +435,11 @@ func (h *UserHandler) ImportUpdateExisting(c *gin.Context) {
 func (h *UserHandler) ImportTemplate(c *gin.Context) {
 	headers := []string{
 		"登录账号*", "姓名*", "密码*",
-		"邮箱", "手机号", "部门", "用户类型", "管理员", "用户组",
+		"邮箱", "手机号", "部门", "用户来源", "管理员", "用户组",
 	}
 	example := []string{
 		"jdoe", "张三", "",
-		"jdoe@example.com", "13800000000", "总公司", "internal", "否", "研发组,测试组",
+		"jdoe@example.com", "13800000000", "总公司", "local", "否", "研发组,测试组",
 	}
 	if c.Query("format") == "csv" {
 		c.Header("Content-Type", "text/csv; charset=utf-8")

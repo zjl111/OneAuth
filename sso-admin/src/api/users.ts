@@ -11,7 +11,7 @@ export interface User {
   gender?: string;
   employee_no?: string;
   domain_account?: string;
-  user_type?: 'internal' | 'external' | string;
+  user_source?: 'local' | 'platform' | string;
   hire_status?: 'active' | 'resigned' | string;
   sort_order?: number;
   department_id: string | null;

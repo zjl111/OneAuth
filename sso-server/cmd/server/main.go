@@ -24,6 +24,7 @@ import (
 	"sso-server/internal/router"
 	"sso-server/internal/service"
 	"sso-server/internal/session"
+	"sso-server/pkg/crypto"
 	"sso-server/pkg/mailer"
 )
 
@@ -114,11 +115,16 @@ func main() {
 	accountRecoveryRepo := repository.NewAccountRecoveryRepository(db)
 
 	// services
+	// 目录同步的 Secret 落库前加密：密钥由 app.secret_key 派生；缺失时降级为明文并告警，不阻断启动。
+	secretCipher, err := crypto.NewSecretCipher(cfg.App.SecretKey)
+	if err != nil {
+		log.Printf("WARN: app.secret_key 未配置，目录同步密钥将以明文存储: %v", err)
+	}
 	userService := service.NewUserService(userRepo, configRepo)
 	clientService := service.NewClientService(clientRepo, monitorRepo, appGrantRepo)
 	ldapService := service.NewLDAPService(configRepo, userRepo)
 	wecomService := service.NewWeComService(configRepo, userRepo)
-	directorySyncService := service.NewDirectorySyncService(configRepo, userRepo, deptRepo)
+	directorySyncService := service.NewDirectorySyncService(configRepo, userRepo, deptRepo, userGroupRepo, secretCipher, cfg.Security.DefaultPassword)
 
 	// 启动时把所有应用同步到监控表，避免内置/历史应用缺监控
 	if allClients, err := clientRepo.ListAll(); err == nil {
@@ -160,6 +166,10 @@ func main() {
 		}
 	}
 	userLockScheduler.Start(context.Background())
+
+	// 目录同步定时调度器：每日凌晨 2:00 执行完整同步，受「启用同步」开关控制
+	directorySyncScheduler := service.NewDirectorySyncScheduler(directorySyncService)
+	directorySyncScheduler.Start(context.Background())
 
 	// 日志清理：按系统配置中的保留天数，每小时清理一次
 	go func() {
@@ -352,6 +362,7 @@ func main() {
 		scheduler.Stop()
 	}
 	userLockScheduler.Stop()
+	directorySyncScheduler.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)

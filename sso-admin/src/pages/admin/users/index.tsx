@@ -71,7 +71,7 @@ interface ImportPreviewRow {
   email: string;
   phone: string;
   department: string;
-  userType: string;
+  userSource: string;
   admin: string;
   groups: string;
   status: 'pending' | 'existing' | 'error' | 'success';
@@ -87,6 +87,8 @@ function lockReasonText(reason?: string): string {
       return '登录失败次数过多，被自动锁定';
     case 'wecom_missing':
       return '企业微信同步时账号不存在，被自动锁定';
+    case 'source_missing':
+      return '同步用户的来源不存在';
     case 'manual':
       return '管理员手动锁定';
     default:
@@ -412,7 +414,7 @@ export default function UserListPage() {
       const email = getCell(row, '邮箱');
       const phone = getCell(row, '手机号');
       const department = getCell(row, '部门');
-      const userType = getCell(row, '用户类型');
+      const userSource = getCell(row, '用户来源');
       const admin = getCell(row, '管理员');
       const groups = getCell(row, '用户组');
 
@@ -430,7 +432,7 @@ export default function UserListPage() {
 
       previewRows.push({
         row: i + 1, username, nickname, password, email, phone,
-        department, userType, admin, groups, status, error,
+        department, userSource, admin, groups, status, error,
       });
     }
     return previewRows;
@@ -693,14 +695,16 @@ export default function UserListPage() {
           { title: '邮箱', dataIndex: 'email', width: 200, render: (v) => v || '-' },
           {
             title: '部门',
-            dataIndex: ['department', 'name'],
+            dataIndex: 'department',
             width: 140,
+            sorter: true,
             render: (_, r) => r.department?.name || '-',
           },
           {
             title: '用户角色',
             dataIndex: 'roles',
             width: 180,
+            sorter: true,
             render: (_, r) => {
               const roles = r.roles || [];
               if (roles.length === 0) return <span className="user-admin-no">普通用户</span>;
@@ -735,7 +739,9 @@ export default function UserListPage() {
           },
           {
             title: '状态',
+            dataIndex: 'is_locked',
             width: 100,
+            sorter: true,
             render: (_, r) =>
               r.is_locked ? (
                 <Tooltip title={lockReasonText(r.lock_reason)}>
@@ -879,7 +885,7 @@ export default function UserListPage() {
             className="user-form-compact"
             initialValues={{
               is_active: true,
-              user_type: 'internal',
+              user_source: 'local',
             }}
           >
             {/* 隐藏字段：注册 avatar 到表单，确保保存时包含头像 URL */}
@@ -889,14 +895,17 @@ export default function UserListPage() {
 
             <div className="form-grid-container">
               {/* Row 1: 登录账号 | 姓名 */}
-              {!editing && (
+              {(editing ? editing.user_source === 'platform' : true) && (
                 <div className="grid-cell">
                   <Form.Item
                     name="username"
                     label={
                       <span>
                         <span>登录账号</span>
-                        <Tooltip title="登录账号为唯一标识，创建后不可更改" placement="top">
+                        <Tooltip
+                          title={editing && editing.user_source === 'platform' ? '同步用户可在此调整登录账号以符合公司规则；修改后不会被自动同步覆盖' : '登录账号为唯一标识，创建后不可更改'}
+                          placement="top"
+                        >
                           <ExclamationCircleOutlined className="label-tip-icon" />
                         </Tooltip>
                       </span>
@@ -907,7 +916,7 @@ export default function UserListPage() {
                   </Form.Item>
                 </div>
               )}
-              <div className={`grid-cell${editing ? ' grid-cell-full' : ''}`}>
+              <div className={`grid-cell${editing && editing.user_source !== 'platform' ? ' grid-cell-full' : ''}`}>
                 <Form.Item name="nickname" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
                   <Input placeholder="请输入姓名" />
                 </Form.Item>
@@ -985,19 +994,6 @@ export default function UserListPage() {
                 </Form.Item>
               </div>
 
-              {/* Row 4: 用户类型 | 状态 */}
-              <div className="grid-cell">
-                <Form.Item name="user_type" label="用户类型" rules={[{ required: true }]}>
-                  <Select
-                    options={[
-                      { value: 'internal', label: '内部员工' },
-                      { value: 'external', label: '外部协作' },
-                    ]}
-                    suffixIcon={<span className="custom-select-arrow">▾</span>}
-                    getPopupContainer={() => document.body}
-                  />
-                </Form.Item>
-              </div>
               <div className="grid-cell">
                 <Form.Item
                   name="is_active"
@@ -1066,8 +1062,8 @@ export default function UserListPage() {
                   先下载模板填好再上传，<span style={{ color: '#f54a45' }}>*</span> 的列必填：
                 </div>
                 <ul className="import-rules-list">
-                  <li>登录账号<span style={{ color: '#f54a45' }}>*</span>、姓名<span style={{ color: '#f54a45' }}>*</span>、密码<span style={{ color: '#f54a45' }}>*</span>、邮箱<span style={{ color: '#f54a45' }}>*</span>、手机号、部门、用户类型、管理员、用户组</li>
-                  <li>部门按"名称"匹配（与系统中的部门同名）；用户类型 internal/external；管理员是/否</li>
+                  <li>登录账号<span style={{ color: '#f54a45' }}>*</span>、姓名<span style={{ color: '#f54a45' }}>*</span>、密码<span style={{ color: '#f54a45' }}>*</span>、邮箱<span style={{ color: '#f54a45' }}>*</span>、手机号、部门、管理员、用户组</li>
+                  <li>部门按"名称"匹配（与系统中的部门同名）；用户来源由系统自动标记（本地 local / 平台 platform），无需选择；管理员是/否</li>
                   <li>用户组按名称匹配，多个用逗号分隔（如"研发组,测试组"）；不存在的组会跳过并记录警告</li>
                   <li>文件 ≤ 5MB，支持 .csv 和 .xlsx</li>
                 </ul>
@@ -1156,7 +1152,7 @@ export default function UserListPage() {
                       <th>*邮箱</th>
                       <th>手机</th>
                       <th>部门</th>
-                      <th>用户类型</th>
+                      <th>用户来源</th>
                       <th>管理员</th>
                       <th>用户组</th>
                     </tr>
@@ -1188,7 +1184,7 @@ export default function UserListPage() {
                         <td>{row.email || '-'}</td>
                         <td>{row.phone || '-'}</td>
                         <td>{row.department || '-'}</td>
-                        <td>{row.userType || 'internal'}</td>
+                        <td>{row.userSource || 'local'}</td>
                         <td>{row.admin || '否'}</td>
                         <td>{row.groups || '-'}</td>
                       </tr>
@@ -1285,6 +1281,11 @@ export default function UserListPage() {
                   usersApi.lock(id, !values.is_active)
                 ));
               }
+              if (values.user_source !== undefined) {
+                promises.push(...selectedRowKeys.map((id) =>
+                  usersApi.update(id, { user_source: values.user_source })
+                ));
+              }
               await Promise.all(promises);
               message.success('批量修改成功');
               setBatchEditOpen(false);
@@ -1314,6 +1315,16 @@ export default function UserListPage() {
               options={[
                 { label: '启用', value: true },
                 { label: '禁用', value: false },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="user_source" label="设置用户来源">
+            <Select
+              placeholder="选择用户来源（不选则不修改）"
+              allowClear
+              options={[
+                { label: '本地 (local)', value: 'local' },
+                { label: '平台 (platform)', value: 'platform' },
               ]}
             />
           </Form.Item>

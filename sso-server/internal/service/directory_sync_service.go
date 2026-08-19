@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,27 +20,55 @@ import (
 
 	"sso-server/internal/model"
 	"sso-server/internal/repository"
+	"sso-server/pkg/crypto"
 	"sso-server/pkg/password"
 )
 
 const DirectoryProviderWeComAttendance = "wecom_attendance"
 
+// defaultPasswordFallback 当配置未显式设置默认密码（security.default_password 为空）时，
+// 新建平台账号使用的兜底默认密码。固定值，避免每次同步都生成不可登录的随机密码。
+const defaultPasswordFallback = "OneAuth@2026"
+
 type DirectorySyncService struct {
-	configRepo *repository.ConfigRepository
-	userRepo   *repository.UserRepository
-	deptRepo   *repository.DepartmentRepository
-	db         *gorm.DB
-	client     *http.Client
+	configRepo  *repository.ConfigRepository
+	userRepo    *repository.UserRepository
+	deptRepo    *repository.DepartmentRepository
+	groupRepo   *repository.UserGroupRepository
+	db          *gorm.DB
+	client      *http.Client
+	secretCipher *crypto.SecretCipher
+	// defaultPassword 新建账号的默认密码；为空时回退到固定兜底密码（OneAuth@2026）。
+	defaultPassword string
 }
 
-func NewDirectorySyncService(configRepo *repository.ConfigRepository, userRepo *repository.UserRepository, deptRepo *repository.DepartmentRepository) *DirectorySyncService {
+func NewDirectorySyncService(configRepo *repository.ConfigRepository, userRepo *repository.UserRepository, deptRepo *repository.DepartmentRepository, groupRepo *repository.UserGroupRepository, secretCipher *crypto.SecretCipher, defaultPassword string) *DirectorySyncService {
 	return &DirectorySyncService{
-		configRepo: configRepo,
-		userRepo:   userRepo,
-		deptRepo:   deptRepo,
-		db:         userRepo.DB(),
-		client:     &http.Client{Timeout: 20 * time.Second},
+		configRepo:      configRepo,
+		userRepo:        userRepo,
+		deptRepo:        deptRepo,
+		groupRepo:       groupRepo,
+		db:              userRepo.DB(),
+		client:          &http.Client{Timeout: 20 * time.Second},
+		secretCipher:    secretCipher,
+		defaultPassword: strings.TrimSpace(defaultPassword),
 	}
+}
+
+// encryptSecret 仅当明文非空时加密后返回；密文/空值原样处理。
+func (s *DirectorySyncService) encryptSecret(plain string) (string, error) {
+	if s.secretCipher == nil {
+		return strings.TrimSpace(plain), nil
+	}
+	return s.secretCipher.EncryptSecret(plain)
+}
+
+// decryptSecret 解密存储值；若未加密（历史明文）原样返回。
+func (s *DirectorySyncService) decryptSecret(stored string) (string, error) {
+	if s.secretCipher == nil {
+		return stored, nil
+	}
+	return s.secretCipher.DecryptSecret(stored)
 }
 
 type DirectorySyncConfig struct {
@@ -47,12 +76,46 @@ type DirectorySyncConfig struct {
 	PlatformType            string            `json:"platform_type"`
 	BaseURL                 string            `json:"base_url"`
 	APIKey                  string            `json:"api_key,omitempty"`
-	SelectedDepartmentPaths []string          `json:"selected_department_paths"`
-	StripPrefix             string            `json:"strip_prefix"`
-	MountDepartmentID       string            `json:"mount_department_id"`
-	DeactivateMissing       bool              `json:"deactivate_missing"`
-	UsernameStrategy        string            `json:"username_strategy"`
-	FieldMapping            map[string]string `json:"field_mapping"`
+	APIKeySet               bool              `json:"api_key_set"`
+	SelectedDepartmentPaths []string            `json:"selected_department_paths"`
+	StripPrefix             string              `json:"strip_prefix"`
+	MountDepartmentID       string              `json:"mount_department_id"`
+	DeactivateMissing       bool                `json:"deactivate_missing"`
+	UsernameStrategy        string              `json:"username_strategy"`
+	EmailStrategy           string              `json:"email_strategy"`
+	EmailDomain             string              `json:"email_domain"`
+	FieldMapping            map[string]string   `json:"field_mapping"`
+	MappingMode             bool                `json:"mapping_mode"`
+	DepartmentMappings      []DepartmentMapping `json:"department_mappings"`
+	// DefaultGroupIDs 同步导入的用户自动加入的用户组（按组 ID）。为空则不自动加组。
+	DefaultGroupIDs []string `json:"default_group_ids"`
+}
+
+// DepartmentMapping 部门手动匹配：将某一个远端部门一对一映射到本地部门。
+// 启用 MappingMode 后，同步不再按路径自动创建部门，也不修改本地部门。
+//   - 常规匹配：local_department_id 指向本地已存在的部门；
+//   - 按需新建匹配：create_local=true 且 new_dept_name 非空，表示「待创建部门」，
+//     仅在同步时确实有用户归属于该部门才真正新建，避免产生空部门。
+// 仅把已勾选（include=true 且上述二者其一成立）的远端部门下的用户同步到对应本地部门。
+type DepartmentMapping struct {
+	RemoteExternalID  string `json:"remote_external_id"`
+	RemotePath        string `json:"remote_path"`
+	RemoteName        string `json:"remote_name"`
+	LocalDepartmentID string `json:"local_department_id"`
+	CreateLocal       bool   `json:"create_local"`
+	NewDeptName       string `json:"new_dept_name"`
+	NewDeptParentID   string `json:"new_dept_parent_id"`
+	Include           bool   `json:"include"`
+}
+
+// mappingTarget 表示一个远端路径解析后的目标部门。
+type mappingTarget struct {
+	kind      string     // "existing" 已存在本地部门；"create" 待创建部门（按需）
+	localID   uuid.UUID  // existing 时有效
+	name      string     // create 时有效：新部门名称
+	parentID  *uuid.UUID // create 时有效：新部门上级部门（nil 表示根目录）
+	remoteKey string     // 触发创建的远端路径（用于部门绑定记录）
+	createdID *uuid.UUID // 懒创建后缓存的真实部门 ID
 }
 
 type DirectoryDepartment struct {
@@ -65,16 +128,57 @@ type DirectoryDepartment struct {
 }
 
 type DirectorySyncSummary struct {
-	DryRun            bool     `json:"dry_run"`
-	Status            string   `json:"status"`
-	DepartmentCreated int      `json:"department_created"`
-	DepartmentMatched int      `json:"department_matched"`
-	UserCreated       int      `json:"user_created"`
-	UserUpdated       int      `json:"user_updated"`
-	UserDisabled      int      `json:"user_disabled"`
-	UserSkipped       int      `json:"user_skipped"`
-	Message           string   `json:"message"`
-	Details           []string `json:"details"`
+	DryRun            bool              `json:"dry_run"`
+	Status            string            `json:"status"`
+	DepartmentCreated int               `json:"department_created"`
+	DepartmentMatched int               `json:"department_matched"`
+	UserCreated       int               `json:"user_created"`
+	UserUpdated       int               `json:"user_updated"`
+	UserDisabled      int               `json:"user_disabled"`
+	UserSkipped       int               `json:"user_skipped"`
+	Message           string            `json:"message"`
+	Details           []string          `json:"details"`
+	MappingPreview    []SyncPreviewDept `json:"mapping_preview"`
+}
+
+// SyncPreviewUser 预览树中的单个用户节点。
+type SyncPreviewUser struct {
+	Name           string `json:"name"`
+	Username       string `json:"username"`        // 将落库的真实用户名（经策略换算，全小写）
+	SourceUsername string `json:"source_username"` // 远端原始账号（大小写原样，供对照）
+	Email          string `json:"email"`
+	Status         string `json:"status"` // "create" 新建 | "update" 更新
+}
+
+// SyncPreviewDept 预览树中的部门节点（含子部门与直属用户），用于「我选中部门的全部待同步用户」树形展示。
+type SyncPreviewDept struct {
+	RemotePath string            `json:"remote_path"`
+	RemoteName string            `json:"remote_name"`
+	UserCount  int               `json:"user_count"`
+	Users      []SyncPreviewUser `json:"users"`
+	Children   []SyncPreviewDept `json:"children"`
+}
+
+// UserImportPreviewItem 是「用户导入」表格中的一行，对应一个将被同步的远端用户。
+type UserImportPreviewItem struct {
+	ExternalID     string   `json:"external_id"`
+	Status         string   `json:"status"`    // "create" 新建 | "update" 更新
+	Username       string   `json:"username"`  // 将落库的真实用户名（经策略换算，全小写）
+	Name           string   `json:"name"`
+	Email          string   `json:"email"`
+	Groups         []string `json:"groups"` // 用户所属远端部门路径（用户组/部门，仅作来源追溯）
+	Department     string   `json:"department"` // 解析后将要落库的本地部门名称（所见即所得）
+	Exists         bool     `json:"exists"` // 是否已存在于本地系统
+}
+
+// UserImportPreview 是「用户导入」弹框的分页预览结果。
+type UserImportPreview struct {
+	SyncAt     string                  `json:"sync_at"`
+	Progress   int                     `json:"progress"` // 0-100，拉取未完成时显示进度
+	Total      int                     `json:"total"`
+	Page       int                     `json:"page"`
+	PageSize   int                     `json:"page_size"`
+	Users      []UserImportPreviewItem `json:"users"`
 }
 
 type directorySnapshot struct {
@@ -88,6 +192,8 @@ func defaultDirectoryFieldMapping() map[string]string {
 		"username":         "userId",
 		"nickname":         "userName",
 		"email":            "email",
+		"given_name":       "givenName",
+		"surname":          "surname",
 		"phone":            "phone",
 		"position":         "position",
 		"department_path":  "departmentPath",
@@ -111,8 +217,13 @@ func (s *DirectorySyncService) LoadConfig(maskSecret bool) DirectorySyncConfig {
 		cfg.PlatformType = v
 	}
 	cfg.BaseURL = strings.TrimSpace(s.configRepo.Get("directory_sync", "base_url"))
-	if !maskSecret {
-		cfg.APIKey = s.configRepo.Get("directory_sync", "api_key")
+	if raw := s.configRepo.Get("directory_sync", "api_key"); raw != "" {
+		cfg.APIKeySet = true
+		if !maskSecret {
+			if dec, err := s.decryptSecret(raw); err == nil {
+				cfg.APIKey = dec
+			}
+		}
 	}
 	if raw := s.configRepo.Get("directory_sync", "selected_department_paths"); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &cfg.SelectedDepartmentPaths)
@@ -125,6 +236,10 @@ func (s *DirectorySyncService) LoadConfig(maskSecret bool) DirectorySyncConfig {
 	if v := strings.TrimSpace(s.configRepo.Get("directory_sync", "username_strategy")); v != "" {
 		cfg.UsernameStrategy = v
 	}
+	if v := strings.TrimSpace(s.configRepo.Get("directory_sync", "email_strategy")); v != "" {
+		cfg.EmailStrategy = v
+	}
+	cfg.EmailDomain = strings.TrimSpace(s.configRepo.Get("directory_sync", "email_domain"))
 	if raw := s.configRepo.Get("directory_sync", "field_mapping"); raw != "" {
 		m := defaultDirectoryFieldMapping()
 		var incoming map[string]string
@@ -136,6 +251,15 @@ func (s *DirectorySyncService) LoadConfig(maskSecret bool) DirectorySyncConfig {
 			}
 		}
 		cfg.FieldMapping = m
+	}
+	if v := s.configRepo.Get("directory_sync", "mapping_mode"); v != "" {
+		cfg.MappingMode = v == "true"
+	}
+	if raw := s.configRepo.Get("directory_sync", "department_mappings"); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &cfg.DepartmentMappings)
+	}
+	if raw := s.configRepo.Get("directory_sync", "default_group_ids"); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &cfg.DefaultGroupIDs)
 	}
 	return cfg
 }
@@ -153,8 +277,13 @@ func (s *DirectorySyncService) SaveConfig(in DirectorySyncConfig) error {
 	if in.FieldMapping == nil {
 		in.FieldMapping = defaultDirectoryFieldMapping()
 	}
+	if strings.TrimSpace(in.EmailStrategy) != "" && strings.TrimSpace(in.EmailDomain) == "" {
+		return errors.New("邮箱策略已启用，请先填写邮箱域名")
+	}
 	selected, _ := json.Marshal(in.SelectedDepartmentPaths)
 	mapping, _ := json.Marshal(in.FieldMapping)
+	mappings, _ := json.Marshal(in.DepartmentMappings)
+	defaultGroups, _ := json.Marshal(in.DefaultGroupIDs)
 	items := map[string]string{
 		"enabled":                   strconv.FormatBool(in.Enabled),
 		"platform_type":             strings.TrimSpace(in.PlatformType),
@@ -164,7 +293,12 @@ func (s *DirectorySyncService) SaveConfig(in DirectorySyncConfig) error {
 		"mount_department_id":       strings.TrimSpace(in.MountDepartmentID),
 		"deactivate_missing":        strconv.FormatBool(in.DeactivateMissing),
 		"username_strategy":         strings.TrimSpace(in.UsernameStrategy),
+		"email_strategy":            strings.TrimSpace(in.EmailStrategy),
+		"email_domain":              strings.TrimSpace(in.EmailDomain),
 		"field_mapping":             string(mapping),
+		"mapping_mode":              strconv.FormatBool(in.MappingMode),
+		"department_mappings":       string(mappings),
+		"default_group_ids":         string(defaultGroups),
 	}
 	for k, v := range items {
 		if err := s.configRepo.Set("directory_sync", k, v); err != nil {
@@ -172,7 +306,11 @@ func (s *DirectorySyncService) SaveConfig(in DirectorySyncConfig) error {
 		}
 	}
 	if strings.TrimSpace(in.APIKey) != "" {
-		if err := s.configRepo.Set("directory_sync", "api_key", strings.TrimSpace(in.APIKey)); err != nil {
+		enc, err := s.encryptSecret(in.APIKey)
+		if err != nil {
+			return fmt.Errorf("加密 api_key 失败: %w", err)
+		}
+		if err := s.configRepo.Set("directory_sync", "api_key", enc); err != nil {
 			return err
 		}
 	}
@@ -225,8 +363,14 @@ func (s *DirectorySyncService) Sync(dryRun bool) (*DirectorySyncSummary, error) 
 		return summary, err
 	}
 
+	// 持久化到缓冲表，供「用户导入」弹窗展示，无需重复拉取远端。
+	// 缓冲写入失败不阻断本次同步。
+	if err := s.storeSnapshot(snap, cfg); err != nil {
+		log.Printf("[dir-sync] 写入缓冲表失败(不影响本次同步): %v", err)
+	}
+
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		return s.applySnapshot(tx, cfg, snap, dryRun, summary)
+		return s.applySnapshot(tx, cfg, snap, dryRun, summary, nil)
 	})
 	if err != nil {
 		summary.Status = "failed"
@@ -241,6 +385,370 @@ func (s *DirectorySyncService) Sync(dryRun bool) (*DirectorySyncSummary, error) 
 	return summary, nil
 }
 
+// SyncUsers 完整的目录同步（拉取远端 → 写入缓冲表 → 应用到用户）。
+// 供每日凌晨 2 点的定时任务调用（自动创建/更新/禁用用户）。
+func (s *DirectorySyncService) SyncUsers() (*DirectorySyncSummary, error) {
+	return s.Sync(false)
+}
+
+// Pull 仅拉取远端通讯录并写入缓冲表，刷新「用户导入」预览，不创建/修改/禁用任何用户。
+// 供手动「同步用户」按钮调用；真正建号由「导入选中/导入全部」（ImportUsers）负责。
+func (s *DirectorySyncService) Pull() (*DirectorySyncSummary, error) {
+	cfg := s.LoadConfig(false)
+	if err := validateDirectoryConfig(cfg, true); err != nil {
+		return nil, err
+	}
+	summary := &DirectorySyncSummary{DryRun: false, Status: "success"}
+	logRow := &model.DirectorySyncLog{
+		Provider:  cfg.PlatformType,
+		Status:    "running",
+		DryRun:    false,
+		StartedAt: time.Now(),
+	}
+	if err := s.db.Create(logRow).Error; err != nil {
+		return nil, err
+	}
+	snap, err := s.fetchCombinedSnapshot(cfg)
+	if err != nil {
+		summary.Status = "failed"
+		summary.Message = err.Error()
+		s.finishLog(logRow, summary)
+		return summary, err
+	}
+	// 只写缓冲表刷新预览；不 applySnapshot（不创建/更新/禁用用户，不加默认组）。
+	if err := s.storeSnapshot(snap, cfg); err != nil {
+		summary.Status = "failed"
+		summary.Message = "拉取成功但写入缓冲失败: " + err.Error()
+		s.finishLog(logRow, summary)
+		return summary, err
+	}
+	summary.Message = "拉取完成，已刷新可导入的通讯录（仅拉取，未创建/修改用户）"
+	s.finishLog(logRow, summary)
+	return summary, nil
+}
+
+// storeSnapshot 把远端快照写入缓冲表（sso_directory_sync_buffer）。
+// 仅保存「处于同步范围内」的用户（能解析到本地部门者），其余忽略，与真正同步落库的范围保持一致。
+// 写入策略：先按 provider 清空旧缓冲，再批量插入本次快照，保证缓冲表始终反映最近一次同步结果。
+func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg DirectorySyncConfig) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		mountID, err := parseOptionalUUID(cfg.MountDepartmentID)
+		if err != nil {
+			return err
+		}
+		var deptResolver map[string]*mappingTarget
+		if cfg.MappingMode {
+			deptResolver, err = s.buildMappingResolver(tx, cfg)
+			if err != nil {
+				return err
+			}
+		} else {
+			pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+			if err != nil {
+				return err
+			}
+			deptResolver = make(map[string]*mappingTarget, len(pathIndex))
+			for k, v := range pathIndex {
+				deptResolver[k] = &mappingTarget{kind: "existing", localID: v}
+			}
+		}
+
+		// 删除旧缓冲前，先读出用户手动编辑过的值（username/email），重建时保留，
+		// 避免「同步用户」(pull) 覆盖用户的手动编辑。
+		var oldBufs []model.DirectorySyncBuffer
+		if err := tx.Where("provider = ?", cfg.PlatformType).Find(&oldBufs).Error; err != nil {
+			return err
+		}
+		editedUsernames := make(map[string]string, len(oldBufs))
+		editedEmails := make(map[string]string, len(oldBufs))
+		for _, o := range oldBufs {
+			if o.UsernameEdited != "" {
+				editedUsernames[o.ExternalID] = o.UsernameEdited
+			}
+			if o.EmailEdited != "" {
+				editedEmails[o.ExternalID] = o.EmailEdited
+			}
+		}
+
+		rows := make([]model.DirectorySyncBuffer, 0, len(snap.Users))
+		for _, remote := range snap.Users {
+			externalID := getStringAny(remote, cfg.FieldMapping["external_id"])
+			if externalID == "" {
+				externalID = firstNonEmpty(getStringAny(remote, "externalId"), getStringAny(remote, "userId"))
+			}
+			if externalID == "" {
+				continue
+			}
+			// 仅保留处于同步范围内（能解析到本地部门）的用户
+			deptID := s.resolveUserDepartment(tx, cfg, remote, deptResolver, mountID, true, nil)
+			if deptID == nil {
+				continue
+			}
+			item, ok := s.computePreviewItem(tx, cfg, remote, externalID, deptID)
+			if !ok {
+				continue
+			}
+			raw, _ := json.Marshal(remote)
+			groupsJSON, _ := json.Marshal(item.Groups)
+			// 用户手动编辑过的字段优先保留（不被远端计算值覆盖）
+			username, usernameEdited := item.Username, editedUsernames[externalID]
+			if usernameEdited != "" {
+				username = usernameEdited
+			}
+			email, emailEdited := item.Email, editedEmails[externalID]
+			if emailEdited != "" {
+				email = emailEdited
+			}
+			rows = append(rows, model.DirectorySyncBuffer{
+				Provider:       cfg.PlatformType,
+				ExternalID:     externalID,
+				Username:       username,
+				Name:           item.Name,
+				Email:          email,
+				Department:     item.Department,
+				Groups:         string(groupsJSON),
+				Status:         item.Status,
+				Exists:         item.Exists,
+				UsernameEdited: usernameEdited,
+				EmailEdited:    emailEdited,
+				Raw:            string(raw),
+				FetchedAt:      time.Now(),
+			})
+		}
+
+		if err := tx.Where("provider = ?", cfg.PlatformType).Delete(&model.DirectorySyncBuffer{}).Error; err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			if err := tx.CreateInBatches(&rows, 200).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// computePreviewItem 计算单个远端用户在本地落库时的展示信息（用户名/姓名/邮箱/部门/状态/是否已存在）。
+// 与 UserImportPreview 的逐用户解析逻辑保持一致，供 storeSnapshot 与（必要时）缓冲读取复用。
+func (s *DirectorySyncService) computePreviewItem(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, externalID string, deptID *uuid.UUID) (*UserImportPreviewItem, bool) {
+	deptName := ""
+	var d model.Department
+	if err := tx.First(&d, "id = ?", *deptID).Error; err == nil {
+		deptName = d.Name
+	}
+	nickname := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["nickname"]), externalID)
+	sourceUsername := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["username"]), externalID)
+	rawEmail := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["email"]))
+	givenName := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["given_name"]))
+	surname := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["surname"]))
+	displayEmail := s.resolvePreviewEmail(cfg, sourceUsername, rawEmail, nickname, givenName, surname)
+	previewUser := s.buildPreviewUser(tx, cfg, remote, externalID, displayEmail, sourceUsername)
+
+	groups := getStringListAny(remote, cfg.FieldMapping["department_paths"])
+	if len(groups) == 0 {
+		if p := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["department_path"])); p != "" {
+			groups = []string{p}
+		}
+	}
+	item := &UserImportPreviewItem{
+		ExternalID: externalID,
+		Status:     previewUser.Status,
+		Username:   previewUser.Username,
+		Name:       nickname,
+		Email:      displayEmail,
+		Groups:     groups,
+		Department: deptName,
+		Exists:     previewUser.Status == "update",
+	}
+	return item, true
+}
+
+// ImportUsers 按用户勾选的 external_id 列表导入用户。externalIDs 为空表示导入全部待同步用户。
+// 与 Sync 的区别：仅处理白名单内的用户，且不触发"禁用远端缺失用户"（避免影响未勾选的人）。
+// ImportUsers 基于缓冲表导入用户（不再重复拉取远端）。
+// externalIDs 为空表示导入全部缓冲用户；非空表示只导入勾选的 external_id。
+// 仅处理缓冲表内的用户，且不会触发「禁用远端缺失用户」（避免影响未勾选的人）。
+func (s *DirectorySyncService) ImportUsers(externalIDs []string, groupIDs []string) (*DirectorySyncSummary, error) {
+	cfg := s.LoadConfig(false)
+	if err := validateDirectoryConfig(cfg, true); err != nil {
+		return nil, err
+	}
+	summary := &DirectorySyncSummary{DryRun: false, Status: "success"}
+	logRow := &model.DirectorySyncLog{
+		Provider:  cfg.PlatformType,
+		Status:    "running",
+		DryRun:    false,
+		StartedAt: time.Now(),
+	}
+	if err := s.db.Create(logRow).Error; err != nil {
+		return nil, err
+	}
+
+	// 从缓冲表读取待导入数据，不再重复拉取远端。
+	var rows []model.DirectorySyncBuffer
+	q := s.db.Where("provider = ?", cfg.PlatformType)
+	if len(externalIDs) > 0 {
+		q = q.Where("external_id IN ?", externalIDs)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		summary.Status = "failed"
+		summary.Message = err.Error()
+		s.finishLog(logRow, summary)
+		return summary, err
+	}
+	if len(rows) == 0 {
+		summary.Status = "failed"
+		summary.Message = "缓冲表中没有可导入的用户，请先点击「同步用户」拉取远端通讯录"
+		s.finishLog(logRow, summary)
+		return summary, fmt.Errorf("缓冲表为空，请先同步用户")
+	}
+
+	var whitelist map[string]bool
+	if len(externalIDs) > 0 {
+		whitelist = make(map[string]bool, len(externalIDs))
+		for _, id := range externalIDs {
+			whitelist[id] = true
+		}
+	}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		mountID, err := parseOptionalUUID(cfg.MountDepartmentID)
+		if err != nil {
+			return err
+		}
+		var deptResolver map[string]*mappingTarget
+		if cfg.MappingMode {
+			deptResolver, err = s.buildMappingResolver(tx, cfg)
+			if err != nil {
+				return err
+			}
+		} else {
+			pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+			if err != nil {
+				return err
+			}
+			deptResolver = make(map[string]*mappingTarget, len(pathIndex))
+			for k, v := range pathIndex {
+				deptResolver[k] = &mappingTarget{kind: "existing", localID: v}
+			}
+		}
+		seen := make(map[string]bool)
+		for _, r := range rows {
+			if whitelist != nil && !whitelist[r.ExternalID] {
+				continue
+			}
+			var remote map[string]any
+			if err := json.Unmarshal([]byte(r.Raw), &remote); err != nil {
+				return fmt.Errorf("解析缓冲记录 %s 失败: %w", r.ExternalID, err)
+			}
+			if err := s.applyRemoteUser(tx, cfg, remote, deptResolver, mountID, false, summary, seen, r.Username, r.EmailEdited, groupIDs); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		summary.Status = "failed"
+		summary.Message = err.Error()
+	} else {
+		summary.Message = "导入完成"
+	}
+	s.finishLog(logRow, summary)
+	if err != nil {
+		return summary, err
+	}
+	return summary, nil
+}
+
+// UserImportPreview 读取缓冲表（sso_directory_sync_buffer）构建「用户导入」表格预览数据。
+// 不再拉取远端，直接展示最近一次同步（手动「同步用户」或定时任务）写入的快照，
+// 因此打开「用户导入」弹窗本身不会触发任何同步操作。
+// keyword 支持对用户名/姓名/邮箱/外部 ID 模糊过滤；按 external_id 排序保证分页稳定。
+func (s *DirectorySyncService) UserImportPreview(keyword string, page, pageSize int) (*UserImportPreview, error) {
+	cfg := s.LoadConfig(false)
+	if cfg.PlatformType == "" {
+		return nil, fmt.Errorf("尚未配置同步平台类型")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 15
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+
+	kw := strings.ToLower(strings.TrimSpace(keyword))
+	var rows []model.DirectorySyncBuffer
+	q := s.db.Where("provider = ?", cfg.PlatformType)
+	if kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("external_id LIKE ? OR username LIKE ? OR name LIKE ? OR email LIKE ?", like, like, like, like)
+	}
+	if err := q.Order("external_id asc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	items := make([]UserImportPreviewItem, 0, len(rows))
+	for _, r := range rows {
+		var groups []string
+		_ = json.Unmarshal([]byte(r.Groups), &groups)
+		items = append(items, UserImportPreviewItem{
+			ExternalID: r.ExternalID,
+			Status:     r.Status,
+			Username:   r.Username,
+			Name:       r.Name,
+			Email:      r.Email,
+			Groups:     groups,
+			Department: r.Department,
+			Exists:     r.Exists,
+		})
+	}
+
+	total := len(items)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	pageItems := make([]UserImportPreviewItem, 0)
+	if start < total {
+		pageItems = items[start:end]
+	}
+
+	// 同步时间取缓冲表最新的 fetched_at
+	syncAt := ""
+	if len(rows) > 0 {
+		var latestStr string
+		s.db.Model(&model.DirectorySyncBuffer{}).
+			Where("provider = ?", cfg.PlatformType).
+			Select("MAX(fetched_at) as latest").
+			Row().Scan(&latestStr)
+		if latestStr != "" {
+			if t, err := time.Parse("2006-01-02 15:04:05.999999-07:00", latestStr); err == nil {
+				syncAt = t.Format("2006-01-02 15:04:05")
+			} else if t, err := time.Parse(time.RFC3339Nano, latestStr); err == nil {
+				syncAt = t.Format("2006-01-02 15:04:05")
+			} else {
+				syncAt = latestStr
+			}
+		}
+	}
+
+	return &UserImportPreview{
+		SyncAt:   syncAt,
+		Progress: 100,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+		Users:    pageItems,
+	}, nil
+}
+
 func (s *DirectorySyncService) LatestLogs(limit int) ([]model.DirectorySyncLog, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
@@ -250,11 +758,41 @@ func (s *DirectorySyncService) LatestLogs(limit int) ([]model.DirectorySyncLog, 
 	return logs, err
 }
 
-func (s *DirectorySyncService) fetchCombinedSnapshot(cfg DirectorySyncConfig) (*directorySnapshot, error) {
-	roots := cfg.SelectedDepartmentPaths
-	if len(roots) == 0 {
-		roots = []string{""}
+// mappingRoots 计算手动匹配模式下需要拉取的远端根路径：取所有 include=true 的部门路径，
+// 并剔除被其祖先已覆盖的重复路径（如已选父部门则不再单独选子部门），避免重复拉取。
+func mappingRoots(cfg DirectorySyncConfig) []string {
+	seen := map[string]bool{}
+	for _, m := range cfg.DepartmentMappings {
+		if !m.Include || strings.TrimSpace(m.RemotePath) == "" {
+			continue
+		}
+		rp := strings.TrimSpace(m.RemotePath)
+		dup := false
+		for parent := range seen {
+			if rp == parent || strings.HasPrefix(rp, parent+"/") {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			for existing := range seen {
+				if existing == rp || strings.HasPrefix(existing, rp+"/") {
+					delete(seen, existing)
+				}
+			}
+			seen[rp] = true
+		}
 	}
+	out := make([]string, 0, len(seen))
+	for rp := range seen {
+		out = append(out, rp)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// fetchSnapshotForRoots 按给定根路径集合向第三方平台拉取部门与用户快照并合并去重。
+func (s *DirectorySyncService) fetchSnapshotForRoots(cfg DirectorySyncConfig, roots []string) (*directorySnapshot, error) {
 	deptByID := make(map[string]map[string]any)
 	userByID := make(map[string]map[string]any)
 	for _, root := range roots {
@@ -305,6 +843,32 @@ func (s *DirectorySyncService) fetchCombinedSnapshot(cfg DirectorySyncConfig) (*
 	return snap, nil
 }
 
+func (s *DirectorySyncService) fetchCombinedSnapshot(cfg DirectorySyncConfig) (*directorySnapshot, error) {
+	// 手动部门匹配模式：只拉取已勾选匹配的远端部门（含其下级），
+	// 避免把整个公司的用户都拉回来，再产生大量无关的“跳过”记录。
+	roots := cfg.SelectedDepartmentPaths
+	if cfg.MappingMode {
+		if mr := mappingRoots(cfg); len(mr) > 0 {
+			roots = mr
+		}
+	}
+	if len(roots) == 0 {
+		roots = []string{""}
+	}
+	snap, err := s.fetchSnapshotForRoots(cfg, roots)
+	if err != nil {
+		return nil, err
+	}
+	// 兜底：按勾选部门拉取却一个用户都没回来（远端 root_path 不支持子树过滤等异常），
+	// 回退为全量拉取，确保不会漏同步。
+	if cfg.MappingMode && len(snap.Users) == 0 && !(len(roots) == 1 && roots[0] == "") {
+		if full, err2 := s.fetchSnapshotForRoots(cfg, []string{""}); err2 == nil {
+			snap = full
+		}
+	}
+	return snap, nil
+}
+
 func (s *DirectorySyncService) getJSON(cfg DirectorySyncConfig, path string, q url.Values, out any) error {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	if base == "" {
@@ -332,76 +896,149 @@ func (s *DirectorySyncService) getJSON(cfg DirectorySyncConfig, path string, q u
 	return json.Unmarshal(body, out)
 }
 
-func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfig, snap *directorySnapshot, dryRun bool, summary *DirectorySyncSummary) error {
+// whitelist 为非 nil 时，仅同步其中列出的 external_id 用户（部分导入）；为 nil 表示全量导入。
+func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfig, snap *directorySnapshot, dryRun bool, summary *DirectorySyncSummary, whitelist map[string]bool) error {
 	mountID, err := parseOptionalUUID(cfg.MountDepartmentID)
 	if err != nil {
 		return err
 	}
-	pathToDeptID, err := s.buildDepartmentPathIndex(tx, mountID)
-	if err != nil {
-		return err
+
+	var deptResolver map[string]*mappingTarget
+	if cfg.MappingMode {
+		// 手动匹配模式：remote 路径(裁剪后) -> 目标部门（已存在或待创建），待创建部门在用户阶段按需新建
+		deptResolver, err = s.buildMappingResolver(tx, cfg)
+		if err != nil {
+			return err
+		}
+	} else {
+		pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+		if err != nil {
+			return err
+		}
+		deptResolver = make(map[string]*mappingTarget, len(pathIndex))
+		for k, v := range pathIndex {
+			deptResolver[k] = &mappingTarget{kind: "existing", localID: v}
+		}
 	}
 
-	deptPaths := collectRemoteDepartmentPaths(snap, cfg)
-	sort.Slice(deptPaths, func(i, j int) bool {
-		di, dj := pathDepth(deptPaths[i]), pathDepth(deptPaths[j])
-		if di == dj {
-			return deptPaths[i] < deptPaths[j]
-		}
-		return di < dj
-	})
-
-	for _, localPath := range deptPaths {
-		if localPath == "" {
-			continue
-		}
-		remoteID := "path:" + localPath
-		localID, ok := pathToDeptID[localPath]
-		if !ok {
-			if binding, err := s.getBinding(tx, cfg.PlatformType, "department", remoteID); err == nil {
-				localID = binding.LocalID
-				ok = true
+	if cfg.MappingMode {
+		// 仅处理已勾选匹配且本地已存在的远端部门：建立绑定，不创建、不覆盖本地部门。
+		// 待创建部门（create）在用户处理阶段、确认有用户归属时才新建，避免产生空部门。
+		for _, remote := range snap.Departments {
+			rp := getStringAny(remote, "path")
+			if rp == "" {
+				continue
 			}
-		}
-		if ok {
+			t, ok := deptResolver[localDepartmentPath(rp, cfg.StripPrefix)]
+			if !ok || t.kind != "existing" {
+				continue
+			}
 			summary.DepartmentMatched++
 			if !dryRun {
-				_ = s.upsertBinding(tx, cfg.PlatformType, "department", remoteID, localID, localPath)
-			}
-			continue
-		}
-		summary.DepartmentCreated++
-		if dryRun {
-			continue
-		}
-		parentID := mountID
-		if parent := parentPath(localPath); parent != "" {
-			if id, ok := pathToDeptID[parent]; ok {
-				parentID = &id
+				_ = s.upsertBinding(tx, cfg.PlatformType, "department", "path:"+rp, t.localID, rp)
 			}
 		}
-		dept := &model.Department{
-			Name:        leafName(localPath),
-			ParentID:    parentID,
-			Description: "third-party directory sync",
-		}
-		if err := tx.Create(dept).Error; err != nil {
-			return err
-		}
-		pathToDeptID[localPath] = dept.ID
-		if err := s.upsertBinding(tx, cfg.PlatformType, "department", remoteID, dept.ID, localPath); err != nil {
-			return err
+	} else {
+		deptPaths := collectRemoteDepartmentPaths(snap, cfg)
+		sort.Slice(deptPaths, func(i, j int) bool {
+			di, dj := pathDepth(deptPaths[i]), pathDepth(deptPaths[j])
+			if di == dj {
+				return deptPaths[i] < deptPaths[j]
+			}
+			return di < dj
+		})
+
+		for _, localPath := range deptPaths {
+			if localPath == "" {
+				continue
+			}
+			remoteID := "path:" + localPath
+			var localID *uuid.UUID
+			if t, ok := deptResolver[localPath]; ok && t.kind == "existing" {
+				id := t.localID
+				localID = &id
+			}
+			if localID == nil {
+				if binding, err := s.getBinding(tx, cfg.PlatformType, "department", remoteID); err == nil {
+					id := binding.LocalID
+					localID = &id
+				}
+			}
+			if localID != nil {
+				summary.DepartmentMatched++
+				if !dryRun {
+					_ = s.upsertBinding(tx, cfg.PlatformType, "department", remoteID, *localID, localPath)
+				}
+				continue
+			}
+			summary.DepartmentCreated++
+			if dryRun {
+				continue
+			}
+			parentID := mountID
+			if parent := parentPath(localPath); parent != "" {
+				if t, ok := deptResolver[parent]; ok && t.kind == "existing" {
+					id := t.localID
+					parentID = &id
+				}
+			}
+			dept := &model.Department{
+				Name:        leafName(localPath),
+				ParentID:    parentID,
+				Description: "third-party directory sync",
+			}
+			if err := tx.Create(dept).Error; err != nil {
+				return err
+			}
+			id := dept.ID
+			deptResolver[localPath] = &mappingTarget{kind: "existing", localID: id}
+			if err := s.upsertBinding(tx, cfg.PlatformType, "department", remoteID, id, localPath); err != nil {
+				return err
+			}
 		}
 	}
 
 	seenUserIDs := make(map[string]bool)
+	previewUsers := make(map[string][]SyncPreviewUser)
 	for _, remote := range snap.Users {
-		if err := s.applyRemoteUser(tx, cfg, remote, pathToDeptID, mountID, dryRun, summary, seenUserIDs); err != nil {
+		// 部分导入：白名单之外、未被勾选的用户直接跳过，不参与落库与结果树
+		if wlExt := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["external_id"]), getStringAny(remote, "externalId"), getStringAny(remote, "userId")); wlExt != "" && whitelist != nil && !whitelist[wlExt] {
+			continue
+		}
+		if cfg.MappingMode {
+			deptID := s.resolveUserDepartment(tx, cfg, remote, deptResolver, mountID, dryRun, summary)
+			if deptID == nil {
+				// 手动匹配模式：未勾选部门下的用户完全忽略——不同步、不计入跳过、不列出。
+				continue
+			}
+			// 记录到预览树：按用户真实远端部门归类（便于树形展示「选中部门下的全部用户」）
+			externalID := getStringAny(remote, cfg.FieldMapping["external_id"])
+			email := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["email"]))
+			sourceUsername := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["username"]), externalID)
+			actualDept := ""
+			if ps := getStringListAny(remote, cfg.FieldMapping["department_paths"]); len(ps) > 0 {
+				actualDept = ps[0]
+			} else {
+				actualDept = strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["department_path"]))
+			}
+			if actualDept == "" {
+				actualDept = "（无部门）"
+			}
+			previewUsers[actualDept] = append(previewUsers[actualDept], s.buildPreviewUser(tx, cfg, remote, externalID, email, sourceUsername))
+		}
+		if err := s.applyRemoteUser(tx, cfg, remote, deptResolver, mountID, dryRun, summary, seenUserIDs, "", "", nil); err != nil {
 			summary.UserSkipped++
 			summary.Details = append(summary.Details, err.Error())
 		}
 	}
-	if cfg.DeactivateMissing {
+	if cfg.MappingMode {
+		log.Printf("[DEBUG] buildPreviewTree input: mappingMode=%v snapUsers=%d previewUsers=%d", cfg.MappingMode, len(snap.Users), len(previewUsers))
+		for p, us := range previewUsers {
+			log.Printf("[DEBUG] previewUsers key=%q count=%d", p, len(us))
+		}
+		summary.MappingPreview = s.buildPreviewTree(snap, cfg, previewUsers)
+	}
+	if cfg.DeactivateMissing && whitelist == nil {
 		if err := s.disableMissingUsers(tx, cfg, seenUserIDs, dryRun, summary); err != nil {
 			return err
 		}
@@ -409,7 +1046,63 @@ func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfi
 	return nil
 }
 
-func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, pathToDeptID map[string]uuid.UUID, mountID *uuid.UUID, dryRun bool, summary *DirectorySyncSummary, seen map[string]bool) error {
+// buildMappingResolver 将已勾选的部门匹配转换为 "裁剪后的远端路径 -> 目标部门" 映射。
+// 目标可能是本地已存在部门（existing），也可能是「按需新建」的待创建部门（create，
+// 仅在同步到真正归属该部门的用户时才创建，避免产生空部门）。
+// 同一 (新部门名, 上级) 组合会被去重为同一个待创建目标，便于父子远端部门共用。
+func (s *DirectorySyncService) buildMappingResolver(tx *gorm.DB, cfg DirectorySyncConfig) (map[string]*mappingTarget, error) {
+	var localDepts []model.Department
+	if err := tx.Find(&localDepts).Error; err != nil {
+		return nil, err
+	}
+	localByID := make(map[uuid.UUID]bool, len(localDepts))
+	for _, d := range localDepts {
+		localByID[d.ID] = true
+	}
+	createKey := func(parent, name string) string { return parent + "\x00" + name }
+	createTargets := make(map[string]*mappingTarget)
+	getCreateTarget := func(parent, name string) *mappingTarget {
+		k := createKey(parent, name)
+		if t, ok := createTargets[k]; ok {
+			return t
+		}
+		pid, _ := parseOptionalUUID(parent)
+		t := &mappingTarget{kind: "create", name: strings.TrimSpace(name), parentID: pid}
+		createTargets[k] = t
+		return t
+	}
+	out := make(map[string]*mappingTarget)
+	for _, m := range cfg.DepartmentMappings {
+		if !m.Include || strings.TrimSpace(m.RemotePath) == "" {
+			continue
+		}
+		key := localDepartmentPath(m.RemotePath, cfg.StripPrefix)
+		if key == "" {
+			continue
+		}
+		if m.CreateLocal && strings.TrimSpace(m.NewDeptName) != "" {
+			t := getCreateTarget(m.NewDeptParentID, m.NewDeptName)
+			if t.remoteKey == "" {
+				t.remoteKey = key
+			}
+			out[key] = t
+		} else if strings.TrimSpace(m.LocalDepartmentID) != "" {
+			id, err := uuid.Parse(strings.TrimSpace(m.LocalDepartmentID))
+			if err != nil {
+				return nil, fmt.Errorf("部门匹配中存在无效本地部门 ID：%s", m.LocalDepartmentID)
+			}
+			if !localByID[id] {
+				return nil, fmt.Errorf("部门匹配中引用的本地部门不存在（可能已被删除）：%s", m.LocalDepartmentID)
+			}
+			out[key] = &mappingTarget{kind: "existing", localID: id}
+		}
+	}
+	return out, nil
+}
+
+// overrideUsername 非空时表示用户手动编辑过用户名：仅当与「自然落库用户名」不同才覆盖，
+// 否则保持原有策略逻辑（未编辑的用户行为完全不变）。完整同步传 ""，ImportUsers 传缓冲表 username。
+func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, resolver map[string]*mappingTarget, mountID *uuid.UUID, dryRun bool, summary *DirectorySyncSummary, seen map[string]bool, overrideUsername, overrideEmail string, groupIDs []string) error {
 	externalID := getStringAny(remote, cfg.FieldMapping["external_id"])
 	if externalID == "" {
 		return errors.New("跳过用户：缺少 external_id")
@@ -418,11 +1111,15 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 
 	nickname := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["nickname"]), externalID)
 	sourceUsername := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["username"]), externalID)
-	email := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["email"]))
+	rawEmail := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["email"]))
+	givenName := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["given_name"]))
+	surname := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["surname"]))
+	// 远端有邮箱则用于"是否已存在用户"的判定；邮箱策略只在远端无邮箱时生成。
+	email := rawEmail
 	phone := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["phone"]))
 	position := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["position"]))
 	active := getBoolAny(remote, cfg.FieldMapping["active"], true)
-	deptID := s.resolveUserDepartment(remote, cfg, pathToDeptID, mountID)
+	deptID := s.resolveUserDepartment(tx, cfg, remote, resolver, mountID, dryRun, summary)
 
 	var user *model.User
 	if binding, err := s.getBinding(tx, cfg.PlatformType, "user", externalID); err == nil {
@@ -452,27 +1149,50 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 			return nil
 		}
 		username := s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, uuid.Nil)
-		hash, _ := password.Hash(uuid.New().String())
+		// 仅当 override 与「自然落库用户名」不同（即用户手动编辑过）时才覆盖，未编辑用户行为不变。
+		if overrideUsername != "" && overrideUsername != username {
+			username = s.resolveImportUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, uuid.Nil, overrideUsername)
+		}
+		// 新建账号：优先使用配置里的默认密码（security.default_password），
+		// 未配置时回退到固定兜底密码（OneAuth@2026），仍可直接登录，无需逐个重置。
+		plainPassword := s.defaultPassword
+		if plainPassword == "" {
+			plainPassword = defaultPasswordFallback
+		}
+		hash, _ := password.Hash(plainPassword)
 		user = &model.User{
 			ID:            uuid.New(),
 			Username:      username,
 			Nickname:      nickname,
 			PasswordHash:  hash,
 			Position:      position,
-			DomainAccount: externalID,
-			UserType:      "wecom",
-			HireStatus:    hireStatus(active),
+		DomainAccount: externalID,
+		UserSource:    "platform",
+		HireStatus:    hireStatus(active),
 			DepartmentID:  deptID,
 			IsActive:      active,
 		}
-		if email != "" && !s.valueTaken(tx, "email", email, uuid.Nil) {
-			user.Email = &email
+		if overrideEmail != "" {
+			// 用户手动编辑过邮箱：用编辑值（替代远端邮箱/邮箱策略），避免重名。
+			if !s.valueTaken(tx, "email", overrideEmail, uuid.Nil) {
+				user.Email = &overrideEmail
+			}
+		} else {
+			if email != "" && !s.valueTaken(tx, "email", email, uuid.Nil) {
+				user.Email = &email
+			}
+			if assignEmail := s.resolveAssignEmail(tx, cfg, sourceUsername, rawEmail, nickname, givenName, surname, uuid.Nil); assignEmail != nil {
+				user.Email = assignEmail
+			}
 		}
 		if phone != "" && !s.valueTaken(tx, "phone", phone, uuid.Nil) {
 			user.Phone = &phone
 		}
 		if err := tx.Create(user).Error; err != nil {
 			return fmt.Errorf("创建用户 %s 失败: %w", nickname, err)
+		}
+		if err := s.assignGroups(tx, cfg, user.ID, groupIDs); err != nil {
+			return err
 		}
 		return s.upsertBinding(tx, cfg.PlatformType, "user", externalID, user.ID, "")
 	}
@@ -488,15 +1208,37 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 	user.IsActive = active
 	user.DepartmentID = deptID
 	user.Department = nil
-	if shouldNormalizeExistingUsername(user.Username, sourceUsername) {
-		user.Username = s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, user.ID)
-	} else {
-		user.Username = strings.ToLower(user.Username)
+	// 已存在用户：邮箱以 sso 已存为准，同步不覆盖（SSO primary）——
+	// 同步只负责新增用户的邮箱、以及缺失用户的禁用；已存在用户的邮箱保持不变，
+	// 避免把管理员已经手动调整过的邮箱改回远端的值。
+	// 登录账号：
+	//   - override 与「自然落库用户名」不同（用户手动编辑过）→ 覆盖为编辑值（已存在用户也改）；
+	//   - 否则保持原逻辑：管理员手动编辑过则保留，否则按需规整。
+	if overrideUsername != "" {
+		natural := s.effectiveUsername(tx, cfg, "update", user, sourceUsername, nickname)
+		if overrideUsername != natural {
+			user.Username = s.resolveImportUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, user.ID, overrideUsername)
+		} else if !user.ProfileManuallyEdited {
+			if shouldNormalizeExistingUsername(user.Username, sourceUsername) {
+				user.Username = s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, user.ID)
+			} else {
+				user.Username = strings.ToLower(user.Username)
+			}
+		}
+	} else if !user.ProfileManuallyEdited {
+		if shouldNormalizeExistingUsername(user.Username, sourceUsername) {
+			user.Username = s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, user.ID)
+		} else {
+			user.Username = strings.ToLower(user.Username)
+		}
 	}
-	if email == "" {
-		user.Email = nil
-	} else if !s.valueTaken(tx, "email", email, user.ID) {
-		user.Email = &email
+	// 邮箱：
+	//   - 用户手动编辑过邮箱（overrideEmail 非空）→ 覆盖（已存在也改），避免重名；
+	//   - 否则保持现有（邮箱以 sso 为主，同步不覆盖）。
+	if overrideEmail != "" {
+		if !s.valueTaken(tx, "email", overrideEmail, user.ID) {
+			user.Email = &overrideEmail
+		}
 	}
 	if phone == "" {
 		user.Phone = nil
@@ -506,10 +1248,59 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 	if err := tx.Save(user).Error; err != nil {
 		return fmt.Errorf("更新用户 %s 失败: %w", nickname, err)
 	}
+	if err := s.assignDefaultGroups(tx, cfg, user.ID); err != nil {
+		return err
+	}
 	return s.upsertBinding(tx, cfg.PlatformType, "user", externalID, user.ID, "")
 }
 
-func (s *DirectorySyncService) resolveUserDepartment(remote map[string]any, cfg DirectorySyncConfig, pathToDeptID map[string]uuid.UUID, mountID *uuid.UUID) *uuid.UUID {
+// assignDefaultGroups 将同步用户加入配置里指定的默认用户组。
+// 采用「追加成员」方式（INSERT OR IGNORE / ON CONFLICT DO NOTHING），不会移除用户已有的其它组成员关系；
+// 仅当组确实存在时才追加，避免产生孤儿成员关系。
+// assignGroups 将用户加入指定用户组；若 groupIDs 为空则回退到配置中的默认用户组。
+func (s *DirectorySyncService) assignGroups(tx *gorm.DB, cfg DirectorySyncConfig, userID uuid.UUID, groupIDs []string) error {
+	ids := groupIDs
+	if len(ids) == 0 {
+		ids = cfg.DefaultGroupIDs
+	}
+	if s.groupRepo == nil || len(ids) == 0 {
+		return nil
+	}
+	for _, raw := range ids {
+		gid, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		if _, err := s.groupRepo.Get(gid); err != nil {
+			continue
+		}
+		if err := s.groupRepo.AddMemberTx(tx, gid, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *DirectorySyncService) assignDefaultGroups(tx *gorm.DB, cfg DirectorySyncConfig, userID uuid.UUID) error {
+	if s.groupRepo == nil || len(cfg.DefaultGroupIDs) == 0 {
+		return nil
+	}
+	for _, raw := range cfg.DefaultGroupIDs {
+		gid, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		if _, err := s.groupRepo.Get(gid); err != nil {
+			continue
+		}
+		if err := s.groupRepo.AddMemberTx(tx, gid, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *DirectorySyncService) resolveUserDepartment(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, resolver map[string]*mappingTarget, mountID *uuid.UUID, dryRun bool, summary *DirectorySyncSummary) *uuid.UUID {
 	paths := getStringListAny(remote, cfg.FieldMapping["department_paths"])
 	if len(paths) == 0 {
 		if p := getStringAny(remote, cfg.FieldMapping["department_path"]); p != "" {
@@ -518,11 +1309,240 @@ func (s *DirectorySyncService) resolveUserDepartment(remote map[string]any, cfg 
 	}
 	for _, p := range paths {
 		localPath := localDepartmentPath(p, cfg.StripPrefix)
-		if id, ok := pathToDeptID[localPath]; ok {
-			return &id
+		if localPath == "" {
+			continue
+		}
+		// 精确匹配优先
+		if t, ok := resolver[localPath]; ok {
+			if id := s.ensureTargetDept(tx, cfg, t, dryRun, summary); id != nil {
+				return id
+			}
+		}
+		// 手动部门匹配模式下，父部门映射覆盖其下所有子部门/小组/团队
+		if cfg.MappingMode {
+			var bestKey string
+			var bestTarget *mappingTarget
+			for key, t := range resolver {
+				if key == "" {
+					continue
+				}
+				if key == localPath || strings.HasPrefix(localPath, key+"/") {
+					if len(key) > len(bestKey) {
+						bestKey = key
+						bestTarget = t
+					}
+				}
+			}
+			if bestTarget != nil {
+				if id := s.ensureTargetDept(tx, cfg, bestTarget, dryRun, summary); id != nil {
+					return id
+				}
+			}
 		}
 	}
+	if cfg.MappingMode {
+		// 匹配模式下，仅当用户部门确实被匹配到本地部门才同步，未匹配的跳过
+		return nil
+	}
 	return mountID
+}
+
+// ensureTargetDept 将目标部门解析为真实本地部门 ID。
+//   - existing：直接返回已存在部门 ID；
+//   - create：仅在确有用户归属（被调用）时才懒创建，并缓存 ID，
+//     从而不会为没有用户的待创建部门生成空部门。
+func (s *DirectorySyncService) ensureTargetDept(tx *gorm.DB, cfg DirectorySyncConfig, t *mappingTarget, dryRun bool, summary *DirectorySyncSummary) *uuid.UUID {
+	if t == nil {
+		return nil
+	}
+	if t.kind == "existing" {
+		id := t.localID
+		return &id
+	}
+	if strings.TrimSpace(t.name) == "" {
+		return nil
+	}
+	if t.createdID != nil {
+		return t.createdID
+	}
+	parentStr := ""
+	if t.parentID != nil {
+		parentStr = t.parentID.String()
+	}
+	extID := "newdept:" + cfg.PlatformType + ":" + parentStr + ":" + t.name
+	if binding, err := s.getBinding(tx, cfg.PlatformType, "department", extID); err == nil {
+		id := binding.LocalID
+		t.createdID = &id
+		return t.createdID
+	}
+	if summary != nil {
+		summary.DepartmentCreated++
+	}
+	if dryRun {
+		dummy := uuid.New()
+		t.createdID = &dummy
+		return t.createdID
+	}
+	dept := &model.Department{
+		Name:        t.name,
+		ParentID:    t.parentID,
+		Description: "directory sync on-demand",
+	}
+	if err := tx.Create(dept).Error; err != nil {
+		return nil
+	}
+	t.createdID = &dept.ID
+	_ = s.upsertBinding(tx, cfg.PlatformType, "department", extID, dept.ID, t.remoteKey)
+	return t.createdID
+}
+
+// buildPreviewUser 生成预览树中的用户节点，并判定其将「新建」还是「更新」。
+func (s *DirectorySyncService) buildPreviewUser(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, externalID, email, sourceUsername string) SyncPreviewUser {
+	nick := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["nickname"]), externalID)
+	user := s.findExistingUserForPreview(tx, cfg, remote, externalID, email, sourceUsername)
+	status := "create"
+	if user != nil {
+		status = "update"
+	}
+	eff := s.effectiveUsername(tx, cfg, status, user, sourceUsername, nick)
+	return SyncPreviewUser{Name: nick, Username: eff, SourceUsername: sourceUsername, Email: email, Status: status}
+}
+
+// findExistingUserForPreview 复刻 applyRemoteUser 的查找链（binding→domain→email→username），
+// 用于预览阶段判定用户是否已存在并拿到其当前用户名。
+func (s *DirectorySyncService) findExistingUserForPreview(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, externalID, email, sourceUsername string) *model.User {
+	if binding, err := s.getBinding(tx, cfg.PlatformType, "user", externalID); err == nil {
+		if u, err := s.getUserByID(tx, binding.LocalID); err == nil {
+			return u
+		}
+	}
+	if u, err := s.getUserByDomainAccount(tx, externalID); err == nil {
+		return u
+	}
+	if email != "" {
+		if u, err := s.getUserByEmail(tx, email); err == nil {
+			return u
+		}
+	}
+	if u, err := s.getUserByUsername(tx, strings.ToLower(sourceUsername)); err == nil {
+		return u
+	}
+	return nil
+}
+
+// effectiveUsername 计算用户"将落库"的用户名，逻辑与 applyRemoteUser 完全一致：
+// 新建 → 按策略生成（含去重序号）；已存在 → 仅在需要规范化时重新生成，否则保持（兜底 ToLower）。
+func (s *DirectorySyncService) effectiveUsername(tx *gorm.DB, cfg DirectorySyncConfig, status string, user *model.User, sourceUsername, nickname string) string {
+	if status == "create" || user == nil {
+		return s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, uuid.Nil)
+	}
+	if shouldNormalizeExistingUsername(user.Username, sourceUsername) {
+		return s.generateUsername(tx, cfg.UsernameStrategy, sourceUsername, nickname, user.ID)
+	}
+	return strings.ToLower(user.Username)
+}
+
+// inSelectedSubtree 判断某远端部门路径是否落在任一已勾选匹配部门的子树内。
+func inSelectedSubtree(p string, roots map[string]bool) bool {
+	if roots[p] {
+		return true
+	}
+	for root := range roots {
+		if strings.HasPrefix(p, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// buildPreviewTree 由快照部门 + 用户映射构造「选中部门 → 用户」的树形预览。
+// 未勾选部门（及其用户）完全不进入结果。
+func (s *DirectorySyncService) buildPreviewTree(snap *directorySnapshot, cfg DirectorySyncConfig, previewUsers map[string][]SyncPreviewUser) []SyncPreviewDept {
+	roots := make(map[string]bool)
+	for _, m := range cfg.DepartmentMappings {
+		if !m.Include || strings.TrimSpace(m.RemotePath) == "" {
+			continue
+		}
+		if strings.TrimSpace(m.LocalDepartmentID) != "" || (m.CreateLocal && strings.TrimSpace(m.NewDeptName) != "") {
+			roots[m.RemotePath] = true
+		}
+	}
+	log.Printf("[DEBUG] buildPreviewTree roots=%v previewUsers=%d snapDepts=%d", roots, len(previewUsers), len(snap.Departments))
+
+	nodes := make(map[string]*SyncPreviewDept)
+	addNode := func(p string) *SyncPreviewDept {
+		if n, ok := nodes[p]; ok {
+			// 快照部门已创建过节点，但创建时 Users 为空；
+			// 必须把真正归属该部门的用户回填进去，否则树里永远显示 0 用户。
+			n.Users = previewUsers[p]
+			return n
+		}
+		n := &SyncPreviewDept{RemotePath: p, RemoteName: leafName(p), Users: previewUsers[p]}
+		nodes[p] = n
+		return n
+	}
+	// 1) 选中子树内的快照部门
+	for _, d := range snap.Departments {
+		p := getStringAny(d, "path")
+		if p == "" || !inSelectedSubtree(p, roots) {
+			continue
+		}
+		n := addNode(p)
+		n.RemoteName = firstNonEmpty(getStringAny(d, "name"), leafName(p))
+	}
+	// 2) 补上仅含用户、但快照部门列表里缺失的部门路径，并保证祖先链存在
+	for p := range previewUsers {
+		cur := p
+		for cur != "" {
+			addNode(cur)
+			parent := parentPath(cur)
+			if parent == cur {
+				break
+			}
+			cur = parent
+		}
+	}
+	// 3) 建立父子关系
+	var tree []SyncPreviewDept
+	for p, n := range nodes {
+		parent := parentPath(p)
+		if parent != "" {
+			if pn, ok := nodes[parent]; ok && pn != n {
+				pn.Children = append(pn.Children, *n)
+				continue
+			}
+		}
+		tree = append(tree, *n)
+	}
+	// 4) 排序 + 递归统计用户数
+	var sortRec func(n *SyncPreviewDept)
+	sortRec = func(n *SyncPreviewDept) {
+		sort.Slice(n.Children, func(i, j int) bool { return n.Children[i].RemotePath < n.Children[j].RemotePath })
+		for i := range n.Children {
+			sortRec(&n.Children[i])
+		}
+	}
+	for i := range tree {
+		sortRec(&tree[i])
+	}
+	var calc func(n *SyncPreviewDept) int
+	calc = func(n *SyncPreviewDept) int {
+		c := len(n.Users)
+		for i := range n.Children {
+			c += calc(&n.Children[i])
+		}
+		n.UserCount = c
+		return c
+	}
+	for i := range tree {
+		calc(&tree[i])
+	}
+	treeJSON, _ := json.Marshal(tree)
+	if len(treeJSON) > 2000 {
+		treeJSON = treeJSON[:2000]
+	}
+	log.Printf("[DEBUG] buildPreviewTree output tree=%s", treeJSON)
+	return tree
 }
 
 func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyncConfig, seen map[string]bool, dryRun bool, summary *DirectorySyncSummary) error {
@@ -538,6 +1558,12 @@ func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyn
 		if err := tx.First(&user, "id = ?", binding.LocalID).Error; err != nil {
 			continue
 		}
+		// 仅对「平台来源」的账号执行自动禁用：当同步来源已不存在该用户时，
+		// 自动禁用并标记原因「同步用户的来源不存在」。
+		// 本地创建的账号不随同步缺失而调整，保持原有禁用/锁定状态不变。
+		if user.UserSource != "platform" {
+			continue
+		}
 		if !user.IsActive && user.HireStatus == "resigned" {
 			continue
 		}
@@ -548,7 +1574,7 @@ func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyn
 		user.IsActive = false
 		user.HireStatus = "resigned"
 		user.IsLocked = true
-		user.LockReason = "wecom_missing"
+		user.LockReason = "source_missing"
 		if err := tx.Save(&user).Error; err != nil {
 			return err
 		}
@@ -716,28 +1742,262 @@ func (s *DirectorySyncService) generateUsername(tx *gorm.DB, strategy, sourceUse
 	return candidate
 }
 
+// resolveImportUsername 计算导入时的最终用户名：
+//   - override 为空：按策略生成（与完整同步一致）；
+//   - override 非空（用户手动编辑过）：sanitize 后使用，并对重名做唯一性兜底（追加数字）。
+func (s *DirectorySyncService) resolveImportUsername(tx *gorm.DB, strategy, sourceUsername, nickname string, currentID uuid.UUID, override string) string {
+	target := sanitizeUsername(override)
+	if target == "" {
+		return s.generateUsername(tx, strategy, sourceUsername, nickname, currentID)
+	}
+	for i := 2; s.valueTaken(tx, "username", target, currentID); i++ {
+		target = target + strconv.Itoa(i)
+	}
+	return target
+}
+
+// bufferConflictInfo 编辑用户名/邮箱时与已存在用户冲突的信息，供前端弹窗让用户选择处理方式。
+type bufferConflictInfo struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+}
+
+// editBufferFieldResult 编辑用户名/邮箱结果：无冲突时已写回编辑值；冲突时不写回、返回冲突信息。
+type editBufferFieldResult struct {
+	Value    string                `json:"-"`
+	Conflict *bufferConflictInfo   `json:"conflict,omitempty"`
+}
+
+// EditBufferUsername 供前端「用户导入」预览行内编辑用户名：
+// 写回缓冲表，导入时按该用户名落库。
+// 若编辑后的用户名与已存在用户冲突，则**不写回**、返回冲突信息，由前端弹窗让用户选择
+// 「关联到已有用户」或「重命名加序号」，避免静默给同一人建两个账号 / 撞名。
+func (s *DirectorySyncService) EditBufferField(externalID, field, value string) (*editBufferFieldResult, error) {
+	cfg := s.LoadConfig(false)
+	if cfg.PlatformType == "" {
+		return nil, errors.New("尚未配置同步平台类型")
+	}
+	externalID = strings.TrimSpace(externalID)
+	if externalID == "" {
+		return nil, errors.New("external_id 不能为空")
+	}
+	var row model.DirectorySyncBuffer
+	if err := s.db.Where("provider = ? AND external_id = ?", cfg.PlatformType, externalID).First(&row).Error; err != nil {
+		return nil, errors.New("缓冲记录不存在，请先点击「同步用户」拉取远端通讯录")
+	}
+
+	switch field {
+	case "username":
+		target := sanitizeUsername(value)
+		if target == "" {
+			return nil, errors.New("用户名不能为空或仅含非法字符")
+		}
+		if s.valueTaken(s.db, "username", target, uuid.Nil) {
+			return &editBufferFieldResult{Value: target, Conflict: s.fillUserConflictInfo(s.db, target, "")}, nil
+		}
+		if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Username: target, UsernameEdited: target}).Error; err != nil {
+			return nil, err
+		}
+		return &editBufferFieldResult{Value: target, Conflict: nil}, nil
+	case "email":
+		target := sanitizeEmail(value)
+		if target == "" || !isValidEmail(target) {
+			return nil, errors.New("邮箱格式不正确")
+		}
+		if s.valueTaken(s.db, "email", target, uuid.Nil) {
+			return &editBufferFieldResult{Value: target, Conflict: s.fillUserConflictInfo(s.db, "", target)}, nil
+		}
+		if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Email: target, EmailEdited: target}).Error; err != nil {
+			return nil, err
+		}
+		return &editBufferFieldResult{Value: target, Conflict: nil}, nil
+	default:
+		return nil, errors.New("不支持的字段类型")
+	}
+}
+
+// ResolveBufferConflict 处理用户名/邮箱冲突的两种选择：
+// field: "username" 或 "email"
+//   - "link"：建立绑定（该 external_id → 冲突用户）。导入时该账号会被判定为「已存在」、
+//     更新该用户而非新建，预览标记为已存在——从根本上避免同一人两个账号 / 撞名。
+//     同时将缓冲行的 username/email 更新为冲突用户的值。
+//   - "rename"：基于用户想改的目标值追加序号（唯一性兜底）写回，导入时新建该值账号。
+//     对用户名追加序号到 username 字段；对邮箱追加序号到 email local part。
+// 返回最终落库/显示的值（username 或 email）。
+func (s *DirectorySyncService) ResolveBufferConflict(externalID, field, action, conflictUserID, value string) (string, error) {
+	cfg := s.LoadConfig(false)
+	if cfg.PlatformType == "" {
+		return "", errors.New("尚未配置同步平台类型")
+	}
+	externalID = strings.TrimSpace(externalID)
+	if externalID == "" {
+		return "", errors.New("external_id 不能为空")
+	}
+	var row model.DirectorySyncBuffer
+	if err := s.db.Where("provider = ? AND external_id = ?", cfg.PlatformType, externalID).First(&row).Error; err != nil {
+		return "", errors.New("缓冲记录不存在")
+	}
+	switch action {
+	case "link":
+		var u model.User
+		if err := s.db.First(&u, "id = ?", conflictUserID).Error; err != nil {
+			return "", errors.New("冲突用户不存在")
+		}
+		// 建立绑定：导入时该 external_id 通过 binding 更新该已存在用户，不再新建。
+		if err := s.upsertBinding(s.db, cfg.PlatformType, "user", externalID, u.ID, ""); err != nil {
+			return "", err
+		}
+		// 更新缓冲行：显示已存在用户的 username/email，并标记为已存在（导入时走更新分支）。
+		updates := model.DirectorySyncBuffer{Exists: true}
+		switch field {
+		case "username":
+			updates.Username = u.Username
+		case "email":
+			if u.Email != nil {
+				updates.Email = *u.Email
+			}
+		}
+		if err := s.db.Model(&row).Updates(updates).Error; err != nil {
+			return "", err
+		}
+		switch field {
+		case "username":
+			return u.Username, nil
+		case "email":
+			if u.Email != nil {
+				return *u.Email, nil
+			}
+			return "", nil
+		default:
+			return "", errors.New("不支持的字段类型")
+		}
+	case "rename":
+		if field == "username" {
+			target := sanitizeUsername(value)
+			if target == "" {
+				target = sanitizeUsername(row.Username)
+			}
+			if target == "" {
+				target = "user"
+			}
+			for i := 2; s.valueTaken(s.db, "username", target, uuid.Nil); i++ {
+				target = target + strconv.Itoa(i)
+			}
+			if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Username: target, UsernameEdited: target}).Error; err != nil {
+				return "", err
+			}
+			return target, nil
+		} else if field == "email" {
+			target := sanitizeEmail(value)
+			if target == "" || !isValidEmail(target) {
+				// 回退到缓冲中已有邮箱
+				target = sanitizeEmail(row.Email)
+			}
+			if target == "" || !isValidEmail(target) {
+				return "", errors.New("邮箱格式不正确")
+			}
+			at := strings.LastIndex(target, "@")
+			local, domain := target[:at], target[at:]
+			for i := 2; s.valueTaken(s.db, "email", local+strconv.Itoa(i)+domain, uuid.Nil); i++ {
+				target = local + strconv.Itoa(i) + domain
+			}
+			if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Email: target, EmailEdited: target}).Error; err != nil {
+				return "", err
+			}
+			return target, nil
+		}
+		return "", errors.New("不支持的字段类型")
+	default:
+		return "", errors.New("未知的冲突处理动作")
+	}
+}
+
+// fillUserConflictInfo 根据 username 或 email 查找冲突用户，填充冲突信息。
+func (s *DirectorySyncService) fillUserConflictInfo(db *gorm.DB, username, email string) *bufferConflictInfo {
+	if username != "" {
+		if u, err := s.getUserByUsername(db, username); err == nil {
+			return s.userConflictInfo(u)
+		}
+	}
+	if email != "" {
+		if u, err := s.getUserByEmail(db, email); err == nil {
+			return s.userConflictInfo(u)
+		}
+	}
+	return &bufferConflictInfo{}
+}
+
+func (s *DirectorySyncService) userConflictInfo(u *model.User) *bufferConflictInfo {
+	return &bufferConflictInfo{
+		UserID:   u.ID.String(),
+		Username: u.Username,
+		Name:     u.Nickname,
+		Email:    derefString(u.Email),
+		Phone:    derefString(u.Phone),
+	}
+}
+
+// sanitizeEmail 规整邮箱：去首尾空白、小写。
+func sanitizeEmail(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return value
+}
+
+// isValidEmail 基础邮箱格式校验（非空、含 @ 且 @ 不在首尾、域名含点）。
+func isValidEmail(value string) bool {
+	v := strings.TrimSpace(value)
+	at := strings.LastIndex(v, "@")
+	return at > 0 && at < len(v)-1 && strings.Contains(v[at+1:], ".")
+}
+
+// derefString 安全解引用 *string，nil 返回空串。
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// isLatin 判断字符串是否仅含 ASCII 字母/数字（即已是拼音或英文，无需再转）。
+func isLatin(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r > unicode.MaxASCII || (!unicode.IsLetter(r) && !unicode.IsDigit(r)) {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeUsernameBase(strategy, sourceUsername, nickname string) string {
-	source := strings.TrimSpace(sourceUsername)
-	lower := strings.ToLower(source)
+	source := strings.ToLower(strings.TrimSpace(sourceUsername))
 	switch strategy {
 	case "source_lower":
-		return sanitizeUsername(lower)
-	case "pinyin":
-		if py := nameToPinyin(nickname); py != "" {
-			return sanitizeUsername(py)
+		return sanitizeUsername(source)
+	case "pinyin", "smart_pinyin", "":
+		// 远端 username 通常已是姓名拼音，直接使用；非拉丁时回退到拉丁昵称或数字占位。
+		// 不再用逐字中文→拼音表反解（易漏字且需手工维护）。
+		if source != "" && isLatin(source) {
+			return sanitizeUsername(source)
 		}
-	case "smart_pinyin", "":
+		if n := strings.ToLower(strings.TrimSpace(nickname)); n != "" && isLatin(n) {
+			return sanitizeUsername(n)
+		}
 		if isNumeric(source) {
-			if py := nameToPinyin(nickname); py != "" {
-				return sanitizeUsername(py)
-			}
 			if len(source) > 6 {
 				return "u" + source[len(source)-6:]
 			}
+			return "u" + source
 		}
-		return sanitizeUsername(lower)
+		return sanitizeUsername(source)
 	}
-	return sanitizeUsername(lower)
+	return sanitizeUsername(source)
 }
 
 func shouldNormalizeExistingUsername(current, source string) bool {
@@ -761,64 +2021,198 @@ func sanitizeUsername(value string) string {
 	return value
 }
 
-func nameToPinyin(name string) string {
-	var b strings.Builder
-	for _, r := range strings.TrimSpace(name) {
-		if unicode.IsSpace(r) {
-			continue
-		}
-		if r < unicode.MaxASCII {
-			if unicode.IsLetter(r) || unicode.IsDigit(r) {
-				b.WriteRune(unicode.ToLower(r))
-			}
-			continue
-		}
-		if py, ok := commonNamePinyin[r]; ok {
-			b.WriteString(py)
-		}
-	}
-	return b.String()
+// ---- 邮箱策略 ----
+
+var emailLocalCleaner = regexp.MustCompile(`[^a-z0-9._%+-]+`)
+
+// sanitizeEmailLocal 仅保留邮箱本地名允许的字符（小写）。
+func sanitizeEmailLocal(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = emailLocalCleaner.ReplaceAllString(value, "")
+	value = strings.Trim(value, "._%+-")
+	return value
 }
 
-var commonNamePinyin = map[rune]string{
-	'王': "wang", '李': "li", '张': "zhang", '刘': "liu", '陈': "chen", '杨': "yang", '黄': "huang", '赵': "zhao",
-	'吴': "wu", '周': "zhou", '徐': "xu", '孙': "sun", '马': "ma", '朱': "zhu", '胡': "hu", '郭': "guo",
-	'何': "he", '林': "lin", '罗': "luo", '高': "gao", '郑': "zheng", '梁': "liang", '谢': "xie", '宋': "song",
-	'唐': "tang", '许': "xu", '韩': "han", '冯': "feng", '邓': "deng", '曹': "cao", '彭': "peng", '曾': "zeng",
-	'萧': "xiao", '田': "tian", '董': "dong", '袁': "yuan", '潘': "pan", '于': "yu", '蒋': "jiang", '蔡': "cai",
-	'余': "yu", '杜': "du", '叶': "ye", '程': "cheng", '苏': "su", '魏': "wei", '吕': "lv", '丁': "ding",
-	'任': "ren", '沈': "shen", '姚': "yao", '卢': "lu", '姜': "jiang", '崔': "cui", '钟': "zhong", '谭': "tan",
-	'陆': "lu", '汪': "wang", '范': "fan", '金': "jin", '石': "shi", '廖': "liao", '贾': "jia", '夏': "xia",
-	'韦': "wei", '付': "fu", '方': "fang", '白': "bai", '邹': "zou", '孟': "meng", '熊': "xiong", '秦': "qin",
-	'邱': "qiu", '江': "jiang", '尹': "yin", '薛': "xue", '闫': "yan", '段': "duan", '雷': "lei", '侯': "hou",
-	'龙': "long", '史': "shi", '陶': "tao", '黎': "li", '贺': "he", '顾': "gu", '毛': "mao", '郝': "hao",
-	'龚': "gong", '邵': "shao", '万': "wan", '钱': "qian", '严': "yan", '覃': "qin", '武': "wu", '戴': "dai",
-	'莫': "mo", '孔': "kong", '向': "xiang", '常': "chang", '汤': "tang", '康': "kang", '施': "shi", '文': "wen",
-	'牛': "niu", '樊': "fan", '葛': "ge", '邢': "xing", '安': "an", '齐': "qi", '易': "yi", '乔': "qiao",
-	'伍': "wu", '庞': "pang", '颜': "yan", '倪': "ni", '庄': "zhuang", '聂': "nie", '章': "zhang", '鲁': "lu",
-	'岳': "yue", '翟': "zhai", '殷': "yin", '詹': "zhan", '申': "shen", '欧': "ou", '耿': "geng", '关': "guan",
-	'兰': "lan", '焦': "jiao", '俞': "yu", '左': "zuo", '柳': "liu", '甄': "zhen", '宫': "gong", '晏': "yan",
-	'涛': "tao", '浩': "hao", '欣': "xin", '飞': "fei", '狮': "shi", '德': "de", '尚': "shang", '靖': "jing",
-	'凯': "kai", '燕': "yan", '昊': "hao", '洁': "jie", '海': "hai", '洋': "yang", '伟': "wei", '芳': "fang",
-	'娜': "na", '敏': "min", '静': "jing", '强': "qiang", '磊': "lei", '军': "jun", '丽': "li", '勇': "yong",
-	'艳': "yan", '杰': "jie", '娟': "juan", '明': "ming", '超': "chao", '秀': "xiu", '霞': "xia", '平': "ping",
-	'刚': "gang", '辉': "hui", '鹏': "peng", '华': "hua", '鑫': "xin", '俊': "jun", '峰': "feng", '健': "jian",
-	'斌': "bin", '宇': "yu", '宁': "ning", '博': "bo", '佳': "jia", '瑞': "rui", '萍': "ping", '兵': "bing",
-	'旭': "xu", '阳': "yang", '雪': "xue", '丹': "dan", '媛': "yuan", '倩': "qian", '亮': "liang",
+// sanitizeEmailDomain 规整域名：去首尾空白、去掉开头多余的 @ 与结尾的点。
+func sanitizeEmailDomain(domain string) string {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = strings.TrimPrefix(domain, "@")
+	domain = strings.Trim(domain, ".")
+	return domain
 }
+
+// splitEmailAddress 拆分邮箱为本地名与域名；非法（无 @ 或 @ 在首尾）返回空串。
+func splitEmailAddress(email string) (local, domain string) {
+	email = strings.TrimSpace(email)
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return "", ""
+	}
+	return email[:at], strings.ToLower(email[at+1:])
+}
+
+// derivePinyinName 把远端 userId 等拼音串（如 "TianZhongYa"）拆成 [surname, givenName]。
+// 约定：拼音为 CamelCase，首段为姓（单姓最常见），其余为名；适用于单姓中文名。
+// 仅做拆分、不做中文字典转写，避免在代码中维护庞大的拼音表。
+func derivePinyinName(s string) (surname, given string) {
+	s = strings.TrimSpace(s)
+	if s == "" || !isLatin(s) {
+		return "", ""
+	}
+	segs := camelSegments(s)
+	if len(segs) < 2 {
+		return "", ""
+	}
+	return segs[0], strings.Join(segs[1:], "")
+}
+
+// camelSegments 按大写字母边界把 CamelCase 串拆成若干段，如 "TianZhongYa" -> ["Tian","Zhong","Ya"]。
+func camelSegments(s string) []string {
+	var segs []string
+	var cur strings.Builder
+	for i, r := range s {
+		if unicode.IsUpper(r) && i > 0 && cur.Len() > 0 {
+			segs = append(segs, cur.String())
+			cur.Reset()
+		}
+		cur.WriteRune(r)
+	}
+	if cur.Len() > 0 {
+		segs = append(segs, cur.String())
+	}
+	return segs
+}
+
+// generateEmail 按邮箱策略生成邮箱本地名。
+// 拼音一律取自远端已经提供的拼音，不再反向用逐字中文表转写（易漏字且需手工维护）：
+//   - given_surname：优先用远端独立的 givenName.surname（已是拼音）；
+//     当远端 givenName/surname 为中文（非拉丁，无法拼装）时，回退到远端邮箱的本地名
+//     （仅当远端邮箱域名与配置一致，避免误用个人邮箱）；再不行才回退到远端 username（完整拼音）。
+//   - fullname：优先用远端 username（完整拼音），其次远端邮箱本地名，再回退到拉丁昵称。
+// 仅当策略与域名都配置时返回非空；否则返回 ""（沿用远端或留空）。
+func (s *DirectorySyncService) generateEmail(cfg DirectorySyncConfig, sourceUsername, nickname, givenName, surname, rawEmail string) string {
+	strategy := strings.TrimSpace(cfg.EmailStrategy)
+	domain := sanitizeEmailDomain(cfg.EmailDomain)
+	if strategy == "" || domain == "" {
+		return ""
+	}
+	src := strings.ToLower(strings.TrimSpace(sourceUsername))
+	g := strings.TrimSpace(givenName)
+	sr := strings.TrimSpace(surname)
+	// 远端邮箱本地名：仅当其域名与配置一致时才可作为兜底，避免误用个人邮箱等外部域名。
+	remoteLocal, remoteDomain := splitEmailAddress(rawEmail)
+	useRemoteEmail := remoteDomain != "" && strings.EqualFold(remoteDomain, domain)
+	var local string
+	switch strategy {
+	case "given_surname":
+		if isLatin(g) && isLatin(sr) {
+			local = sanitizeEmailLocal(g + "." + sr)
+		} else if dSurname, dGiven := derivePinyinName(sourceUsername); dGiven != "" && dSurname != "" {
+			// 远端未单独给出 givenName/surname（或为中文）时，复用远端 userId 中已提供的拼音
+			// （约定为「姓+名」CamelCase，如 TianZhongYa），拆出并反转为「名.姓」以契合策略。
+			local = sanitizeEmailLocal(dGiven + "." + dSurname)
+		} else if useRemoteEmail {
+			local = sanitizeEmailLocal(remoteLocal)
+		} else if src != "" {
+			local = sanitizeEmailLocal(src) // 远端拼音兜底，完整可用
+		}
+	case "fullname":
+		if src != "" {
+			local = sanitizeEmailLocal(src)
+		} else if useRemoteEmail {
+			local = sanitizeEmailLocal(remoteLocal)
+		} else if isLatin(nickname) {
+			local = sanitizeEmailLocal(nickname)
+		}
+	default:
+		return ""
+	}
+	if local == "" {
+		return ""
+	}
+	return local + "@" + domain
+}
+
+// resolvePreviewEmail 预览阶段计算展示邮箱：
+//   - 策略为空：沿用远端邮箱（无则空）
+//   - 策略为 given_surname / fullname：按规则用配置的邮件后缀生成，忽略远端邮箱；
+//     生成失败（缺少姓名/后缀）时回退到远端邮箱
+func (s *DirectorySyncService) resolvePreviewEmail(cfg DirectorySyncConfig, sourceUsername, rawEmail, nickname, givenName, surname string) string {
+	strategy := strings.TrimSpace(cfg.EmailStrategy)
+	if strategy == "" {
+		return strings.TrimSpace(rawEmail)
+	}
+	if gen := s.generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail); gen != "" {
+		return gen
+	}
+	return strings.TrimSpace(rawEmail)
+}
+
+// resolveAssignEmail 计算最终写入的邮箱指针：
+//   - 策略为空（跟随远端）：远端有邮箱则占用后使用，无则留空（不生成）；
+//   - 策略为 given_surname / fullname：按规则用配置的邮件后缀生成并覆盖远端邮箱，
+//     对生成值做唯一性兜底（追加数字）；生成失败（缺姓名/后缀）时回退到远端邮箱。
+func (s *DirectorySyncService) resolveAssignEmail(tx *gorm.DB, cfg DirectorySyncConfig, sourceUsername, rawEmail, nickname, givenName, surname string, currentID uuid.UUID) *string {
+	strategy := strings.TrimSpace(cfg.EmailStrategy)
+	if strategy == "" {
+		raw := strings.TrimSpace(rawEmail)
+		if raw == "" {
+			return nil
+		}
+		if s.valueTaken(tx, "email", raw, currentID) {
+			return nil
+		}
+		return &raw
+	}
+	gen := s.generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail)
+	if gen == "" {
+		// 生成失败（缺姓名/后缀），回退远端邮箱
+		raw := strings.TrimSpace(rawEmail)
+		if raw == "" || s.valueTaken(tx, "email", raw, currentID) {
+			return nil
+		}
+		return &raw
+	}
+	cand := gen
+	at := strings.Index(cand, "@")
+	for i := 2; s.valueTaken(tx, "email", cand, currentID); i++ {
+		if at < 0 {
+			cand = gen + strconv.Itoa(i)
+		} else {
+			cand = gen[:at] + strconv.Itoa(i) + gen[at:]
+		}
+	}
+	return &cand
+}
+
 
 func validateDirectoryConfig(cfg DirectorySyncConfig, requireDepartments bool) error {
-	if cfg.PlatformType != DirectoryProviderWeComAttendance {
-		return errors.New("暂只支持企微后台通讯录同步")
+	switch cfg.PlatformType {
+	case DirectoryProviderWeComAttendance:
+		if strings.TrimSpace(cfg.BaseURL) == "" {
+			return errors.New("请先配置第三方平台地址")
+		}
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return errors.New("请先配置 API Key")
+		}
+	default:
+		return errors.New("暂只支持企微后台通讯录同步（考勤桥接）")
 	}
-	if strings.TrimSpace(cfg.BaseURL) == "" {
-		return errors.New("请先配置第三方平台地址")
-	}
-	if strings.TrimSpace(cfg.APIKey) == "" {
-		return errors.New("请先配置 API Key")
-	}
-	if requireDepartments && len(cfg.SelectedDepartmentPaths) == 0 {
-		return errors.New("请至少选择一个同步部门")
+	if requireDepartments {
+		if cfg.MappingMode {
+			hasMapping := false
+			for _, m := range cfg.DepartmentMappings {
+				if m.Include && (strings.TrimSpace(m.LocalDepartmentID) != "" || (m.CreateLocal && strings.TrimSpace(m.NewDeptName) != "")) {
+					hasMapping = true
+					break
+				}
+			}
+			if !hasMapping {
+				return errors.New("请在『部门匹配』中至少勾选一个远端部门，并映射到本地部门或登记待创建部门")
+			}
+		} else if len(cfg.SelectedDepartmentPaths) == 0 {
+			return errors.New("请至少选择一个同步部门")
+		}
 	}
 	return nil
 }

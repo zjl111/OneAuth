@@ -56,3 +56,37 @@ func (l *DirectorySyncLog) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// DirectorySyncBuffer 同步缓冲表：每次执行同步（手动「同步用户」或凌晨定时任务）时，
+// 把远端拉取的通讯录快照写入此表，供「用户导入」弹窗直接读取展示，避免每次打开都重新拉取远端。
+// raw 字段保存远端原始 JSON，导入/落库时再解析还原，确保与真实同步逻辑使用完全一致的数据。
+type DirectorySyncBuffer struct {
+	ID         uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
+	Provider   string    `gorm:"size:50;not null;index:idx_buf_provider" json:"provider"`
+	ExternalID string    `gorm:"size:255;not null;uniqueIndex:idx_buf_ext" json:"external_id"`
+	Username   string    `gorm:"size:255" json:"username"`
+	Name       string    `gorm:"size:255" json:"name"`
+	Email      string    `gorm:"size:255" json:"email"`
+	Department string    `gorm:"size:255" json:"department"`
+	Groups     string    `gorm:"type:text" json:"groups"` // 用户所属远端部门路径 JSON 数组
+	Status     string    `gorm:"size:20" json:"status"`    // "create" 新建 | "update" 更新
+	Exists     bool      `gorm:"default:false" json:"exists"`
+	// UsernameEdited/EmailEdited 记录用户手动编辑过的值（空=未编辑）。
+	// 「同步用户」(pull) 重建缓冲时保留这两个字段，避免覆盖用户的手动编辑；
+	// 导入时优先用这些编辑值落库。
+	UsernameEdited string `gorm:"size:255" json:"-"`
+	EmailEdited    string `gorm:"size:255" json:"-"`
+	Raw            string    `gorm:"type:text" json:"-"` // 远端原始记录 JSON，落库时解析
+	FetchedAt  time.Time `json:"fetched_at"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (DirectorySyncBuffer) TableName() string { return "sso_directory_sync_buffer" }
+
+func (b *DirectorySyncBuffer) BeforeCreate(tx *gorm.DB) error {
+	if b.ID == uuid.Nil {
+		b.ID = uuid.New()
+	}
+	return nil
+}

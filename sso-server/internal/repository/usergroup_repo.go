@@ -123,6 +123,22 @@ func (r *UserGroupRepository) AddMember(groupID uuid.UUID, userID uuid.UUID) err
 	}
 }
 
+// AddMemberTx 与 AddMember 等价，但使用调用方传入的事务（tx），便于在同步事务内连同用户创建一起提交。
+func (r *UserGroupRepository) AddMemberTx(tx *gorm.DB, groupID uuid.UUID, userID uuid.UUID) error {
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		return tx.Exec(
+			`INSERT OR IGNORE INTO sso_user_group_members (user_group_id, user_id) VALUES (?, ?)`,
+			groupID, userID,
+		).Error
+	default:
+		return tx.Exec(
+			`INSERT INTO sso_user_group_members (user_group_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+			groupID, userID,
+		).Error
+	}
+}
+
 func uniqUUIDs(ids []uuid.UUID) []uuid.UUID {
 	if len(ids) < 2 {
 		return ids

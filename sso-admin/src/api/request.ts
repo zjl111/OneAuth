@@ -1,4 +1,4 @@
-import axios, { type AxiosResponse } from 'axios';
+import axios, { type AxiosResponse, type AxiosRequestConfig } from 'axios';
 import { message } from 'antd';
 import { useAuthStore } from '@/store/authStore';
 
@@ -117,13 +117,13 @@ export interface PageData<T> {
   items: T[];
 }
 
-export async function get<T = unknown>(url: string, params?: Record<string, unknown>): Promise<T> {
-  const r: AxiosResponse<ApiResponse<T>> = await request.get(url, { params });
+export async function get<T = unknown>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig): Promise<T> {
+  const r: AxiosResponse<ApiResponse<T>> = await request.get(url, { params, ...config });
   return r.data.data;
 }
 
-export async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
-  const r: AxiosResponse<ApiResponse<T>> = await request.post(url, body);
+export async function post<T = unknown>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const r: AxiosResponse<ApiResponse<T>> = await request.post(url, body, config);
   return r.data.data;
 }
 

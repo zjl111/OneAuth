@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
@@ -12,6 +14,28 @@ type UserRepository struct{ db *gorm.DB }
 func NewUserRepository(db *gorm.DB) *UserRepository { return &UserRepository{db: db} }
 
 func (r *UserRepository) DB() *gorm.DB { return r.db }
+
+// buildOrderClause maps frontend ordering param to SQL ORDER BY clause.
+// Returns (orderClause, needsDeptJoin).
+func buildOrderClause(ordering string) (string, bool) {
+	field := strings.TrimPrefix(ordering, "-")
+	desc := strings.HasPrefix(ordering, "-")
+	dir := "ASC"
+	if desc {
+		dir = "DESC"
+	}
+	switch field {
+	case "department":
+		return "d.name " + dir, true
+	case "is_locked":
+		return "is_locked " + dir, false
+	case "roles":
+		// Sort by first role code (subquery); users with no role get 'zzz' so they sort last in ASC
+		return "(SELECT COALESCE(MIN(r.code),'zzz') FROM sso_user_roles ur JOIN sso_role r ON r.id=ur.role_id WHERE ur.user_id=sso_user.id) " + dir, false
+	default:
+		return ordering + " " + dir, false
+	}
+}
 
 func (r *UserRepository) Create(u *model.User) error { return r.db.Create(u).Error }
 
@@ -137,7 +161,11 @@ func (r *UserRepository) List(q UserQuery) ([]model.User, int64, error) {
 	}
 	order := "created_at DESC"
 	if q.Ordering != "" {
-		order = q.Ordering
+		var needsDeptJoin bool
+		order, needsDeptJoin = buildOrderClause(q.Ordering)
+		if needsDeptJoin {
+			tx = tx.Joins("LEFT JOIN sso_department d ON sso_user.department_id = d.id")
+		}
 	}
 	var users []model.User
 	if err := tx.Order(order).Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).Find(&users).Error; err != nil {

@@ -17,7 +17,7 @@ import (
 
 // LDAPService 负责按 SystemConfig.ldap.* 与外部目录服务交互。
 // 它不替代主认证流程：先尝试本地密码，本地失败后才查 LDAP；
-// LDAP bind 成功的用户若本地不存在，会按属性映射自动创建（user_type=ldap）。
+// LDAP bind 成功的用户若本地不存在，会按属性映射自动创建（user_source=platform）。
 type LDAPService struct {
 	cfg      *repository.ConfigRepository
 	userRepo *repository.UserRepository
@@ -197,7 +197,7 @@ func (s *LDAPService) Authenticate(login, plain string) (*model.User, error) {
 		Username:     username,
 		Nickname:     displayName,
 		PasswordHash: randHash,
-		UserType:     "ldap",
+		UserSource:   "platform",
 		HireStatus:   "active",
 		IsActive:     true,
 		LastLogin:    &now,

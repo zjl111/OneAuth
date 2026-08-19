@@ -81,6 +81,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Incident{},
 		&model.DirectorySyncBinding{},
 		&model.DirectorySyncLog{},
+		&model.DirectorySyncBuffer{},
 		&model.AccountRecoveryRule{},
 		&model.AccountRecoveryLog{},
 		&model.AccountReconciliation{},
@@ -97,6 +98,7 @@ func AutoMigrate(db *gorm.DB) error {
 	runOnce(db, "purge_soft_deleted_users_v1", func() { purgeSoftDeletedUsers(db) })
 	runOnce(db, "dedupe_user_group_members_v1", func() { dedupeUserGroupMembers(db) })
 	runOnce(db, "prune_orphan_user_group_members_v1", func() { pruneOrphanUserGroupMembers(db) })
+	runOnce(db, "migrate_user_source_v1", func() { migrateUserSource(db) })
 	return nil
 }
 
@@ -147,6 +149,32 @@ func runOnce(db *gorm.DB, name string, fn func()) {
 			Where("category = ? AND key = ?", cat, name).
 			Update("value", "done")
 	}
+}
+
+// migrateUserSource 把旧的 user_type（internal/external/wecom/ldap）迁移到新的 user_source（local/platform）。
+// 平台同步来的（wecom/ldap）标记为 platform，其余（internal/external/手动创建）标记为 local。
+// 在 AutoMigrate 已为模型新增 user_source 列之后执行；user_type 列由本函数手工 DROP（GORM 不会主动删列）。
+func migrateUserSource(db *gorm.DB) {
+	if !db.Migrator().HasColumn("sso_user", "user_type") {
+		return
+	}
+	type row struct {
+		ID       string
+		UserType string
+	}
+	var rows []row
+	if err := db.Raw(`SELECT id, user_type FROM sso_user`).Scan(&rows).Error; err != nil {
+		return
+	}
+	for _, r := range rows {
+		src := "local"
+		if r.UserType == "wecom" || r.UserType == "ldap" {
+			src = "platform"
+		}
+		db.Exec(`UPDATE sso_user SET user_source = ? WHERE id = ?`, src, r.ID)
+	}
+	// 列本身 GORM AutoMigrate 不会主动 DROP（怕误删），手工 DROP 一次；失败也无所谓（留着不影响功能）。
+	db.Exec(`ALTER TABLE sso_user DROP COLUMN user_type`)
 }
 
 // migrateAccessPolicy 把旧的 grant_mode (public/user/group/org) 迁移到新的 access_policy (all/assigned/none)

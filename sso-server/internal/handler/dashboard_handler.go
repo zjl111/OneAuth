@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -27,19 +28,32 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		wg                                                                    sync.WaitGroup
 		userCount, loginCount, appCount, downCount, totalMonitor, activeUsers int64
 	)
+	// safeGoroutine 给子 goroutine 加 panic 兜底：单点查询 panic 只影响本次统计、
+	// 返回降级值，绝不拖垮整个进程——否则 gin Recovery 抓不住子 goroutine，
+	// 一旦 panic 会直接 crash 服务，网关对同时刻的并发请求统一报 502。
+	safeGoroutine := func(f func()) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[dashboard] stats goroutine recovered: %v", r)
+			}
+		}()
+		f()
+	}
 	wg.Add(6)
-	go func() { defer wg.Done(); userCount, _ = h.UserRepo.CountActive() }()
-	go func() { defer wg.Done(); loginCount, _ = h.LogRepo.CountLoginsToday() }()
-	go func() { defer wg.Done(); appCount, _ = h.ClientRepo.Count() }()
-	go func() { defer wg.Done(); downCount, _ = h.MonitorRepo.CountDown() }()
+	go func() { defer wg.Done(); safeGoroutine(func() { userCount, _ = h.UserRepo.CountActive() }) }()
+	go func() { defer wg.Done(); safeGoroutine(func() { loginCount, _ = h.LogRepo.CountLoginsToday() }) }()
+	go func() { defer wg.Done(); safeGoroutine(func() { appCount, _ = h.ClientRepo.Count() }) }()
+	go func() { defer wg.Done(); safeGoroutine(func() { downCount, _ = h.MonitorRepo.CountDown() }) }()
 	go func() {
 		defer wg.Done()
-		all, _ := h.MonitorRepo.ListAll()
-		totalMonitor = int64(len(all))
+		safeGoroutine(func() {
+			all, _ := h.MonitorRepo.ListAll()
+			totalMonitor = int64(len(all))
+		})
 	}()
 	go func() {
 		defer wg.Done()
-		activeUsers, _ = h.LogRepo.CountActiveUsersWithin(ActiveWindow)
+		safeGoroutine(func() { activeUsers, _ = h.LogRepo.CountActiveUsersWithin(ActiveWindow) })
 	}()
 	wg.Wait()
 

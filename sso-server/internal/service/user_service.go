@@ -127,7 +127,7 @@ type CreateUserInput struct {
 	Gender        string      `json:"gender"`
 	EmployeeNo    string      `json:"employee_no"`
 	DomainAccount string      `json:"domain_account"`
-	UserType      string      `json:"user_type"`
+	UserSource    string      `json:"user_source"`
 	HireStatus    string      `json:"hire_status"`
 	SortOrder     int         `json:"sort_order"`
 	DepartmentID  *uuid.UUID  `json:"department_id"`
@@ -152,7 +152,7 @@ func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
 		Gender:        in.Gender,
 		EmployeeNo:    in.EmployeeNo,
 		DomainAccount: in.DomainAccount,
-		UserType:      defaultStr(in.UserType, "internal"),
+		UserSource:    defaultStr(in.UserSource, "local"),
 		HireStatus:    defaultStr(in.HireStatus, "active"),
 		SortOrder:     in.SortOrder,
 		DepartmentID:  in.DepartmentID,
@@ -195,6 +195,7 @@ func (s *UserService) Create(in CreateUserInput) (*model.User, error) {
 }
 
 type UpdateUserInput struct {
+	Username      *string     `json:"username"`
 	Nickname      *string     `json:"nickname"`
 	Email         *string     `json:"email"`
 	Phone         *string     `json:"phone"`
@@ -203,7 +204,7 @@ type UpdateUserInput struct {
 	Gender        *string     `json:"gender"`
 	EmployeeNo    *string     `json:"employee_no"`
 	DomainAccount *string     `json:"domain_account"`
-	UserType      *string     `json:"user_type"`
+	UserSource    *string     `json:"user_source"`
 	HireStatus    *string     `json:"hire_status"`
 	SortOrder     *int        `json:"sort_order"`
 	DepartmentID  *uuid.UUID  `json:"department_id"`
@@ -221,10 +222,29 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 		u.Nickname = *in.Nickname
 	}
 	if in.Email != nil {
-		if *in.Email == "" {
+		newEmail := strings.TrimSpace(*in.Email)
+		// 邮箱唯一性校验（避免与其它用户重复，触发 DB 唯一索引报错）
+		if newEmail != "" {
+			if existing, err := s.repo.GetByEmail(newEmail); err == nil && existing.ID != u.ID {
+				return nil, errors.New("邮箱 " + newEmail + " 已存在")
+			}
+		}
+		if newEmail == "" {
 			u.Email = nil
 		} else {
-			u.Email = in.Email
+			u.Email = &newEmail
+		}
+	}
+	// 登录账号：仅平台（同步）用户允许修改；本地用户保持"创建后不可更改"。
+	// 改过后置 ProfileManuallyEdited=true，后续目录同步不再覆盖其账号/邮箱。
+	if in.Username != nil && u.UserSource == "platform" {
+		newUsername := strings.TrimSpace(*in.Username)
+		if newUsername != u.Username {
+			if existing, err := s.repo.GetByUsername(newUsername); err == nil && existing.ID != u.ID {
+				return nil, errors.New("登录账号 " + newUsername + " 已存在")
+			}
+			u.Username = newUsername
+			u.ProfileManuallyEdited = true
 		}
 	}
 	if in.Phone != nil {
@@ -263,8 +283,8 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 	if in.DomainAccount != nil {
 		u.DomainAccount = *in.DomainAccount
 	}
-	if in.UserType != nil {
-		u.UserType = *in.UserType
+	if in.UserSource != nil {
+		u.UserSource = *in.UserSource
 	}
 	if in.HireStatus != nil {
 		u.HireStatus = *in.HireStatus
@@ -446,6 +466,8 @@ func LockReasonText(reason string) string {
 		return "登录失败次数过多，被自动锁定"
 	case "wecom_missing":
 		return "企业微信同步时账号不存在，被自动锁定"
+	case "source_missing":
+		return "同步用户的来源不存在"
 	case "manual":
 		return "管理员手动锁定"
 	default:

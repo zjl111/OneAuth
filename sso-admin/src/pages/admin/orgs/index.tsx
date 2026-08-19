@@ -281,7 +281,7 @@ export default function OrgPage() {
       createUserForm.setFieldsValue({
         department_id: selectedDept?.id,
         is_active: true,
-        user_type: 'internal',
+        user_source: 'local',
       });
     }, 0);
   };
@@ -297,7 +297,7 @@ export default function OrgPage() {
         email: values.email,
         phone: values.phone || null,
         department_id: selectedDept?.id || null,
-        user_type: values.user_type || 'internal',
+        user_source: values.user_source || 'local',
         is_active: values.is_active !== false,
         is_staff: values.is_admin || false,
         avatar: avatarUrl || '',
@@ -753,7 +753,7 @@ export default function OrgPage() {
             className="user-form-compact"
             initialValues={{
               is_active: true,
-              user_type: 'internal',
+              user_source: 'local',
             }}
           >
             <Form.Item name="avatar" style={{ display: 'none' }}>
@@ -846,19 +846,6 @@ export default function OrgPage() {
                 </Form.Item>
               </div>
 
-              {/* Row 4: 用户类型 | 状态 */}
-              <div className="grid-cell">
-                <Form.Item name="user_type" label="用户类型" rules={[{ required: true }]}>
-                  <Select
-                    options={[
-                      { value: 'internal', label: '内部员工' },
-                      { value: 'external', label: '外部协作' },
-                    ]}
-                    suffixIcon={<span className="custom-select-arrow">▾</span>}
-                    getPopupContainer={() => document.body}
-                  />
-                </Form.Item>
-              </div>
               <div className="grid-cell">
                 <Form.Item
                   name="is_active"

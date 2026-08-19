@@ -158,13 +158,13 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte, update
 			Email:    email,
 			Phone:    phone,
 		}
-		if userType == "external" || userType == "外部" || userType == "外部协作" {
-			in.UserType = "external"
-		} else if userType != "" && userType != "internal" && userType != "内部" && userType != "内部员工" {
-			fail("用户类型只能是 internal / external")
+		if userType == "platform" || userType == "外部" || userType == "外部协作" {
+			in.UserSource = "platform"
+		} else if userType != "" && userType != "local" && userType != "内部" && userType != "内部员工" && userType != "本地" {
+			fail("用户来源只能是 local / platform")
 			continue
 		} else {
-			in.UserType = "internal"
+			in.UserSource = "local"
 		}
 		if deptName != "" {
 			id, ok := deptByName[deptName]
@@ -211,12 +211,12 @@ func (s *UserImportService) ImportFromBytes(filename string, data []byte, update
 						updateInput.DepartmentID = &parsed
 					}
 				}
-				if userType == "external" || userType == "外部" || userType == "外部协作" {
-					v := "external"
-					updateInput.UserType = &v
+				if userType == "platform" || userType == "外部" || userType == "外部协作" {
+					v := "platform"
+					updateInput.UserSource = &v
 				} else {
-					v := "internal"
-					updateInput.UserType = &v
+					v := "local"
+					updateInput.UserSource = &v
 				}
 				if adminFlag {
 					if superAdminRoleID == "" {

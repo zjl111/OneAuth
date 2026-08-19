@@ -299,9 +299,24 @@ SELECT COUNT(*) FROM (
 	return n, err
 }
 
+// shanghaiLocation 返回上海时区；若容器缺少 tzdata zoneinfo（如精简 Alpine 基础镜像），
+// time.LoadLocation 会返回 nil，直接传给 .In() 会 panic。这里做兜底：
+//   - 优先 LoadLocation("Asia/Shanghai")；
+//   - 失败则回退到 time.Local（通常已是容器配置的 TZ）；
+//   - 极端情况再回退 UTC。保证绝不返回 nil，避免 502/崩溃。
+func shanghaiLocation() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil && loc != nil {
+		return loc
+	}
+	if time.Local != nil {
+		return time.Local
+	}
+	return time.UTC
+}
+
 func (r *LogRepository) CountLoginsToday() (int64, error) {
 	var c int64
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc := shanghaiLocation()
 	now := time.Now().In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	err := r.db.Model(&model.LoginLog{}).
@@ -317,7 +332,7 @@ type DailyLoginCount struct {
 
 func (r *LogRepository) LoginTrend(days int) ([]DailyLoginCount, error) {
 	results := []DailyLoginCount{}
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc := shanghaiLocation()
 	now := time.Now().In(loc)
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -days+1)
 	rows, err := r.db.Model(&model.LoginLog{}).
@@ -419,7 +434,7 @@ func (r *LogRepository) TrafficTrendByRange(rangeParam string) ([]TrafficPoint, 
 
 // trafficTrendHourly 按小时聚合今日 00:00 ~ 23:00（北京时间）
 func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error) {
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc := shanghaiLocation()
 	now = now.In(loc)
 	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
@@ -451,7 +466,7 @@ func (r *LogRepository) trafficTrendHourly(now time.Time) ([]TrafficPoint, error
 
 // trafficTrendDaily 按天聚合最近 N 天（北京时间）
 func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoint, error) {
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc := shanghaiLocation()
 	now = now.In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	cutoff := today.AddDate(0, 0, -days+1)

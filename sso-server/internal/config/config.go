@@ -16,6 +16,7 @@ type Config struct {
 	CORS     CORSConfig     `mapstructure:"cors"`
 	Monitor  MonitorConfig  `mapstructure:"monitor"`
 	Status   StatusConfig   `mapstructure:"status"`
+	Security SecurityConfig `mapstructure:"security"`
 }
 
 type AppConfig struct {
@@ -70,6 +71,11 @@ type MonitorConfig struct {
 
 type StatusConfig struct {
 	Public bool `mapstructure:"public"`
+}
+
+type SecurityConfig struct {
+	// DefaultPassword 目录同步/批量导入新建账号的默认密码；为空时回退到随机密码。
+	DefaultPassword string `mapstructure:"default_password"`
 }
 
 func Load(path string) (*Config, error) {

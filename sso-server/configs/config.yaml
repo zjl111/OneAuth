@@ -52,3 +52,7 @@ monitor:
 
 status:
   public: true  # /api/status/* 是否公开访问
+
+security:
+  # 目录同步/批量导入新建账号的默认密码；留空则回退到随机密码（不可登录，需管理员重置）
+  default_password: "OneAuth@2026"

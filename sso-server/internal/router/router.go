@@ -264,7 +264,13 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 			admin.PUT("/directory-sync/config", h.DirectorySync.SaveConfig)
 			admin.GET("/directory-sync/departments", h.DirectorySync.Departments)
 			admin.POST("/directory-sync/preview", h.DirectorySync.Preview)
+			admin.GET("/directory-sync/user-import-preview", h.DirectorySync.UserImportPreview)
 			admin.POST("/directory-sync/run", h.DirectorySync.Run)
+			admin.POST("/directory-sync/sync-users", h.DirectorySync.SyncUsers)
+			admin.POST("/directory-sync/pull", h.DirectorySync.Pull)
+			admin.POST("/directory-sync/import", h.DirectorySync.ImportUsers)
+			admin.POST("/directory-sync/buffer/edit-field", h.DirectorySync.EditBufferField)
+			admin.POST("/directory-sync/buffer/resolve-conflict", h.DirectorySync.ResolveBufferConflict)
 			admin.GET("/directory-sync/logs", h.DirectorySync.Logs)
 		}
 

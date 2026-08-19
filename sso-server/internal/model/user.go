@@ -19,7 +19,11 @@ type User struct {
 	Gender        string     `gorm:"size:10" json:"gender"`                       // male | female | ""
 	EmployeeNo    string     `gorm:"size:64" json:"employee_no"`                  // 员工编号
 	DomainAccount string     `gorm:"size:128" json:"domain_account"`              // AD/域账号
-	UserType      string     `gorm:"size:30;default:'internal'" json:"user_type"` // internal | external
+	UserSource    string     `gorm:"column:user_source;size:30;default:'local'" json:"user_source"` // local | platform
+	// ProfileManuallyEdited 标记：管理员在后台手动编辑过该（同步）用户的登录账号。
+	// 一旦为 true，目录同步（applyRemoteUser 更新分支）不再规整其 username，保留手动调整。
+	// 邮箱以 sso 已存为准（同步从不覆盖已存在用户的邮箱），故无需本标记保护邮箱。
+	ProfileManuallyEdited bool `gorm:"default:false" json:"profile_manually_edited"`
 	HireStatus    string     `gorm:"size:20;default:'active'" json:"hire_status"` // active | resigned
 	SortOrder     int        `gorm:"default:0" json:"sort_order"`
 	DepartmentID  *uuid.UUID `gorm:"type:char(36);index" json:"department_id"`
@@ -27,7 +31,7 @@ type User struct {
 	IsStaff       bool       `gorm:"default:false" json:"is_staff"`
 	IsLocked      bool       `gorm:"default:false" json:"is_locked"`
 	LockUntil     *time.Time `gorm:"index" json:"lock_until"`
-	LockReason    string     `gorm:"size:50" json:"lock_reason"` // "" | "manual" | "inactivity" | "login_failure" | "wecom_missing"
+	LockReason    string     `gorm:"size:50" json:"lock_reason"` // "" | "manual" | "inactivity" | "login_failure" | "wecom_missing" | "source_missing"
 	LastLogin     *time.Time `json:"last_login"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`

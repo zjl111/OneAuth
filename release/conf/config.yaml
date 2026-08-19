@@ -7,12 +7,24 @@ app:
   driver: "sqlite"
 
 database:
+  # SQLite 路径（driver=sqlite 时使用）
   sqlite_path: "/app/data/sso.db"
+  # PostgreSQL 连接参数（driver=postgres 时使用，按需调整）
+  host: "localhost"
+  port: 5432
+  user: "sso"
+  password: "sso"
+  dbname: "sso_platform"
+  sslmode: "disable"
   max_open_conns: 25
   max_idle_conns: 10
 
 redis:
   enabled: false
+  # Redis 连接参数（enabled=true 时生效，按需调整）
+  addr: "localhost:6379"
+  password: ""
+  db: 0
 
 oauth:
   # issuer 由 .env 的 SSO_ISSUER 通过环境变量覆盖
@@ -38,3 +50,8 @@ monitor:
 
 status:
   public: true
+
+security:
+  # 目录同步/批量导入新建账号的默认密码。
+  # 配置为空时，后端回退到兜底值 OneAuth@2026（见 directory_sync_service.go defaultPasswordFallback）。
+  default_password: "OneAuth@2026"

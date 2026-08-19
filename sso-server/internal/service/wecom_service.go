@@ -234,7 +234,7 @@ func (s *WeComService) FindOrCreateUser(userid string) (*model.User, error) {
 		Nickname:      pickName(detail, userid),
 		PasswordHash:  randHash,
 		DomainAccount: userid,
-		UserType:      "wecom",
+		UserSource:    "platform",
 		HireStatus:    "active",
 		IsActive:      true,
 		LastLogin:     &now,
