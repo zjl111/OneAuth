@@ -467,7 +467,7 @@ func LockReasonText(reason string) string {
 	case "wecom_missing":
 		return "企业微信同步时账号不存在，被自动锁定"
 	case "source_missing":
-		return "同步用户的来源不存在"
+		return "离职禁用"
 	case "manual":
 		return "管理员手动锁定"
 	default:

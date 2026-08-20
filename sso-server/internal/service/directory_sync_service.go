@@ -1039,7 +1039,7 @@ func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfi
 		summary.MappingPreview = s.buildPreviewTree(snap, cfg, previewUsers)
 	}
 	if cfg.DeactivateMissing && whitelist == nil {
-		if err := s.disableMissingUsers(tx, cfg, seenUserIDs, dryRun, summary); err != nil {
+		if err := s.disableMissingUsers(tx, cfg, dryRun, summary); err != nil {
 			return err
 		}
 	}
@@ -1545,37 +1545,67 @@ func (s *DirectorySyncService) buildPreviewTree(snap *directorySnapshot, cfg Dir
 	return tree
 }
 
-func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyncConfig, seen map[string]bool, dryRun bool, summary *DirectorySyncSummary) error {
-	var bindings []model.DirectorySyncBinding
-	if err := tx.Where("provider = ? AND external_type = ?", cfg.PlatformType, "user").Find(&bindings).Error; err != nil {
+// disableMissingUsers 对「平台来源(user_source=platform)」的用户执行缺失禁用：
+// 若其外部账号不在最近一次同步的远端缓冲里（远端已删除/离职），自动禁用并标记
+// 原因「同步用户的来源不存在」。不依赖 binding 表，因此无 user binding 的用户
+// （如历史数据遗漏绑定）也能被正确识别；本地创建的账号不参与，保持原有状态不变。
+func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyncConfig, dryRun bool, summary *DirectorySyncSummary) error {
+	// 远端“仍存在”的标识集合：缓冲表 = 最近一次同步拉回的全部远端用户
+	extIDs := make(map[string]bool)
+	usernames := make(map[string]bool)
+	emails := make(map[string]bool)
+	var buffers []model.DirectorySyncBuffer
+	if err := tx.Where("provider = ?", cfg.PlatformType).Find(&buffers).Error; err != nil {
 		return err
 	}
-	for _, binding := range bindings {
-		if seen[binding.ExternalID] {
+	for _, b := range buffers {
+		if b.ExternalID != "" {
+			extIDs[b.ExternalID] = true
+		}
+		if b.Username != "" {
+			usernames[b.Username] = true
+		}
+		if b.Email != "" {
+			emails[b.Email] = true
+		}
+	}
+
+	// 遍历所有「平台来源」的用户（而非仅遍历 binding）
+	var users []model.User
+	if err := tx.Where("user_source = ?", "platform").Find(&users).Error; err != nil {
+		return err
+	}
+	for i := range users {
+		u := &users[i]
+		// 已是离职禁用状态，跳过，避免重复计数/写入
+		if !u.IsActive && u.HireStatus == "resigned" {
 			continue
 		}
-		var user model.User
-		if err := tx.First(&user, "id = ?", binding.LocalID).Error; err != nil {
-			continue
+		// 判定远端是否仍存在：优先 external_id（经由 binding）；
+		// 无 binding 或未命中则退用 username/email 匹配远端缓冲。
+		remoteExists := false
+		var binding model.DirectorySyncBinding
+		if err := tx.Where("provider = ? AND external_type = ? AND local_id = ?", cfg.PlatformType, "user", u.ID).First(&binding).Error; err == nil && binding.ExternalID != "" {
+			remoteExists = extIDs[binding.ExternalID]
 		}
-		// 仅对「平台来源」的账号执行自动禁用：当同步来源已不存在该用户时，
-		// 自动禁用并标记原因「同步用户的来源不存在」。
-		// 本地创建的账号不随同步缺失而调整，保持原有禁用/锁定状态不变。
-		if user.UserSource != "platform" {
-			continue
+		if !remoteExists && u.Username != "" {
+			remoteExists = usernames[u.Username]
 		}
-		if !user.IsActive && user.HireStatus == "resigned" {
+		if u.Email != nil && *u.Email != "" && !remoteExists {
+			remoteExists = emails[*u.Email]
+		}
+		if remoteExists {
 			continue
 		}
 		summary.UserDisabled++
 		if dryRun {
 			continue
 		}
-		user.IsActive = false
-		user.HireStatus = "resigned"
-		user.IsLocked = true
-		user.LockReason = "source_missing"
-		if err := tx.Save(&user).Error; err != nil {
+		u.IsActive = false
+		u.HireStatus = "resigned"
+		u.IsLocked = true
+		u.LockReason = "source_missing"
+		if err := tx.Save(u).Error; err != nil {
 			return err
 		}
 	}
