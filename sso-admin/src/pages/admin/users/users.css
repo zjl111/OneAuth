@@ -26,6 +26,20 @@
   background: #f8fafb !important;
 }
 
+/* 固定列必须有不透明背景，否则横向滚动时下方列的日期/文字会透过固定列浮现出来 */
+.user-table .ant-table-cell-fix-right {
+  background: #ffffff;
+  position: sticky !important;
+  right: 0;
+  z-index: 2;
+}
+.user-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-right {
+  background: #f8fafb;
+}
+.user-table .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  background: #fafbfc;
+}
+
 /* 去掉固定列的阴影，改为淡线 */
 .user-table .ant-table-cell-fix-right-first::after,
 .user-table .ant-table-cell-fix-right-last::after {

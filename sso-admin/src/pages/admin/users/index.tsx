@@ -575,7 +575,9 @@ export default function UserListPage() {
                   value={filterRoleId}
                   onChange={(v) => setFilterRoleId(v)}
                   style={{ width: '100%' }}
-                  options={roles.map((r) => ({ label: r.name, value: r.id }))}
+                  options={roles
+                    .filter((r) => !['app_admin', 'auditor'].includes(r.code))
+                    .map((r) => ({ label: r.name, value: r.id }))}
                 />
               </div>
               <div style={{ marginBottom: 12 }}>
@@ -703,7 +705,7 @@ export default function UserListPage() {
           {
             title: '用户角色',
             dataIndex: 'roles',
-            width: 180,
+            width: 110,
             sorter: true,
             render: (_, r) => {
               const roles = r.roles || [];
@@ -736,6 +738,19 @@ export default function UserListPage() {
                 </Space>
               );
             },
+          },
+          {
+            title: '用户来源',
+            dataIndex: 'user_source',
+            width: 100,
+            render: (v?: string) =>
+              v === 'platform' ? (
+                <span className="user-tag user-tag--green">平台</span>
+              ) : v === 'local' ? (
+                <span className="user-tag user-tag--gray">本地</span>
+              ) : (
+                <span className="user-admin-no">—</span>
+              ),
           },
           {
             title: '状态',
@@ -895,28 +910,23 @@ export default function UserListPage() {
 
             <div className="form-grid-container">
               {/* Row 1: 登录账号 | 姓名 */}
-              {(editing ? editing.user_source === 'platform' : true) && (
-                <div className="grid-cell">
-                  <Form.Item
-                    name="username"
-                    label={
-                      <span>
-                        <span>登录账号</span>
-                        <Tooltip
-                          title={editing && editing.user_source === 'platform' ? '同步用户可在此调整登录账号以符合公司规则；修改后不会被自动同步覆盖' : '登录账号为唯一标识，创建后不可更改'}
-                          placement="top"
-                        >
-                          <ExclamationCircleOutlined className="label-tip-icon" />
-                        </Tooltip>
-                      </span>
-                    }
-                    rules={[{ required: true, message: '请输入登录账号' }]}
-                  >
-                    <Input placeholder="字母/数字/点/下划线" />
-                  </Form.Item>
-                </div>
-              )}
-              <div className={`grid-cell${editing && editing.user_source !== 'platform' ? ' grid-cell-full' : ''}`}>
+              <div className="grid-cell">
+                <Form.Item
+                  name="username"
+                  label={
+                    <span>
+                      <span>登录账号</span>
+                      <Tooltip title="登录账号为唯一标识，创建后不可更改" placement="top">
+                        <ExclamationCircleOutlined className="label-tip-icon" />
+                      </Tooltip>
+                    </span>
+                  }
+                  rules={[{ required: true, message: '请输入登录账号' }]}
+                >
+                  <Input placeholder="字母/数字/点/下划线" disabled={!!editing} />
+                </Form.Item>
+              </div>
+              <div className="grid-cell">
                 <Form.Item name="nickname" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
                   <Input placeholder="请输入姓名" />
                 </Form.Item>

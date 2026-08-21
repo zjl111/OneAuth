@@ -235,18 +235,8 @@ func (s *UserService) Update(id uuid.UUID, in UpdateUserInput) (*model.User, err
 			u.Email = &newEmail
 		}
 	}
-	// 登录账号：仅平台（同步）用户允许修改；本地用户保持"创建后不可更改"。
-	// 改过后置 ProfileManuallyEdited=true，后续目录同步不再覆盖其账号/邮箱。
-	if in.Username != nil && u.UserSource == "platform" {
-		newUsername := strings.TrimSpace(*in.Username)
-		if newUsername != u.Username {
-			if existing, err := s.repo.GetByUsername(newUsername); err == nil && existing.ID != u.ID {
-				return nil, errors.New("登录账号 " + newUsername + " 已存在")
-			}
-			u.Username = newUsername
-			u.ProfileManuallyEdited = true
-		}
-	}
+	// 登录账号为唯一标识，任何来源（含平台同步用户）创建后均不可更改，
+	// 因此这里不再处理 in.Username，避免绕过前端仍能改写登录账号。
 	if in.Phone != nil {
 		if *in.Phone == "" {
 			u.Phone = nil
