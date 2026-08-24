@@ -62,11 +62,19 @@ func (l *DirectorySyncLog) BeforeCreate(tx *gorm.DB) error {
 // raw 字段保存远端原始 JSON，导入/落库时再解析还原，确保与真实同步逻辑使用完全一致的数据。
 type DirectorySyncBuffer struct {
 	ID         uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
+	// external_id 不设唯一约束、也不建独立索引：用户明确"平台只可能是一个"，切换平台时
+	// 由业务层清理旧平台缓冲（见 directory_sync_service.cleanupPlatformBuffer）。
+	// 历史上曾出现多个 provider 复用同一批 userid，导致单列 unique 索引建不出的迁移故障
+	// （2067），故彻底去掉 external_id 的数据库索引，唯一性交给业务同步链路
+	// （seen 去重 + 导入去重），杜绝数据库层约束带来的升级/启动灾难。
 	Provider   string    `gorm:"size:50;not null;index:idx_buf_provider" json:"provider"`
-	ExternalID string    `gorm:"size:255;not null;uniqueIndex:idx_buf_ext" json:"external_id"`
+	ExternalID string    `gorm:"size:255;not null" json:"external_id"`
 	Username   string    `gorm:"size:255" json:"username"`
 	Name       string    `gorm:"size:255" json:"name"`
 	Email      string    `gorm:"size:255" json:"email"`
+	// SourceUsername 远端原始账号（如企微 userid），未经用户名策略换算。
+	// 本地 username 是经策略转换后的值，此字段用于对照第三方平台的真实用户名。
+	SourceUsername string `gorm:"size:255" json:"source_username"`
 	Department string    `gorm:"size:255" json:"department"`
 	Groups     string    `gorm:"type:text" json:"groups"` // 用户所属远端部门路径 JSON 数组
 	Status     string    `gorm:"size:20" json:"status"`    // "create" 新建 | "update" 更新

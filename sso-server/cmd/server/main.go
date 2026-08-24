@@ -123,8 +123,8 @@ func main() {
 	userService := service.NewUserService(userRepo, configRepo)
 	clientService := service.NewClientService(clientRepo, monitorRepo, appGrantRepo)
 	ldapService := service.NewLDAPService(configRepo, userRepo)
-	wecomService := service.NewWeComService(configRepo, userRepo)
-	directorySyncService := service.NewDirectorySyncService(configRepo, userRepo, deptRepo, userGroupRepo, secretCipher, cfg.Security.DefaultPassword)
+	wecomService := service.NewWeComService(configRepo, userRepo, userGroupRepo)
+	directorySyncService := service.NewDirectorySyncService(configRepo, userRepo, deptRepo, userGroupRepo, secretCipher, cfg.Security.DefaultPassword, wecomService)
 
 	// 启动时把所有应用同步到监控表，避免内置/历史应用缺监控
 	if allClients, err := clientRepo.ListAll(); err == nil {
@@ -257,6 +257,7 @@ func main() {
 			SessionMgr:   sessionMgr,
 			ConfigRepo:   configRepo,
 			LogRepo:      logRepo,
+			Store:        store,
 			Issuer:       cfg.OAuth.Issuer,
 			FrontendBase: frontendBase,
 		},

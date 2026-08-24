@@ -32,6 +32,7 @@ echo "Building gateway binary (linux/amd64)..."
 echo "Building frontend assets..."
 (cd sso-admin && npm run build)
 rm -rf "$OUT_DIR/frontend/dist"
+mkdir -p "$OUT_DIR/frontend"
 cp -R sso-admin/dist "$OUT_DIR/frontend/dist"
 
 echo "Copying CA certificates from local Alpine image..."
@@ -52,9 +53,10 @@ mkdir -p release/data
 cp sso-server/data/ip2region.xdb "release/data/ip2region.xdb"
 
 # ── Sync version into docker-compose.yml and install.sh ──
-sed -i '' "s|oneauth/backend:v[0-9]*\.[0-9]*\.[0-9]*|oneauth/backend:v${VERSION}|g" release/docker-compose.yml
-sed -i '' "s|oneauth/gateway:v[0-9]*\.[0-9]*\.[0-9]*|oneauth/gateway:v${VERSION}|g" release/docker-compose.yml
-sed -i '' "s|oneauth/backend:v[0-9]*\.[0-9]*\.[0-9]*|oneauth/backend:v${VERSION}|g" release/install.sh
+# 匹配 v 后面所有数字和点，避免版本累积叠加（如 v1.0.18.4.3.2）
+sed -i '' "s|oneauth/backend:v[0-9.]*|oneauth/backend:v${VERSION}|g" release/docker-compose.yml
+sed -i '' "s|oneauth/gateway:v[0-9.]*|oneauth/gateway:v${VERSION}|g" release/docker-compose.yml
+sed -i '' "s|oneauth/backend:v[0-9.]*|oneauth/backend:v${VERSION}|g" release/install.sh
 
 echo "Packaging..."
 COPYFILE_DISABLE=1 bsdtar -czf "${PKG_NAME}.tar.gz" \

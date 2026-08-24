@@ -25,6 +25,9 @@ import (
 )
 
 const DirectoryProviderWeComAttendance = "wecom_attendance"
+// DirectoryProviderWeCom 企业微信通讯录：直接走企业微信 API，复用全局 wecom 配置，
+// 无需第三方平台地址与 API Key。
+const DirectoryProviderWeCom = "wecom"
 
 // defaultPasswordFallback 当配置未显式设置默认密码（security.default_password 为空）时，
 // 新建平台账号使用的兜底默认密码。固定值，避免每次同步都生成不可登录的随机密码。
@@ -40,9 +43,11 @@ type DirectorySyncService struct {
 	secretCipher *crypto.SecretCipher
 	// defaultPassword 新建账号的默认密码；为空时回退到固定兜底密码（OneAuth@2026）。
 	defaultPassword string
+	// WeCom 企业微信通讯录拉取（仅 platform_type=wecom 时使用）。
+	WeCom *WeComService
 }
 
-func NewDirectorySyncService(configRepo *repository.ConfigRepository, userRepo *repository.UserRepository, deptRepo *repository.DepartmentRepository, groupRepo *repository.UserGroupRepository, secretCipher *crypto.SecretCipher, defaultPassword string) *DirectorySyncService {
+func NewDirectorySyncService(configRepo *repository.ConfigRepository, userRepo *repository.UserRepository, deptRepo *repository.DepartmentRepository, groupRepo *repository.UserGroupRepository, secretCipher *crypto.SecretCipher, defaultPassword string, wecom *WeComService) *DirectorySyncService {
 	return &DirectorySyncService{
 		configRepo:      configRepo,
 		userRepo:        userRepo,
@@ -52,6 +57,7 @@ func NewDirectorySyncService(configRepo *repository.ConfigRepository, userRepo *
 		client:          &http.Client{Timeout: 20 * time.Second},
 		secretCipher:    secretCipher,
 		defaultPassword: strings.TrimSpace(defaultPassword),
+		WeCom:           wecom,
 	}
 }
 
@@ -162,13 +168,14 @@ type SyncPreviewDept struct {
 // UserImportPreviewItem 是「用户导入」表格中的一行，对应一个将被同步的远端用户。
 type UserImportPreviewItem struct {
 	ExternalID     string   `json:"external_id"`
-	Status         string   `json:"status"`    // "create" 新建 | "update" 更新
-	Username       string   `json:"username"`  // 将落库的真实用户名（经策略换算，全小写）
+	Status         string   `json:"status"`          // "create" 新建 | "update" 更新
+	Username       string   `json:"username"`        // 将落库的真实用户名（经策略换算，全小写）
 	Name           string   `json:"name"`
 	Email          string   `json:"email"`
-	Groups         []string `json:"groups"` // 用户所属远端部门路径（用户组/部门，仅作来源追溯）
-	Department     string   `json:"department"` // 解析后将要落库的本地部门名称（所见即所得）
-	Exists         bool     `json:"exists"` // 是否已存在于本地系统
+	SourceUsername string   `json:"source_username"` // 远端原始账号（如企微 userid），未经策略换算，供对照
+	Groups         []string `json:"groups"`          // 用户所属远端部门路径（用户组/部门，仅作来源追溯）
+	Department     string   `json:"department"`      // 解析后将要落库的本地部门名称（所见即所得）
+	Exists         bool     `json:"exists"`          // 是否已存在于本地系统
 }
 
 // UserImportPreview 是「用户导入」弹框的分页预览结果。
@@ -280,6 +287,9 @@ func (s *DirectorySyncService) SaveConfig(in DirectorySyncConfig) error {
 	if strings.TrimSpace(in.EmailStrategy) != "" && strings.TrimSpace(in.EmailDomain) == "" {
 		return errors.New("邮箱策略已启用，请先填写邮箱域名")
 	}
+	// 在写入新配置**之前**捕获旧平台类型：下面 items 会把 platform_type 覆盖为新值，
+	// 若之后再 Get 只会读到新值，无法判断是否发生了平台切换。
+	oldPlatform := strings.TrimSpace(s.configRepo.Get("directory_sync", "platform_type"))
 	selected, _ := json.Marshal(in.SelectedDepartmentPaths)
 	mapping, _ := json.Marshal(in.FieldMapping)
 	mappings, _ := json.Marshal(in.DepartmentMappings)
@@ -314,11 +324,53 @@ func (s *DirectorySyncService) SaveConfig(in DirectorySyncConfig) error {
 			return err
 		}
 	}
+
+	// 平台类型切换：检测到 platform_type 从旧值变为新值（且两者都非空、确实变化），
+	// 清理旧平台「用户导入」缓冲预览表（sso_directory_sync_buffer）中该旧 provider 的行，
+	// 让切换后重新拉取新平台快照、刷新导入预览。
+	// ⚠️ 身份目录的用户主表 sso_user 及其任何关联（角色/组成员/绑定）一律不动——
+	// 用户明确要求：用户表无论如何不能乱动，切换平台只清缓冲预览数据。
+	// 注意：oldPlatform 必须在写入前捕获（见上方），否则会读到已被覆盖的新值。
+	newPlatform := strings.TrimSpace(in.PlatformType)
+	if newPlatform != "" && oldPlatform != "" && newPlatform != oldPlatform {
+		removed, err := s.cleanupPlatformBuffer(oldPlatform)
+		if err != nil {
+			return fmt.Errorf("切换同步平台失败：清理旧平台[%s]同步缓冲出错: %w", oldPlatform, err)
+		}
+		log.Printf("[dir-sync] 同步平台由 %s 切换为 %s，已删除旧平台导入缓冲 %d 条（身份目录用户表未改动）", oldPlatform, newPlatform, removed)
+	}
 	return nil
+}
+
+// cleanupPlatformBuffer 仅删除旧平台在「用户导入」缓冲预览表 sso_directory_sync_buffer 中
+// 的缓冲行（同步平台切换时调用）。
+// ⚠️ 本方法严格只操作缓冲表，绝不触碰身份目录的用户主表 sso_user，也不动
+// 用户角色 / 用户组成员 / 同步绑定 等任何用户关联数据——这些属于"用户表"，
+// 用户明确要求无论如何不能乱动。
+// 切换平台后，下一次「同步用户」会按新平台重新拉取快照并重建缓冲表。
+func (s *DirectorySyncService) cleanupPlatformBuffer(oldProvider string) (int, error) {
+	var removed int
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("provider = ?", oldProvider).Delete(&model.DirectorySyncBuffer{})
+		if res.Error != nil {
+			return res.Error
+		}
+		removed = int(res.RowsAffected)
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return removed, nil
 }
 
 func (s *DirectorySyncService) FetchDepartments() ([]DirectoryDepartment, error) {
 	cfg := s.LoadConfig(false)
+	if cfg.PlatformType == DirectoryProviderWeCom {
+		// 企业微信通讯录：直接拉企微部门树
+		depts, _, err := s.WeCom.FetchDirectorySnapshot()
+		return depts, err
+	}
 	if err := validateDirectoryConfig(cfg, false); err != nil {
 		return nil, err
 	}
@@ -471,6 +523,7 @@ func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg Direct
 		}
 
 		rows := make([]model.DirectorySyncBuffer, 0, len(snap.Users))
+		seenExt := make(map[string]struct{})
 		for _, remote := range snap.Users {
 			externalID := getStringAny(remote, cfg.FieldMapping["external_id"])
 			if externalID == "" {
@@ -479,6 +532,12 @@ func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg Direct
 			if externalID == "" {
 				continue
 			}
+			// 同 provider 内 external_id 去重兜底：缓冲表唯一约束为 (provider, external_id)，
+			// 若快照里出现同一 external_id 两次（远端重复返回/去重遗漏），此处拦住避免 2067。
+			if _, dup := seenExt[externalID]; dup {
+				continue
+			}
+			seenExt[externalID] = struct{}{}
 			// 仅保留处于同步范围内（能解析到本地部门）的用户
 			deptID := s.resolveUserDepartment(tx, cfg, remote, deptResolver, mountID, true, nil)
 			if deptID == nil {
@@ -499,21 +558,22 @@ func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg Direct
 			if emailEdited != "" {
 				email = emailEdited
 			}
-			rows = append(rows, model.DirectorySyncBuffer{
-				Provider:       cfg.PlatformType,
-				ExternalID:     externalID,
-				Username:       username,
-				Name:           item.Name,
-				Email:          email,
-				Department:     item.Department,
-				Groups:         string(groupsJSON),
-				Status:         item.Status,
-				Exists:         item.Exists,
-				UsernameEdited: usernameEdited,
-				EmailEdited:    emailEdited,
-				Raw:            string(raw),
-				FetchedAt:      time.Now(),
-			})
+		rows = append(rows, model.DirectorySyncBuffer{
+			Provider:       cfg.PlatformType,
+			ExternalID:     externalID,
+			Username:       username,
+			Name:           item.Name,
+			Email:          email,
+			SourceUsername: item.SourceUsername,
+			Department:     item.Department,
+			Groups:         string(groupsJSON),
+			Status:         item.Status,
+			Exists:         item.Exists,
+			UsernameEdited: usernameEdited,
+			EmailEdited:    emailEdited,
+			Raw:            string(raw),
+			FetchedAt:      time.Now(),
+		})
 		}
 
 		if err := tx.Where("provider = ?", cfg.PlatformType).Delete(&model.DirectorySyncBuffer{}).Error; err != nil {
@@ -551,14 +611,15 @@ func (s *DirectorySyncService) computePreviewItem(tx *gorm.DB, cfg DirectorySync
 		}
 	}
 	item := &UserImportPreviewItem{
-		ExternalID: externalID,
-		Status:     previewUser.Status,
-		Username:   previewUser.Username,
-		Name:       nickname,
-		Email:      displayEmail,
-		Groups:     groups,
-		Department: deptName,
-		Exists:     previewUser.Status == "update",
+		ExternalID:     externalID,
+		Status:         previewUser.Status,
+		Username:       previewUser.Username,
+		Name:           nickname,
+		Email:          displayEmail,
+		SourceUsername: sourceUsername,
+		Groups:         groups,
+		Department:     deptName,
+		Exists:         previewUser.Status == "update",
 	}
 	return item, true
 }
@@ -684,7 +745,7 @@ func (s *DirectorySyncService) UserImportPreview(keyword string, page, pageSize 
 	q := s.db.Where("provider = ?", cfg.PlatformType)
 	if kw != "" {
 		like := "%" + kw + "%"
-		q = q.Where("external_id LIKE ? OR username LIKE ? OR name LIKE ? OR email LIKE ?", like, like, like, like)
+		q = q.Where("external_id LIKE ? OR username LIKE ? OR name LIKE ? OR email LIKE ? OR source_username LIKE ?", like, like, like, like, like)
 	}
 	if err := q.Order("external_id asc").Find(&rows).Error; err != nil {
 		return nil, err
@@ -695,14 +756,15 @@ func (s *DirectorySyncService) UserImportPreview(keyword string, page, pageSize 
 		var groups []string
 		_ = json.Unmarshal([]byte(r.Groups), &groups)
 		items = append(items, UserImportPreviewItem{
-			ExternalID: r.ExternalID,
-			Status:     r.Status,
-			Username:   r.Username,
-			Name:       r.Name,
-			Email:      r.Email,
-			Groups:     groups,
-			Department: r.Department,
-			Exists:     r.Exists,
+			ExternalID:     r.ExternalID,
+			Status:         r.Status,
+			Username:       r.Username,
+			Name:           r.Name,
+			Email:          r.Email,
+			SourceUsername: r.SourceUsername,
+			Groups:         groups,
+			Department:     r.Department,
+			Exists:         r.Exists,
 		})
 	}
 
@@ -844,6 +906,18 @@ func (s *DirectorySyncService) fetchSnapshotForRoots(cfg DirectorySyncConfig, ro
 }
 
 func (s *DirectorySyncService) fetchCombinedSnapshot(cfg DirectorySyncConfig) (*directorySnapshot, error) {
+	// 企业微信通讯录：直接走企业微信 API 拉取部门树与用户，复用导入流水线
+	if cfg.PlatformType == DirectoryProviderWeCom {
+		if s.WeCom == nil {
+			return nil, errors.New("企业微信通讯录服务未初始化")
+		}
+		depts, users, err := s.WeCom.FetchDirectorySnapshot()
+		if err != nil {
+			return nil, err
+		}
+		_ = depts // 部门树由 FetchDepartments 接口单独返回，导入流水线只消费 users
+		return &directorySnapshot{Users: users}, nil
+	}
 	// 手动部门匹配模式：只拉取已勾选匹配的远端部门（含其下级），
 	// 避免把整个公司的用户都拉回来，再产生大量无关的“跳过”记录。
 	roots := cfg.SelectedDepartmentPaths
@@ -1143,6 +1217,21 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 		}
 	}
 
+	// 企微已离职账号（姓名含「（已离职）」）：不创建新账号；已存在的按删除逻辑禁用（表示已删除）。
+	if isDepartedName(nickname) {
+		summary.UserSkipped++
+		if user != nil && !dryRun {
+			user.IsActive = false
+			user.HireStatus = "resigned"
+			user.IsLocked = true
+			user.LockReason = "source_missing"
+			if err := tx.Save(user).Error; err != nil {
+				return fmt.Errorf("禁用已离职用户 %s 失败: %w", nickname, err)
+			}
+		}
+		return nil
+	}
+
 	if user == nil {
 		summary.UserCreated++
 		if dryRun {
@@ -1174,18 +1263,18 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 		}
 		if overrideEmail != "" {
 			// 用户手动编辑过邮箱：用编辑值（替代远端邮箱/邮箱策略），避免重名。
-			if !s.valueTaken(tx, "email", overrideEmail, uuid.Nil) {
+			if !valueTaken(tx, "email", overrideEmail, uuid.Nil) {
 				user.Email = &overrideEmail
 			}
 		} else {
-			if email != "" && !s.valueTaken(tx, "email", email, uuid.Nil) {
+			if email != "" && !valueTaken(tx, "email", email, uuid.Nil) {
 				user.Email = &email
 			}
 			if assignEmail := s.resolveAssignEmail(tx, cfg, sourceUsername, rawEmail, nickname, givenName, surname, uuid.Nil); assignEmail != nil {
 				user.Email = assignEmail
 			}
 		}
-		if phone != "" && !s.valueTaken(tx, "phone", phone, uuid.Nil) {
+		if phone != "" && !valueTaken(tx, "phone", phone, uuid.Nil) {
 			user.Phone = &phone
 		}
 		if err := tx.Create(user).Error; err != nil {
@@ -1236,13 +1325,13 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 	//   - 用户手动编辑过邮箱（overrideEmail 非空）→ 覆盖（已存在也改），避免重名；
 	//   - 否则保持现有（邮箱以 sso 为主，同步不覆盖）。
 	if overrideEmail != "" {
-		if !s.valueTaken(tx, "email", overrideEmail, user.ID) {
+		if !valueTaken(tx, "email", overrideEmail, user.ID) {
 			user.Email = &overrideEmail
 		}
 	}
 	if phone == "" {
 		user.Phone = nil
-	} else if !s.valueTaken(tx, "phone", phone, user.ID) {
+	} else if !valueTaken(tx, "phone", phone, user.ID) {
 		user.Phone = &phone
 	}
 	if err := tx.Save(user).Error; err != nil {
@@ -1748,7 +1837,7 @@ func (s *DirectorySyncService) getUserByUsername(tx *gorm.DB, username string) (
 	return &user, err
 }
 
-func (s *DirectorySyncService) valueTaken(tx *gorm.DB, field, value string, currentID uuid.UUID) bool {
+func valueTaken(tx *gorm.DB, field, value string, currentID uuid.UUID) bool {
 	if strings.TrimSpace(value) == "" {
 		return false
 	}
@@ -1766,7 +1855,7 @@ func (s *DirectorySyncService) generateUsername(tx *gorm.DB, strategy, sourceUse
 		base = "user"
 	}
 	candidate := base
-	for i := 2; s.valueTaken(tx, "username", candidate, currentID); i++ {
+	for i := 2; valueTaken(tx, "username", candidate, currentID); i++ {
 		candidate = base + strconv.Itoa(i)
 	}
 	return candidate
@@ -1780,7 +1869,7 @@ func (s *DirectorySyncService) resolveImportUsername(tx *gorm.DB, strategy, sour
 	if target == "" {
 		return s.generateUsername(tx, strategy, sourceUsername, nickname, currentID)
 	}
-	for i := 2; s.valueTaken(tx, "username", target, currentID); i++ {
+	for i := 2; valueTaken(tx, "username", target, currentID); i++ {
 		target = target + strconv.Itoa(i)
 	}
 	return target
@@ -1825,7 +1914,7 @@ func (s *DirectorySyncService) EditBufferField(externalID, field, value string) 
 		if target == "" {
 			return nil, errors.New("用户名不能为空或仅含非法字符")
 		}
-		if s.valueTaken(s.db, "username", target, uuid.Nil) {
+		if valueTaken(s.db, "username", target, uuid.Nil) {
 			return &editBufferFieldResult{Value: target, Conflict: s.fillUserConflictInfo(s.db, target, "")}, nil
 		}
 		if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Username: target, UsernameEdited: target}).Error; err != nil {
@@ -1837,7 +1926,7 @@ func (s *DirectorySyncService) EditBufferField(externalID, field, value string) 
 		if target == "" || !isValidEmail(target) {
 			return nil, errors.New("邮箱格式不正确")
 		}
-		if s.valueTaken(s.db, "email", target, uuid.Nil) {
+		if valueTaken(s.db, "email", target, uuid.Nil) {
 			return &editBufferFieldResult{Value: target, Conflict: s.fillUserConflictInfo(s.db, "", target)}, nil
 		}
 		if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Email: target, EmailEdited: target}).Error; err != nil {
@@ -1913,7 +2002,7 @@ func (s *DirectorySyncService) ResolveBufferConflict(externalID, field, action, 
 			if target == "" {
 				target = "user"
 			}
-			for i := 2; s.valueTaken(s.db, "username", target, uuid.Nil); i++ {
+			for i := 2; valueTaken(s.db, "username", target, uuid.Nil); i++ {
 				target = target + strconv.Itoa(i)
 			}
 			if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Username: target, UsernameEdited: target}).Error; err != nil {
@@ -1931,7 +2020,7 @@ func (s *DirectorySyncService) ResolveBufferConflict(externalID, field, action, 
 			}
 			at := strings.LastIndex(target, "@")
 			local, domain := target[:at], target[at:]
-			for i := 2; s.valueTaken(s.db, "email", local+strconv.Itoa(i)+domain, uuid.Nil); i++ {
+			for i := 2; valueTaken(s.db, "email", local+strconv.Itoa(i)+domain, uuid.Nil); i++ {
 				target = local + strconv.Itoa(i) + domain
 			}
 			if err := s.db.Model(&row).Updates(model.DirectorySyncBuffer{Email: target, EmailEdited: target}).Error; err != nil {
@@ -2120,7 +2209,8 @@ func camelSegments(s string) []string {
 //     （仅当远端邮箱域名与配置一致，避免误用个人邮箱）；再不行才回退到远端 username（完整拼音）。
 //   - fullname：优先用远端 username（完整拼音），其次远端邮箱本地名，再回退到拉丁昵称。
 // 仅当策略与域名都配置时返回非空；否则返回 ""（沿用远端或留空）。
-func (s *DirectorySyncService) generateEmail(cfg DirectorySyncConfig, sourceUsername, nickname, givenName, surname, rawEmail string) string {
+// 该函数不依赖 receiver 状态（纯函数），故改为包级函数，供 wecom 建号等同包逻辑复用。
+func generateEmail(cfg DirectorySyncConfig, sourceUsername, nickname, givenName, surname, rawEmail string) string {
 	strategy := strings.TrimSpace(cfg.EmailStrategy)
 	domain := sanitizeEmailDomain(cfg.EmailDomain)
 	if strategy == "" || domain == "" {
@@ -2172,7 +2262,7 @@ func (s *DirectorySyncService) resolvePreviewEmail(cfg DirectorySyncConfig, sour
 	if strategy == "" {
 		return strings.TrimSpace(rawEmail)
 	}
-	if gen := s.generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail); gen != "" {
+	if gen := generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail); gen != "" {
 		return gen
 	}
 	return strings.TrimSpace(rawEmail)
@@ -2189,23 +2279,23 @@ func (s *DirectorySyncService) resolveAssignEmail(tx *gorm.DB, cfg DirectorySync
 		if raw == "" {
 			return nil
 		}
-		if s.valueTaken(tx, "email", raw, currentID) {
+		if valueTaken(tx, "email", raw, currentID) {
 			return nil
 		}
 		return &raw
 	}
-	gen := s.generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail)
+	gen := generateEmail(cfg, sourceUsername, nickname, givenName, surname, rawEmail)
 	if gen == "" {
 		// 生成失败（缺姓名/后缀），回退远端邮箱
 		raw := strings.TrimSpace(rawEmail)
-		if raw == "" || s.valueTaken(tx, "email", raw, currentID) {
+		if raw == "" || valueTaken(tx, "email", raw, currentID) {
 			return nil
 		}
 		return &raw
 	}
 	cand := gen
 	at := strings.Index(cand, "@")
-	for i := 2; s.valueTaken(tx, "email", cand, currentID); i++ {
+	for i := 2; valueTaken(tx, "email", cand, currentID); i++ {
 		if at < 0 {
 			cand = gen + strconv.Itoa(i)
 		} else {
@@ -2225,8 +2315,11 @@ func validateDirectoryConfig(cfg DirectorySyncConfig, requireDepartments bool) e
 		if strings.TrimSpace(cfg.APIKey) == "" {
 			return errors.New("请先配置 API Key")
 		}
+	case DirectoryProviderWeCom:
+		// 企业微信通讯录复用全局 wecom 配置，无需第三方平台地址 / API Key；
+		// 可用性（是否已启用并校验、corp_id/secret 是否齐全）由 WeCom.FetchDirectorySnapshot 内部检查。
 	default:
-		return errors.New("暂只支持企微后台通讯录同步（考勤桥接）")
+		return errors.New("暂只支持企微后台通讯录同步（考勤桥接）与企业微信通讯录")
 	}
 	if requireDepartments {
 		if cfg.MappingMode {

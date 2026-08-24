@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Form, Input, Button, App as AntdApp, Divider } from 'antd';
-import { UserOutlined, LockOutlined, WechatOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
@@ -35,6 +35,25 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
       .then((d) => setWecomEnabled(!!d?.enabled))
       .catch(() => setWecomEnabled(false));
   }, []);
+
+  // 企业微信内置浏览器自动登录：
+  // 在企微 App 里点应用打开 OneAuth 登录页时，无需手动扫码——
+  // 自动跳到后端 /oauth/wecom/authorize（302 到企业微信 OAuth2 授权链接
+  // open.weixin.qq.com/connect/oauth2/authorize），授权后企微带 code 回调
+  // /oauth/wecom/callback，后端建会话完成登录。
+  // 用 sessionStorage 标记避免"回调回来后再次自动发起"的死循环。
+  useEffect(() => {
+    if (!wecomEnabled) return;
+    const ua = navigator.userAgent.toLowerCase();
+    const inWecom =
+      (window as any).__wxjs_environment === 'enterpriseWechat' || ua.includes('wxwork');
+    if (!inWecom) return;
+    const key = 'oneauth-wecom-autologin-' + (returnTo || redirectTo);
+    if (sessionStorage.getItem(key) === '1') return;
+    sessionStorage.setItem(key, '1');
+    const target = `/oauth/wecom/authorize?return_to=${encodeURIComponent(returnTo || redirectTo)}`;
+    window.location.replace(target);
+  }, [wecomEnabled, redirectTo, returnTo]);
 
   const normalizeCredentials = (username: string, password: string) => ({
     username: username.trim(),
@@ -172,7 +191,7 @@ export default function InlineLoginForm({ redirectTo = '/portal', returnTo }: Pr
             <Button
               block
               size="large"
-              icon={<WechatOutlined style={{ color: '#07c160' }} />}
+              icon={<img src="/wecom-logo.png" alt="企业微信" style={{ width: 18, height: 18 }} />}
               onClick={() => setShowWecomQR(true)}
             >
               使用企业微信登录

@@ -81,6 +81,8 @@ export interface UserImportPreviewItem {
   username: string;
   name: string;
   email: string;
+  /** 远端原始账号（如企微 userid），未经策略换算，供对照 */
+  source_username?: string;
   groups: string[];
   /** 解析后将要落库的本地部门名称（所见即所得，而非源端远端部门路径） */
   department: string;

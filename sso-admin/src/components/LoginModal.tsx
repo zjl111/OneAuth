@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Modal, Form, Input, Button, App as AntdApp, Divider } from 'antd';
-import { UserOutlined, LockOutlined, WechatOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
@@ -38,6 +38,26 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
       .then((d) => setWecomEnabled(!!d?.enabled))
       .catch(() => setWecomEnabled(false));
   }, [open]);
+
+  // 企业微信内置浏览器自动登录：
+  // 在企微 App 里点应用打开 OneAuth 登录页时，无需手动扫码——
+  // 自动跳到后端 /oauth/wecom/authorize（302 到企业微信 OAuth2 授权链接
+  // open.weixin.qq.com/connect/oauth2/authorize），授权后企微带 code 回调
+  // /oauth/wecom/callback，后端建会话完成登录。
+  // 用 sessionStorage 标记避免"回调回来后再次自动发起"的死循环。
+  useEffect(() => {
+    if (!open || !wecomEnabled) return;
+    const ua = navigator.userAgent.toLowerCase();
+    const inWecom =
+      (window as any).__wxjs_environment === 'enterpriseWechat' || ua.includes('wxwork');
+    if (!inWecom) return;
+    const key = 'oneauth-wecom-autologin-' + (returnTo || redirectTo);
+    if (sessionStorage.getItem(key) === '1') return;
+    sessionStorage.setItem(key, '1');
+    // 整页跳转：让后端读到后续回调的 cookie，且避免 SPA 路由与 OAuth 回调冲突。
+    const target = `/oauth/wecom/authorize?return_to=${encodeURIComponent(returnTo || redirectTo)}`;
+    window.location.replace(target);
+  }, [open, wecomEnabled, redirectTo, returnTo]);
 
   const normalizeCredentials = (username: string, password: string) => ({
     username: username.trim(),
@@ -151,55 +171,60 @@ export default function LoginModal({ open, onClose, redirectTo = '/portal', retu
         <h2>
           登录 <span className="brand">{site.name}</span>
         </h2>
-        <p>欢迎回来，请登录您的账号</p>
+        <p>{showWecomQR ? '请使用企业微信扫码登录' : '欢迎回来，请登录您的账号'}</p>
       </div>
-      <Form
-        size="large"
-        onFinish={onFinish}
-        autoComplete="off"
-        requiredMark={false}
-        onValuesChange={() => setLoginError('')}
-      >
-        {loginError && (
-          <div className="login-error-text" role="alert">
-            {loginError}
+      {!showWecomQR && (
+        <Form
+          size="large"
+          onFinish={onFinish}
+          autoComplete="off"
+          requiredMark={false}
+          onValuesChange={() => setLoginError('')}
+        >
+          {loginError && (
+            <div className="login-error-text" role="alert">
+              {loginError}
+            </div>
+          )}
+          <Form.Item name="username" rules={[{ required: true, message: '请输入账号 / 邮箱 / 手机号' }]}>
+            <Input prefix={<UserOutlined />} placeholder="账号 / 邮箱 / 手机号" />
+          </Form.Item>
+          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+          </Form.Item>
+          <div className="login-modal-forgot">
+            <a
+              onClick={() => {
+                onClose();
+                navigate('/oauth/forgot-password');
+              }}
+            >
+              忘记密码？
+            </a>
           </div>
-        )}
-        <Form.Item name="username" rules={[{ required: true, message: '请输入账号 / 邮箱 / 手机号' }]}>
-          <Input prefix={<UserOutlined />} placeholder="账号 / 邮箱 / 手机号" />
-        </Form.Item>
-        <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-          <Input.Password prefix={<LockOutlined />} placeholder="密码" />
-        </Form.Item>
-        <div className="login-modal-forgot">
-          <a
-            onClick={() => {
-              onClose();
-              navigate('/oauth/forgot-password');
-            }}
-          >
-            忘记密码？
-          </a>
-        </div>
-        <Form.Item>
-          <Button type="primary" htmlType="submit" block loading={submitting} className="login-modal-submit">
-            立即登录
-          </Button>
-        </Form.Item>
-      </Form>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={submitting} className="login-modal-submit">
+              立即登录
+            </Button>
+          </Form.Item>
+        </Form>
+      )}
       {wecomEnabled && (
         <>
-          <Divider plain style={{ color: '#94a3b8', fontSize: 12, margin: '8px 0 16px' }}>第三方登录</Divider>
-          {!showWecomQR ? (
-            <Button
-              block
-              size="large"
-              icon={<WechatOutlined style={{ color: '#07c160' }} />}
-              onClick={() => setShowWecomQR(true)}
-            >
-              使用企业微信登录
-            </Button>
-          ) : (
+          {!showWecomQR && (
+            <>
+              <Divider plain style={{ color: '#94a3b8', fontSize: 12, margin: '8px 0 16px' }}>第三方登录</Divider>
+              <Button
+                block
+                size="large"
+                icon={<img src="/wecom-logo.png" alt="企业微信" style={{ width: 18, height: 18 }} />}
+                onClick={() => setShowWecomQR(true)}
+              >
+                使用企业微信登录
+              </Button>
+            </>
+          )}
+          {showWecomQR && (
             <>
               <WecomQRLogin returnTo={returnTo} />
               <div style={{ textAlign: 'center', marginTop: 8 }}>

@@ -38,6 +38,7 @@ import {
   ClockCircleOutlined,
   WarningOutlined,
   FilterOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import './users.css';
@@ -121,6 +122,12 @@ export default function UserListPage() {
   const [form] = Form.useForm();
   const accessToken = useAuthStore((s) => s.accessToken);
   const [avatarUrl, setAvatarUrl] = useState<string>('');
+
+  // 企微账号绑定弹窗
+  const [wecomOpen, setWecomOpen] = useState(false);
+  const [wecomUser, setWecomUser] = useState<User | null>(null);
+  const [wecomValue, setWecomValue] = useState('');
+  const [wecomSaving, setWecomSaving] = useState(false);
 
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -295,6 +302,54 @@ export default function UserListPage() {
     await usersApi.lock(u.id, !u.is_locked);
     message.success(u.is_locked ? '已解锁' : '已锁定');
     load();
+  };
+
+  // 打开企微绑定弹窗：先查当前绑定的 userid 回填
+  const openWecom = async (u: User) => {
+    setWecomUser(u);
+    setWecomValue('');
+    setWecomOpen(true);
+    try {
+      const r = await usersApi.getWeCom(u.id);
+      setWecomValue(r?.wecom_userid || '');
+    } catch {
+      // 查询失败不阻塞，留空由用户填写
+    }
+  };
+
+  const handleSaveWeCom = async () => {
+    if (!wecomUser) return;
+    setWecomSaving(true);
+    try {
+      const r = await usersApi.bindWeCom(wecomUser.id, wecomValue.trim());
+      setWecomValue(r?.wecom_userid || '');
+      message.success(wecomValue.trim() ? '已绑定企业微信账号' : '已解绑企业微信账号');
+      load();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '操作失败');
+    } finally {
+      setWecomSaving(false);
+    }
+  };
+
+  const handleUnbindWeCom = async () => {
+    if (!wecomUser) return;
+    const u = wecomUser;
+    modal.confirm({
+      title: `解绑 ${u.username} 的企业微信账号？`,
+      content: '解绑后该用户将无法用企业微信扫码登录到本账号。',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await usersApi.bindWeCom(u.id, '');
+          setWecomValue('');
+          message.success('已解绑企业微信账号');
+          load();
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '解绑失败');
+        }
+      },
+    });
   };
 
   const handleResetPwd = (u: User) => {
@@ -803,6 +858,12 @@ export default function UserListPage() {
                         label: r.is_locked ? '解锁' : '锁定',
                         icon: r.is_locked ? <UnlockOutlined /> : <LockOutlined />,
                         onClick: () => handleLock(r),
+                      },
+                      {
+                        key: 'wecom',
+                        label: '绑定企微账号',
+                        icon: <LinkOutlined />,
+                        onClick: () => openWecom(r),
                       },
                       { type: 'divider' },
                       {
@@ -1339,6 +1400,35 @@ export default function UserListPage() {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={wecomUser ? `绑定企微账号 · ${wecomUser.username}` : '绑定企微账号'}
+        open={wecomOpen}
+        onCancel={() => setWecomOpen(false)}
+        onOk={handleSaveWeCom}
+        confirmLoading={wecomSaving}
+        okText="保存"
+        width={460}
+      >
+        <div style={{ marginBottom: 12, color: '#64748b', fontSize: 13, lineHeight: 1.7 }}>
+          填写该用户在企业微信中的 <b>userid</b>（企业微信管理后台「成员」的账号 ID），
+          保存后该用户即可用企业微信扫码登录到此账号。
+        </div>
+        <Input
+          value={wecomValue}
+          placeholder="例如 zhangsan"
+          onChange={(e) => setWecomValue(e.target.value)}
+          allowClear
+          onPressEnter={handleSaveWeCom}
+        />
+        {wecomValue.trim() && (
+          <div style={{ marginTop: 12, textAlign: 'right' }}>
+            <Button danger size="small" onClick={handleUnbindWeCom}>
+              解绑
+            </Button>
+          </div>
+        )}
       </Modal>
 
       </Card>

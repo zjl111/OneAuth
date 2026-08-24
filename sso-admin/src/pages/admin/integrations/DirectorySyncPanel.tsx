@@ -305,6 +305,7 @@ export default function DirectorySyncPanel() {
   // 待创建部门（仅登记，不立即建库；立即同步且有用户时才真正创建）
   const [pendingDepts, setPendingDepts] = useState<Record<string, PendingDept>>({});
 
+  const platformType = Form.useWatch('platform_type', form);
   const localTree = useMemo(() => localDeptTreeData(localDepartments), [localDepartments]);
   // 合并待创建部门后的下拉树，供「映射到本地部门」选择
   const combinedLocalTree = useMemo(
@@ -510,7 +511,8 @@ export default function DirectorySyncPanel() {
         it.username.toLowerCase().includes(kw) ||
         it.name.toLowerCase().includes(kw) ||
         (it.email || '').toLowerCase().includes(kw) ||
-        it.external_id.toLowerCase().includes(kw),
+        it.external_id.toLowerCase().includes(kw) ||
+        (it.source_username || '').toLowerCase().includes(kw),
     );
   }, [importPreview, importKeyword]);
 
@@ -966,27 +968,35 @@ export default function DirectorySyncPanel() {
           <Form.Item label="启用同步" name="enabled" valuePropName="checked">
             <Switch checkedChildren="启用" unCheckedChildren="禁用" />
           </Form.Item>
-          <Form.Item label="平台类型" name="platform_type">
+          <Form.Item
+            label="平台类型"
+            name="platform_type"
+            tooltip="选择「企业微信通讯录」可直接使用企业微信配置同步通讯录，无需填写第三方平台地址与 API Key；「考勤系统 (Attendance 桥接)」需配置第三方平台地址与 API Key。"
+          >
             <Select
-              disabled
               options={[
+                { label: '企业微信通讯录', value: 'wecom' },
                 { label: '考勤系统 (Attendance 桥接)', value: 'wecom_attendance' },
               ]}
             />
           </Form.Item>
-          <Form.Item label="第三方平台地址" name="base_url" rules={[{ required: true, message: '请输入第三方平台地址' }]}>
-            <Input placeholder="https://north-maxkb2.fit2cloud.cn:8666/attendance" />
-          </Form.Item>
-          <Form.Item
-            label="API Key"
-            name="api_key"
-            rules={[({ getFieldValue: gfv }) => ({
-              required: gfv('platform_type') === 'wecom_attendance' && !gfv('api_key_set'),
-              message: '请填写 API Key（首次配置必填）',
-            })]}
-          >
-            <Input.Password visibilityToggle={false} placeholder="从第三方平台复制填入；修改时填写新值，否则留空" autoComplete="new-password" />
-          </Form.Item>
+          {platformType !== 'wecom' && (
+            <Form.Item label="第三方平台地址" name="base_url" rules={[{ required: true, message: '请输入第三方平台地址' }]}>
+              <Input placeholder="https://north-maxkb2.fit2cloud.cn:8666/attendance" />
+            </Form.Item>
+          )}
+          {platformType !== 'wecom' && (
+            <Form.Item
+              label="API Key"
+              name="api_key"
+              rules={[({ getFieldValue: gfv }) => ({
+                required: gfv('platform_type') === 'wecom_attendance' && !gfv('api_key_set'),
+                message: '请填写 API Key（首次配置必填）',
+              })]}
+            >
+              <Input.Password visibilityToggle={false} placeholder="从第三方平台复制填入；修改时填写新值，否则留空" autoComplete="new-password" />
+            </Form.Item>
+          )}
           <Form.Item label="用户名策略" name="username_strategy">
             <Select
               options={[
@@ -996,7 +1006,12 @@ export default function DirectorySyncPanel() {
               ]}
             />
           </Form.Item>
-          <Form.Item label="邮箱策略" name="email_strategy">
+          <Form.Item
+            label="邮箱策略"
+            name="email_strategy"
+            tooltip="填写邮箱的后缀生成规则；配合下方邮件后缀使用。"
+            extra="企业微信新版本，用户手机号、邮箱等敏感字段默认不会在同步结果中返回，所以无法获取到用户名，需手动设置策略进行调整。"
+          >
             <Select
               options={[
                 { label: '跟随远端邮箱（默认，不生成）', value: '' },
@@ -1193,6 +1208,17 @@ export default function DirectorySyncPanel() {
                   },
                 },
                 { title: '名称', dataIndex: 'name', width: 120, ellipsis: true },
+                {
+                  title: '源用户名',
+                  dataIndex: 'source_username',
+                  width: 150,
+                  ellipsis: true,
+                  render: (v: string) => (
+                    <Tooltip title={v ? `第三方平台原始账号：${v}` : undefined}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>{v || '-'}</span>
+                    </Tooltip>
+                  ),
+                },
                 {
                   title: '邮箱',
                   dataIndex: 'email',

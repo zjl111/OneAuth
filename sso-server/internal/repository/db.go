@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -33,7 +34,9 @@ func NewDB(cfg *config.Config) (*gorm.DB, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return nil, err
 		}
-		dial = sqlite.Open(path)
+		// _pragma=busy_timeout(5000)：锁冲突时等待 5 秒而非立刻 SQLITE_BUSY。
+		// 配合 WAL 模式（下方手动 PRAGMA），读写不再互相阻塞。
+		dial = sqlite.Open(path + "?_pragma=busy_timeout(5000)")
 	}
 
 	logLevel := logger.Warn
@@ -48,10 +51,24 @@ func NewDB(cfg *config.Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	if cfg.App.Driver != "postgres" {
+		// WAL 模式：读操作不阻塞写操作，大幅缓解 SQLITE_BUSY。
+		// busy_timeout 已在 DSN pragma 中设置（5 秒）。
+		if err := db.Exec("PRAGMA journal_mode = WAL;").Error; err != nil {
+			log.Printf("[db] 启用 WAL 失败: %v", err)
+		}
+	}
+
 	if cfg.App.Driver == "postgres" {
 		sqlDB, _ := db.DB()
 		sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
 		sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	} else {
+		// SQLite：单写锁模型，必须启用 WAL 让读不阻塞写，并设置 busy_timeout
+		// 让锁冲突时自动等待而非立刻 SQLITE_BUSY；连接池限制为 1 写连接避免自锁。
+		sqlDB, _ := db.DB()
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
 	}
 
 	return db, nil
@@ -99,6 +116,11 @@ func AutoMigrate(db *gorm.DB) error {
 	runOnce(db, "dedupe_user_group_members_v1", func() { dedupeUserGroupMembers(db) })
 	runOnce(db, "prune_orphan_user_group_members_v1", func() { pruneOrphanUserGroupMembers(db) })
 	runOnce(db, "migrate_user_source_v1", func() { migrateUserSource(db) })
+	runOnce(db, "migrate_buffer_ext_idx_v1", func() { migrateBufferExtIdx(db) })
+	runOnce(db, "revert_buffer_ext_idx_v1", func() { revertBufferExtIdx(db) })
+	// 独立迁移：确保缓冲表的 external_id 索引被彻底清理（清重复行 + DROP 所有 external_id 索引）。
+	// 用独立迁移名而非复用 revert_buffer_ext_idx_v1，避免旧库已标 done 导致本逻辑不再执行。
+	runOnce(db, "drop_buf_ext_unique_v1", func() { dropBufferExtUnique(db) })
 	return nil
 }
 
@@ -131,7 +153,87 @@ func purgeSoftDeletedUsers(db *gorm.DB) {
 	db.Exec(`ALTER TABLE sso_user DROP COLUMN deleted_at`)
 }
 
-// runOnce 用 sso_system_config 里的标志位防止启动时重复扫表。
+// migrateBufferExtIdx 把 sso_directory_sync_buffer 的外部唯一约束从「单列 external_id」
+// 改为「复合 (provider, external_id)」。
+// 背景：不同平台（wecom 企业微信通讯录 / wecom_attendance 考勤桥接）可能复用同一批员工
+// userid，旧单列唯一索引会让跨平台缓冲插入报 2067 UNIQUE 约束冲突。GORM AutoMigrate 不会
+// 主动 DROP 旧唯一索引，这里手工删一次。新复合索引由模型 tag 在 AutoMigrate 中创建。
+func migrateBufferExtIdx(db *gorm.DB) {
+	// 删除旧的单列 external_id 唯一索引（若存在）。
+	db.Exec(`DROP INDEX IF EXISTS idx_buf_ext`)
+	// 若历史残留跨 provider 重复行（理论上不该有，删除旧唯一索引后复合索引可能无法创建），
+	// 清理掉同 provider 内重复 external_id 的冗余行，保留最新的一条。
+	switch db.Dialector.Name() {
+	case "sqlite":
+		db.Exec(`
+			DELETE FROM sso_directory_sync_buffer
+			WHERE id NOT IN (
+				SELECT MAX(id) FROM sso_directory_sync_buffer
+				GROUP BY provider, external_id
+			)
+		`)
+	default:
+		db.Exec(`
+			DELETE FROM sso_directory_sync_buffer a
+			USING sso_directory_sync_buffer b
+			WHERE a.provider = b.provider
+			  AND a.external_id = b.external_id
+			  AND a.id < b.id
+		`)
+	}
+}
+
+// revertBufferExtIdx 清理 sso_directory_sync_buffer 上所有可能存在的 external_id 索引，
+// 并把缓冲表回退到"不依赖数据库唯一约束"的状态。
+//
+// 背景与教训（关键）：历史版本曾给 external_id 加过单列唯一索引 idx_buf_ext，
+// 后又改成复合唯一索引 idx_buf_provider_ext，最终决定**彻底去掉 external_id 的唯一约束**
+// （用户明确"平台只可能一个、切换平台时清缓冲"，唯一性交给业务同步链路 seen 去重/导入去重）。
+// 期间多次迁移在 AutoMigrate 阶段 CREATE UNIQUE INDEX 时，因缓冲表存在跨 provider 重复
+// external_id 而抛 2067，导致服务 migrate 失败、登录全挂。
+//
+// 本迁移在 AutoMigrate 之后的 runOnce 阶段执行（此时模型已不再声明 external_id 索引），
+// 做两件事：
+//  1) 清理跨 provider 重复的 external_id 行（保留最新一条），让表数据干净；
+//  2) 显式 DROP 掉历史残留的 idx_buf_ext / idx_buf_provider_ext 索引（无论唯一与否），
+//     确保数据库层不再有任何 external_id 约束，杜绝 2067。
+//
+// 注意：idx_buf_provider（provider 普通索引）保留——业务按 provider 清缓冲/导入查询依赖它。
+func revertBufferExtIdx(db *gorm.DB) {
+	dropBufferExtUnique(db)
+}
+
+// dropBufferExtUnique 承载缓冲表 external_id 索引的彻底清理逻辑：
+//  1) 清理跨 provider 重复的 external_id 行，保留 id 最大（最新）的一条（避免残留唯一约束/重复数据）；
+//  2) 显式 DROP 历史残留的 external_id 索引（单列唯一 idx_buf_ext / 复合唯一 idx_buf_provider_ext），
+//     模型已不再声明，AutoMigrate 不会重建。
+//
+// 用独立迁移名 drop_buf_ext_unique_v1 注册，确保即使旧迁移 revert_buffer_ext_idx_v1
+// 已标 done（旧库已执行过），这组清理也一定会执行一次。
+func dropBufferExtUnique(db *gorm.DB) {
+	// 1) 清理跨 provider 重复的 external_id 行，保留 id 最大（最新）的一条。
+	switch db.Dialector.Name() {
+	case "sqlite":
+		db.Exec(`
+			DELETE FROM sso_directory_sync_buffer
+			WHERE id NOT IN (
+				SELECT MAX(id) FROM sso_directory_sync_buffer
+				GROUP BY external_id
+			)
+		`)
+	default:
+		db.Exec(`
+			DELETE FROM sso_directory_sync_buffer a
+			USING sso_directory_sync_buffer b
+			WHERE a.external_id = b.external_id
+			  AND a.id < b.id
+		`)
+	}
+	// 2) 显式删除历史残留的 external_id 索引（单列唯一 / 复合唯一 / 普通 一并清理），
+	//    避免数据库层残留约束导致 2067 或迁移告警。模型已不再声明，AutoMigrate 不会重建。
+	db.Exec(`DROP INDEX IF EXISTS idx_buf_ext`)
+	db.Exec(`DROP INDEX IF EXISTS idx_buf_provider_ext`)
+}
 // 第一次执行 fn 后写入 marker，之后启动直接跳过。
 // 想强制重跑就 DELETE FROM sso_system_config WHERE category='_migration' AND key=<name>。
 func runOnce(db *gorm.DB, name string, fn func()) {

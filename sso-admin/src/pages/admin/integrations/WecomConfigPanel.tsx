@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { App as AntdApp, Button, Card, Form, Input, Skeleton, Space, Switch } from 'antd';
-import { LockOutlined, ReloadOutlined } from '@ant-design/icons';
-import { configApi } from '@/api/misc';
+import { App as AntdApp, Button, Card, Form, Input, Skeleton, Switch } from 'antd';
+import { CheckCircleOutlined, LockOutlined, ReloadOutlined } from '@ant-design/icons';
+import { configApi, wecomConfigApi } from '@/api/misc';
 import { cardStyle, footerStyle, SectionHead } from './_shared';
 
 const PASSWORD_KEYS = new Set(['secret']);
@@ -12,6 +12,8 @@ export default function WecomConfigPanel() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -19,6 +21,10 @@ export default function WecomConfigPanel() {
       const configs = await configApi.byCategory('wecom');
       const obj: Record<string, any> = {};
       configs.forEach((c) => {
+        if (c.key === 'verified') {
+          setVerified(c.value === 'true');
+          return;
+        }
         const fieldKey = `wecom.${c.key}`;
         if (PASSWORD_KEYS.has(c.key)) {
           obj[fieldKey] = '';
@@ -48,6 +54,10 @@ export default function WecomConfigPanel() {
       if (PASSWORD_KEYS.has(key) && v === '') continue;
       items.push({ category: 'wecom', key, value: typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v) });
     }
+    // 携带当前校验状态，避免保存时把后端已落库的 verified 冲掉
+    if (verified) {
+      items.push({ category: 'wecom', key: 'verified', value: 'true' });
+    }
     setSaving(true);
     try {
       await configApi.set(items);
@@ -58,6 +68,28 @@ export default function WecomConfigPanel() {
     }
   };
 
+  // 校验配置：用 corp_id + secret 向企微换取 token 验证有效性；后端校验成功会落库 verified=true，
+  // 之后「启用企业微信登录」开关才会放开（后端 Enabled() 也要求 verified=true）。
+  const handleVerify = async () => {
+    const v = form.getFieldsValue();
+    setVerifying(true);
+    try {
+      await wecomConfigApi.verify({
+        corp_id: String(v['wecom.corp_id'] || '').trim(),
+        secret: String(v['wecom.secret'] || ''),
+      });
+      // 后端已落库 verified=true；前端同步放出开关，并默认开启（用户保存后即时生效）。
+      setVerified(true);
+      form.setFieldValue('wecom.enabled', true);
+      message.success('企业微信配置校验通过，已为您开启登录开关，点击保存即可生效');
+    } catch (e: any) {
+      setVerified(false);
+      message.error(e?.response?.data?.message || '校验失败，请检查 CorpID / Secret');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   if (loading) return <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>;
 
   return (
@@ -65,8 +97,13 @@ export default function WecomConfigPanel() {
       <div style={cardStyle}>
         <SectionHead title="基础配置" />
         <Form.Item label="是否启用企业微信登录" name="wecom.enabled" valuePropName="checked">
-          <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+          <Switch disabled={!verified} checkedChildren="启用" unCheckedChildren="禁用" />
         </Form.Item>
+        {!verified && (
+          <div style={{ color: '#fa8c16', fontSize: 12, marginTop: -8, marginBottom: 8, paddingLeft: 11 }}>
+            请先点击底部「校验」验证 CorpID / Secret 有效性，校验通过后才能启用企业微信登录；修改凭据后请重新校验。
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', columnGap: 32 }}>
           <Form.Item label="CorpID" name="wecom.corp_id">
             <Input placeholder="企业唯一标识 CorpID" />
@@ -90,9 +127,14 @@ export default function WecomConfigPanel() {
         <Button icon={<ReloadOutlined />} onClick={load}>
           刷新
         </Button>
-        <Button type="primary" loading={saving} onClick={handleSave}>
-          保存
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button icon={<CheckCircleOutlined />} onClick={handleVerify} loading={verifying}>
+            校验
+          </Button>
+          <Button type="primary" loading={saving} onClick={handleSave}>
+            保存
+          </Button>
+        </div>
       </div>
     </Form>
   );

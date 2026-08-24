@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Card, Form, Input, Button, Upload, App as AntdApp, Tabs, Space, Divider, Tag, Descriptions } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Upload, App as AntdApp, Tabs, Space, Divider, Tag, Descriptions, Modal, Popconfirm, Alert, Typography } from 'antd';
+import { UploadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
 import UserAvatar from '@/components/UserAvatar';
+import WecomQRLogin from '@/components/WecomQRLogin';
 import './profile.css';
+
+const { Paragraph, Text } = Typography;
 
 export default function ProfilePage() {
   const { message } = AntdApp.useApp();
@@ -15,6 +18,64 @@ export default function ProfilePage() {
   const [profileForm] = Form.useForm();
   const [pwdForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
+
+  // —— 企业微信绑定（自服务）——
+  const [wecomEnabled, setWecomEnabled] = useState(false);
+  const [wecomUserid, setWecomUserid] = useState<string>('');
+  const [wecomLoading, setWecomLoading] = useState(false);
+  const [bindModalOpen, setBindModalOpen] = useState(false);
+  const [qrKey, setQrKey] = useState(0);
+
+  const loadWeComBinding = async () => {
+    try {
+      const r = await authApi.getWeComBinding();
+      setWecomUserid(r.wecom_userid || '');
+    } catch {
+      setWecomUserid('');
+    }
+  };
+
+  // 企业微信登录未开启时，不展示「绑定设置」
+  useEffect(() => {
+    let active = true;
+    authApi
+      .getWeComStatus()
+      .then((d) => {
+        const en = !!d?.enabled;
+        if (!active) return;
+        setWecomEnabled(en);
+        if (en) loadWeComBinding();
+      })
+      .catch(() => setWecomEnabled(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // 扫码绑定回调跳转回来 ?bind=success 时提示并刷新
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('bind') === 'success') {
+      message.success('企业微信已绑定，现在可用企业微信扫码登录');
+      loadWeComBinding();
+      // 清掉 query，避免刷新重复提示
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleUnbind = async () => {
+    setWecomLoading(true);
+    try {
+      await authApi.bindWeCom('');
+      setWecomUserid('');
+      message.success('已解绑企业微信');
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '解绑失败');
+    } finally {
+      setWecomLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -53,6 +114,110 @@ export default function ProfilePage() {
     } catch (e: any) {
       message.error(e?.response?.data?.message || '修改失败');
     }
+  };
+
+  // 企业微信绑定设置 tab：仅当企业微信登录启用时展示（没开启就没有"绑定"一说）
+  const wecomTab = {
+    key: 'wecom',
+    label: '绑定设置',
+    children: (
+      <div style={{ maxWidth: 620 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px',
+            border: '1px solid #f0f0f0',
+            borderRadius: 8,
+            background: '#fff',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: '#e6f7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <img src="/wecom-logo.png" alt="企业微信" style={{ width: 28, height: 28 }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#262626' }}>企业微信</div>
+              <div style={{ fontSize: 13, color: '#8c8c8c', marginTop: 4 }}>
+                {wecomUserid ? '已绑定，可通过企业微信扫码登录' : '绑定后，您可通过企业微信扫码进行登录'}
+              </div>
+            </div>
+          </div>
+
+          {wecomUserid ? (
+            <Popconfirm
+              title="确定解绑企业微信？"
+              description="解绑后将无法用企业微信扫码登录本账号，本地账号登录不受影响。"
+              okText="解绑"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={handleUnbind}
+            >
+              <Button loading={wecomLoading}>解绑</Button>
+            </Popconfirm>
+          ) : (
+            <Button
+              type="primary"
+              loading={wecomLoading}
+              onClick={() => {
+                setQrKey((k) => k + 1);
+                setBindModalOpen(true);
+              }}
+            >
+              绑定
+            </Button>
+          )}
+        </div>
+
+        <Modal
+          title="绑定企业微信"
+          open={bindModalOpen}
+          footer={null}
+          onCancel={() => setBindModalOpen(false)}
+          width={440}
+          destroyOnClose
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: '8px 0 16px',
+            }}
+          >
+            <div key={qrKey}>
+              <WecomQRLogin mode="bind" />
+            </div>
+            <div
+              style={{
+                marginTop: 12,
+                color: '#8c8c8c',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span>请使用企业微信扫描二维码绑定</span>
+              <Button type="link" size="small" icon={<ReloadOutlined />} onClick={() => setQrKey((k) => k + 1)}>
+                刷新
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      </div>
+    ),
   };
 
   return (
@@ -173,6 +338,7 @@ export default function ProfilePage() {
                 </Descriptions>
               ),
             },
+            ...(wecomEnabled ? [wecomTab] : []),
           ]}
         />
       </Card>

@@ -145,6 +145,11 @@ export const configApi = {
   uploadLogo: '/api/v1/configs/upload-logo',
 };
 
+// 企业微信配置校验：用 corp_id + secret 向企微换取 access_token，成功即配置有效
+export const wecomConfigApi = {
+  verify: (data: { corp_id: string; secret: string }) => post<{ ok: boolean }>('/wecom/verify', data),
+};
+
 export const accessApi = {
   list: () => get<IPRule[]>('/access/ip'),
   create: (data: Partial<IPRule>) => post<IPRule>('/access/ip', data),

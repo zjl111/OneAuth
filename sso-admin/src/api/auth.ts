@@ -48,6 +48,11 @@ export const authApi = {
     put<{ user: UserInfo; permissions: string[] }>('/auth/profile', data),
   changePassword: (data: { old_password: string; new_password: string }) =>
     post('/auth/change-password', data),
+  // 企业微信登录是否启用
+  getWeComStatus: () => get<{ enabled: boolean }>('/auth/wecom/status'),
+  // 个人企业微信绑定（自服务）
+  getWeComBinding: () => get<{ wecom_userid: string }>('/profile/wecom'),
+  bindWeCom: (wecom_userid: string) => put<{ wecom_userid: string }>('/profile/wecom', { wecom_userid }),
   forgotPassword: (email: string) => post<{ message: string }>('/auth/forgot-password', { email }),
   verifyResetToken: (token: string) => get<{ email: string }>('/auth/reset-password/verify', { token }),
   resetPassword: (data: { token: string; new_password: string }) =>

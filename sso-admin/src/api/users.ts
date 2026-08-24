@@ -63,6 +63,11 @@ export const usersApi = {
   lock: (id: string, lock: boolean) => post(`/users/${id}/lock`, { lock }),
   setRoles: (id: string, role_ids: string[]) => put(`/users/${id}/roles`, { role_ids }),
   setGroups: (id: string, group_ids: string[]) => put(`/users/${id}/groups`, { group_ids }),
+  // 企微账号绑定：查询当前绑定的企微 userid
+  getWeCom: (id: string) => get<{ wecom_userid: string }>(`/users/${id}/wecom`),
+  // 绑定/解绑企微账号（wecom_userid 为空串=解绑）
+  bindWeCom: (id: string, wecom_userid: string) =>
+    put<{ wecom_userid: string }>(`/users/${id}/wecom`, { wecom_userid }),
   // 批量导入：multipart 上传 .csv / .xlsx；走 axios 实例自动带 Authorization
   importFile: async (file: File, mode: 'create' | 'update' = 'create'): Promise<ImportUsersResult> => {
     const fd = new FormData();

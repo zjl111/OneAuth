@@ -33,8 +33,14 @@ dist/
 .idea/
 *.swp
 .claude/
+.workbuddy/
 
 # 编译产物
 sso-server/seed-fake
 sso-server/sso-server
+sso-server/oneauth-server
 sso-server/bin/
+sso-server/tmp/
+
+# 安装包
+oneauth-v*.tar.gz

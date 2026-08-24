@@ -116,6 +116,8 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		// 企业微信扫码登录入口（前端按钮点击 → 跳企微 → 回调）
 		if h.WeCom != nil {
 			oauthGroup.GET("/wecom/login", h.WeCom.Login)
+			// 企业微信内置浏览器"点击应用 → 自动登录"入口（OAuth2 网页授权，与扫码独立，不影响扫码）
+			oauthGroup.GET("/wecom/authorize", h.WeCom.Authorize)
 			oauthGroup.GET("/wecom/callback", h.WeCom.Callback)
 		}
 	}
@@ -160,6 +162,9 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		authed.PUT("/auth/profile", h.Auth.UpdateProfile)
 		authed.POST("/auth/avatar", h.Auth.UploadAvatar)
 		authed.POST("/auth/change-password", h.Auth.ChangePassword)
+		// 个人企业微信绑定（自服务：当前登录用户绑定/解绑自己的企微账号）
+		authed.GET("/profile/wecom", h.WeCom.GetWeComBindingSelf)
+		authed.PUT("/profile/wecom", h.WeCom.BindWeComSelf)
 
 		// 普通用户门户
 		authed.GET("/portal/apps", h.Portal.Apps)
@@ -184,6 +189,12 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		admin.PUT("/users/:id/roles", h.User.SetRoles)
 		admin.PUT("/users/:id/groups", h.User.SetGroups)
 		admin.POST("/users/:id/avatar", h.User.UploadAvatar)
+		// 企微账号绑定/解绑（管理端手动绑定，userid 空=解绑）
+		if h.WeCom != nil {
+			admin.GET("/users/:id/wecom", h.WeCom.GetWeComBinding)
+			admin.PUT("/users/:id/wecom", h.WeCom.BindWeCom)
+			admin.POST("/wecom/verify", h.WeCom.Verify)
+		}
 		// 批量导入：上传 csv/xlsx
 		admin.POST("/users/import", h.User.ImportUsers)
 		admin.POST("/users/import/update-existing", h.User.ImportUpdateExisting)
