@@ -1,5 +1,5 @@
 FROM alpine:latest
-RUN apk add --no-cache python3 ca-certificates tzdata
+RUN apk add --no-cache python3 ca-certificates tzdata py3-requests py3-jwt py3-pycryptodome
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY release/build/backend/sso-server /app/sso-server
