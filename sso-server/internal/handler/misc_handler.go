@@ -330,12 +330,14 @@ type LogHandler struct {
 
 func parseLogQuery(c *gin.Context) repository.LogQuery {
 	q := repository.LogQuery{
-		Username: c.Query("username"),
-		Status:   c.Query("status"),
-		ClientID: c.Query("client_id"),
-		Resource: c.Query("resource"),
-		Page:     parseInt(c.Query("page"), 1),
-		PageSize: parseInt(c.Query("page_size"), 20),
+		Username:  c.Query("username"),
+		Status:    c.Query("status"),
+		ClientID:  c.Query("client_id"),
+		Resource:  c.Query("resource"),
+		Page:      parseInt(c.Query("page"), 1),
+		PageSize:  parseInt(c.Query("page_size"), 20),
+		SortBy:    c.Query("sort_by"),
+		SortOrder: c.Query("sort_order"),
 	}
 	if v := c.Query("start_time"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {

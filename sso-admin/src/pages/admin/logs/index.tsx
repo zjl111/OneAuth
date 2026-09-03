@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Tabs, Table, Tag, Input, Button, Select, Form, InputNumber, Space, App as AntdApp, type TableColumnsType } from 'antd';
+import { Card, Tabs, Table, Tag, Input, Button, Select, Form, InputNumber, Space, App as AntdApp, Modal, Typography, type TableColumnsType } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { configApi, logApi, type AccessLog, type LoginLog, type OperationLog, type SystemConfig } from '@/api/misc';
@@ -22,6 +22,23 @@ interface LogTableProps<T> {
 
 function fmtTime(v: string) {
   return dayjs(v).format('YYYY-MM-DD HH:mm:ss');
+}
+
+function LongLogText({ value }: { value?: string }) {
+  const [open, setOpen] = useState(false);
+  const text = (value || '').trim();
+  if (!text) return <>—</>;
+  if (text.length <= 80) return <Typography.Text>{text}</Typography.Text>;
+  return (
+    <>
+      <Button type="link" className="log-output-link" onClick={() => setOpen(true)}>
+        查看详情
+      </Button>
+      <Modal title="日志输出详情" open={open} onCancel={() => setOpen(false)} footer={null} width={760} destroyOnHidden>
+        <pre className="log-output-detail">{text}</pre>
+      </Modal>
+    </>
+  );
 }
 
 function LogsStrategyPanel() {
@@ -105,10 +122,16 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [filterVals, setFilterVals] = useState<Record<string, string>>({});
+  const [sorting, setSorting] = useState<{ field?: string; order?: 'asc' | 'desc' }>({});
 
-  const load = (nextPagination = pagination, nextFilters = filterVals) => {
+  const load = (nextPagination = pagination, nextFilters = filterVals, nextSorting = sorting) => {
     setLoading(true);
-    fetcher({ page: nextPagination.current, page_size: nextPagination.pageSize, ...nextFilters })
+    fetcher({
+      page: nextPagination.current,
+      page_size: nextPagination.pageSize,
+      ...nextFilters,
+      ...(nextSorting.field ? { sort_by: nextSorting.field, sort_order: nextSorting.order } : {}),
+    })
       .then((d) => {
         setData(d.items || []);
         setTotal(d.total);
@@ -119,7 +142,7 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, pagination.pageSize]);
+  }, []);
 
   return (
     <>
@@ -170,17 +193,22 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
         loading={loading}
         dataSource={data}
         columns={columns}
+        onChange={(pageInfo, _filters, sorter) => {
+          const activeSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+          const nextSorting = activeSorter?.order
+            ? { field: String(activeSorter.field || ''), order: activeSorter.order === 'ascend' ? 'asc' as const : 'desc' as const }
+            : {};
+          const nextPagination = { current: pageInfo.current || 1, pageSize: pageInfo.pageSize || pagination.pageSize };
+          setSorting(nextSorting);
+          setPagination(nextPagination);
+          load(nextPagination, filterVals, nextSorting);
+        }}
         pagination={{
           current: pagination.current,
           pageSize: pagination.pageSize,
           total,
           showSizeChanger: true,
           showTotal: (t) => `共 ${t} 条`,
-          onChange: (page, pageSize) => {
-            const nextPagination = { current: page, pageSize };
-            setPagination(nextPagination);
-            load(nextPagination);
-          },
         }}
       />
     </>
@@ -190,15 +218,19 @@ function LogTable<T extends { id: number }>({ fetcher, columns, filters = [] }: 
 const loginColumns: TableColumnsType<LoginLog> = [
   {
     title: '用户名',
+    dataIndex: 'username',
+    sorter: true,
     width: 220,
     render: (_, r) => {
       const name = r.display_name || r.username;
       return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
     },
   },
-  { title: 'IP', dataIndex: 'ip_address', width: 140 },
+  { title: 'IP', dataIndex: 'ip_address', width: 140, sorter: true },
   {
     title: '登录城市',
+    dataIndex: 'province',
+    sorter: true,
     width: 150,
     render: (_, r) => {
       const p = (r as any).province || '';
@@ -214,16 +246,17 @@ const loginColumns: TableColumnsType<LoginLog> = [
       return p || c;
     },
   },
-  { title: '运营商', dataIndex: 'isp', width: 100, render: (v) => v || '—' },
+  { title: '运营商', dataIndex: 'isp', width: 100, sorter: true, render: (v) => v || '—' },
   {
     title: '状态',
     dataIndex: 'status',
+    sorter: true,
     width: 90,
     render: (v) => (v === 'success' ? <Tag color="green">成功</Tag> : <Tag color="red">失败</Tag>),
   },
-  { title: '消息', dataIndex: 'message', width: 160, ellipsis: true },
-  { title: '用户代理', dataIndex: 'user_agent', ellipsis: true, render: (v: string) => v || '—' },
-  { title: '时间', dataIndex: 'created_at', width: 170, render: fmtTime },
+  { title: '消息', dataIndex: 'message', width: 160, ellipsis: true, sorter: true },
+  { title: '用户代理', dataIndex: 'user_agent', ellipsis: true, sorter: true, render: (v: string) => v || '—' },
+  { title: '时间', dataIndex: 'created_at', width: 170, sorter: true, defaultSortOrder: 'descend', render: fmtTime },
 ];
 
 // 把审计中间件产出的 action / resource 翻成中文
@@ -284,6 +317,8 @@ function translateAction(action: string, resource: string): string {
 const operationColumns: TableColumnsType<OperationLog> = [
   {
     title: '用户',
+    dataIndex: 'username',
+    sorter: true,
     width: 220,
     render: (_, r) => {
       const name = r.display_name || r.username;
@@ -293,18 +328,21 @@ const operationColumns: TableColumnsType<OperationLog> = [
   {
     title: '资源',
     dataIndex: 'resource_type',
+    sorter: true,
     width: 110,
     render: (v: string) => <Tag>{RESOURCE_LABEL[v] || v}</Tag>,
   },
   {
     title: '操作',
     dataIndex: 'action',
+    sorter: true,
     width: 160,
     render: (v: string, r) => <span style={{ fontWeight: 500 }}>{translateAction(v, r.resource_type)}</span>,
   },
   {
     title: '目标名称',
     dataIndex: 'resource_id',
+    sorter: true,
     width: 260,
     ellipsis: true,
     render: (_, r) => {
@@ -316,33 +354,38 @@ const operationColumns: TableColumnsType<OperationLog> = [
     title: '输出',
     dataIndex: 'output',
     width: 280,
-    ellipsis: true,
-    render: (v: string) => <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{(v || '').trim() || '—'}</span>,
+    sorter: true,
+    render: (v: string) => <LongLogText value={v} />,
   },
-  { title: 'IP', dataIndex: 'ip_address', width: 140 },
+  { title: 'IP', dataIndex: 'ip_address', width: 140, sorter: true },
   {
     title: '状态码',
     dataIndex: 'status',
+    sorter: true,
     width: 80,
     render: (v: number) => (v >= 400 ? <Tag color="red">{v}</Tag> : <Tag color="green">{v}</Tag>),
   },
-  { title: '时间', dataIndex: 'created_at', width: 170, render: fmtTime },
+  { title: '时间', dataIndex: 'created_at', width: 170, sorter: true, defaultSortOrder: 'descend', render: fmtTime },
 ];
 
 const accessColumns: TableColumnsType<AccessLog> = [
   {
     title: '用户',
+    dataIndex: 'username',
+    sorter: true,
     width: 220,
     render: (_, r) => {
       const name = r.display_name || r.username;
       return name && r.username && name !== r.username ? `${name}(${r.username})` : r.username;
     },
   },
-  { title: '应用名称', dataIndex: 'client_name', width: 200 },
-  { title: 'Client ID', dataIndex: 'client_id', width: 200 },
-  { title: 'IP', dataIndex: 'ip_address', width: 140 },
+  { title: '应用名称', dataIndex: 'client_name', width: 200, sorter: true },
+  { title: 'Client ID', dataIndex: 'client_id', width: 200, sorter: true },
+  { title: 'IP', dataIndex: 'ip_address', width: 140, sorter: true },
   {
     title: '登录城市',
+    dataIndex: 'province',
+    sorter: true,
     width: 150,
     render: (_, r) => {
       const p = (r as any).province || '';
@@ -358,7 +401,7 @@ const accessColumns: TableColumnsType<AccessLog> = [
       return p || c;
     },
   },
-  { title: '时间', dataIndex: 'created_at', render: fmtTime },
+  { title: '时间', dataIndex: 'created_at', sorter: true, defaultSortOrder: 'descend', render: fmtTime },
 ];
 
 

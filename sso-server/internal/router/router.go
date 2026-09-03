@@ -15,27 +15,27 @@ import (
 )
 
 type Handlers struct {
-	OAuth      *handler.OAuthHandler
-	Auth       *handler.AuthHandler
-	User       *handler.UserHandler
-	App        *handler.AppHandler
-	Dashboard  *handler.DashboardHandler
-	Portal     *handler.PortalHandler
-	Department *handler.DepartmentHandler
-	Role       *handler.RoleHandler
-	Log        *handler.LogHandler
-	Config     *handler.ConfigHandler
-	Access     *handler.AccessHandler
-	Monitor    *handler.MonitorHandler
-	Status     *handler.StatusHandler
-	Site       *handler.SiteHandler
-	Session    *handler.SessionHandler
-	UserGroup  *handler.UserGroupHandler
-	LoginRule  *handler.LoginRuleHandler
-	WeCom      *handler.WeComHandler
-	DirectorySync *handler.DirectorySyncHandler
-	CAS        *handler.CASHandler
-	SAML       *handler.SAMLHandler
+	OAuth           *handler.OAuthHandler
+	Auth            *handler.AuthHandler
+	User            *handler.UserHandler
+	App             *handler.AppHandler
+	Dashboard       *handler.DashboardHandler
+	Portal          *handler.PortalHandler
+	Department      *handler.DepartmentHandler
+	Role            *handler.RoleHandler
+	Log             *handler.LogHandler
+	Config          *handler.ConfigHandler
+	Access          *handler.AccessHandler
+	Monitor         *handler.MonitorHandler
+	Status          *handler.StatusHandler
+	Site            *handler.SiteHandler
+	Session         *handler.SessionHandler
+	UserGroup       *handler.UserGroupHandler
+	LoginRule       *handler.LoginRuleHandler
+	WeCom           *handler.WeComHandler
+	DirectorySync   *handler.DirectorySyncHandler
+	CAS             *handler.CASHandler
+	SAML            *handler.SAMLHandler
 	AccountRecovery *handler.AccountRecoveryHandler
 }
 
@@ -282,6 +282,7 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 			admin.POST("/directory-sync/import", h.DirectorySync.ImportUsers)
 			admin.POST("/directory-sync/buffer/edit-field", h.DirectorySync.EditBufferField)
 			admin.POST("/directory-sync/buffer/resolve-conflict", h.DirectorySync.ResolveBufferConflict)
+			admin.POST("/directory-sync/reset-departments", h.DirectorySync.ResetDepartments)
 			admin.GET("/directory-sync/logs", h.DirectorySync.Logs)
 		}
 

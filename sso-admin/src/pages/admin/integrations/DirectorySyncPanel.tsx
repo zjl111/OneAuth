@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   App as AntdApp,
+  Alert,
   AutoComplete,
   Button,
   Card,
+  Collapse,
   Form,
   Input,
   Modal,
@@ -22,6 +24,7 @@ import {
 import {
   ApiOutlined,
   ApartmentOutlined,
+  DeleteOutlined,
   EditOutlined,
   HistoryOutlined,
   PlayCircleOutlined,
@@ -220,6 +223,25 @@ function flattenRemoteDepts(
   return out;
 }
 
+function filterRemoteDeptTree(list: DirectoryDepartment[], roots: string[]): DirectoryDepartment[] {
+  const selected = roots.map((p) => p.trim()).filter(Boolean);
+  if (selected.length === 0) return list;
+  const walk = (items: DirectoryDepartment[]): DirectoryDepartment[] => {
+    const out: DirectoryDepartment[] = [];
+    for (const dept of items) {
+      if (selected.includes(dept.path)) {
+        out.push({ ...dept, children: undefined });
+        continue;
+      }
+      // 不在手动映射弹窗里显示未选中的企业根祖先；
+      // 直接把选中的北区/南区等作为可映射根节点。
+      out.push(...walk(dept.children || []));
+    }
+    return out;
+  };
+  return walk(list);
+}
+
 // 按名称（忽略大小写/空格）在本地部门树中查找同名部门，返回其 ID；找不到返回空串。
 function findLocalDeptByName(list: Department[], name: string): string {
   const target = name.trim().toLowerCase();
@@ -248,11 +270,16 @@ const CONNECTION_FIELDS = [
   'username_strategy',
   'email_strategy',
   'email_domain',
+  'selected_department_paths',
+  'strip_prefix',
+  'mount_department_id',
 ];
 
 export default function DirectorySyncPanel() {
   const { message, modal } = AntdApp.useApp();
   const [form] = Form.useForm<DirectorySyncConfig>();
+  const selectedDepartmentPaths = Form.useWatch('selected_department_paths', form) || [];
+  const stripPrefix = Form.useWatch('strip_prefix', form) || '';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingConn, setSavingConn] = useState(false);
@@ -263,8 +290,10 @@ export default function DirectorySyncPanel() {
   const [localDepartments, setLocalDepartments] = useState<Department[]>([]);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [summary, setSummary] = useState<DirectorySyncSummary | null>(null);
+  const [summaryDetailType, setSummaryDetailType] = useState<'skipped' | 'disabled' | 'failed' | null>(null);
   const [importPreview, setImportPreview] = useState<UserImportPreview | null>(null);
   const [importKeyword, setImportKeyword] = useState('');
+  const [importDepartment, setImportDepartment] = useState<string>();
   const [importPage, setImportPage] = useState(1);
   const [importPageSize, setImportPageSize] = useState(15);
   const [importLoading, setImportLoading] = useState(false);
@@ -435,6 +464,11 @@ export default function DirectorySyncPanel() {
       await saveConfig(CONNECTION_FIELDS);
       const depts = await directorySyncApi.departments();
       setRemoteDepartments(depts);
+      const current = form.getFieldsValue(['strip_prefix', 'selected_department_paths']) as DirectorySyncConfig;
+      if (!current.strip_prefix && depts.length === 1) {
+        // 企微通常只有一个公司根节点：默认裁掉公司名，在 OneAuth 挂载部门下直接创建北区/南区等子树。
+        form.setFieldValue('strip_prefix', depts[0].path);
+      }
       message.success('已拉取部门');
     } catch (e: any) {
       message.error(e?.message || '拉取远端部门失败');
@@ -463,12 +497,14 @@ export default function DirectorySyncPanel() {
       const seen = new Set<string>();
       let total = 0;
       let syncAt = '';
+      let defaultPassword = '';
       let p = 1;
       do {
         const r = await directorySyncApi.userImportPreview({ page: p, page_size: 200 });
         if (p === 1) {
           total = r.total;
           syncAt = r.sync_at;
+          defaultPassword = r.default_password;
         }
         if (r.users.length === 0) break; // 防止 total 与实际不符时的死循环
         for (const u of r.users) {
@@ -486,10 +522,12 @@ export default function DirectorySyncPanel() {
         total: all.length,
         page: 1,
         page_size: importPageSize,
+        default_password: defaultPassword,
         users: all,
       });
       setImportPage(1);
       setImportKeyword('');
+      setImportDepartment(undefined);
       setImportOpen(true);
     } catch (e: any) {
       message.error(e?.message || '加载用户导入预览失败');
@@ -503,18 +541,87 @@ export default function DirectorySyncPanel() {
   };
 
   // 本地过滤 + 本地分页：全部用户已在 loadImportPreview 中拉回，翻页/搜索不再请求后端
+  const importDepartmentOptions = useMemo(() => {
+    const paths = new Set<string>();
+    for (const user of importPreview?.users || []) {
+      for (const path of user.groups || []) {
+        const value = path.trim();
+        if (value) paths.add(value);
+      }
+    }
+    const trimDisplayPrefix = (path: string) => {
+      const prefix = stripPrefix.trim().replace(/^\/+|\/+$/g, '');
+      const normalized = path.trim().replace(/^\/+|\/+$/g, '');
+      if (!prefix) return normalized;
+      if (normalized === prefix) return normalized.split('/').pop() || normalized;
+      if (normalized.startsWith(`${prefix}/`)) return normalized.slice(prefix.length + 1);
+      return normalized;
+    };
+    return [...paths].sort((a, b) => a.localeCompare(b, 'zh-CN')).map((path) => ({
+      label: trimDisplayPrefix(path),
+      value: path,
+    }));
+  }, [importPreview, stripPrefix]);
+
   const filteredImportItems = useMemo(() => {
     const kw = importKeyword.trim().toLowerCase();
-    if (!kw) return importPreview?.users || [];
     return (importPreview?.users || []).filter(
-      (it) =>
-        it.username.toLowerCase().includes(kw) ||
-        it.name.toLowerCase().includes(kw) ||
-        (it.email || '').toLowerCase().includes(kw) ||
-        it.external_id.toLowerCase().includes(kw) ||
-        (it.source_username || '').toLowerCase().includes(kw),
+      (it) => {
+        const inDepartment = !importDepartment || (it.groups || []).some(
+          (path) => path === importDepartment || path.startsWith(`${importDepartment}/`),
+        );
+        if (!inDepartment) return false;
+        if (!kw) return true;
+        return (
+          it.username.toLowerCase().includes(kw) ||
+          it.name.toLowerCase().includes(kw) ||
+          (it.email || '').toLowerCase().includes(kw) ||
+          it.external_id.toLowerCase().includes(kw) ||
+          (it.source_username || '').toLowerCase().includes(kw)
+        );
+      },
     );
-  }, [importPreview, importKeyword]);
+  }, [importPreview, importKeyword, importDepartment]);
+
+  // “仅选当前筛选”必须替换旧选择，避免切换部门后把不可见用户悄悄带入导入请求。
+  const selectFilteredUsers = () => {
+    setSelectedRowKeys(filteredImportItems.map((user) => user.external_id));
+  };
+
+  // 需要跨部门合并时由用户显式追加，不再把追加行为伪装成“全选当前筛选”。
+  const appendFilteredUsers = () => {
+    const keys = new Set(selectedRowKeys);
+    filteredImportItems.forEach((user) => keys.add(user.external_id));
+    setSelectedRowKeys([...keys]);
+  };
+
+  const unselectFilteredUsers = () => {
+    const filtered = new Set(filteredImportItems.map((user) => user.external_id));
+    setSelectedRowKeys((keys) => keys.filter((key) => !filtered.has(key)));
+  };
+
+  const selectedCurrentCount = useMemo(() => {
+    const selected = new Set(selectedRowKeys);
+    return filteredImportItems.filter((user) => selected.has(user.external_id)).length;
+  }, [filteredImportItems, selectedRowKeys]);
+
+  const selectedHiddenCount = Math.max(0, selectedRowKeys.length - selectedCurrentCount);
+
+  const importSelectionSummary = (ids: string[]) => {
+    const selected = ids.length > 0 ? new Set(ids) : null;
+    const counts = new Map<string, number>();
+    for (const user of importPreview?.users || []) {
+      if (selected && !selected.has(user.external_id)) continue;
+      const path = user.department || user.groups?.[0] || '未匹配部门';
+      const parts = path.split('/').map((part) => part.trim()).filter(Boolean);
+      const scope = parts.length > 1 ? parts[1] : (parts[0] || '未匹配部门');
+      counts.set(scope, (counts.get(scope) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => `${name} ${count} 人`)
+      .join('、');
+  };
 
   const importPageItems = useMemo(() => {
     const start = (importPage - 1) * importPageSize;
@@ -531,6 +638,7 @@ export default function DirectorySyncPanel() {
         setSyncing('run');
         try {
           const r = await directorySyncApi.run();
+          setSummaryDetailType(null);
           setSummary(r);
           setSummaryOpen(true);
           setLogs(await directorySyncApi.logs());
@@ -544,21 +652,40 @@ export default function DirectorySyncPanel() {
 
   // 用户导入：按勾选的 external_id 列表导入；空数组表示导入全部待同步用户。
   const doImportUsers = async (ids: string[]) => {
+    const distribution = importSelectionSummary(ids);
     modal.confirm({
       title: ids.length === 0 ? '确认导入全部待同步用户？' : `确认导入选中的 ${ids.length} 位用户？`,
-      content: '将创建或更新这些用户并按其部门匹配落库；未勾选的用户不会被处理、也不会被禁用。',
+      content: (
+        <div>
+          <div>将创建或更新这些用户并按其部门匹配落库；未勾选的用户不会被处理、也不会被禁用。</div>
+          {distribution ? <div style={{ marginTop: 8 }}><b>本次部门分布：</b>{distribution}</div> : null}
+          {ids.length > 0 && selectedHiddenCount > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginTop: 10 }}
+              message={`当前筛选之外还有 ${selectedHiddenCount} 位已勾选用户，也会一并导入`}
+            />
+          ) : null}
+        </div>
+      ),
       okText: '导入',
       onOk: async () => {
         setSyncing('import');
         try {
           const groupIds = defaultGroupIds;
           const r = await directorySyncApi.importUsers({ external_ids: ids, group_ids: groupIds });
+          setSummaryDetailType(null);
           setSummary(r);
           setSummaryOpen(true);
           setLogs(await directorySyncApi.logs());
           setImportOpen(false);
           setSelectedRowKeys([]);
-          message.success('导入完成');
+          if (r.user_failed > 0) {
+            message.warning(r.message || `导入完成，${r.user_failed} 位用户失败`);
+          } else {
+            message.success('导入完成');
+          }
         } finally {
           setSyncing(null);
         }
@@ -702,7 +829,7 @@ export default function DirectorySyncPanel() {
       pending[key] = { key, id, name, parent_id: parent };
       return id;
     };
-    flattenRemoteDepts(remoteDepartments).forEach((d) => {
+    flattenRemoteDepts(scopedRemoteDepartments).forEach((d) => {
       const existing = prev.get(d.path);
       if (existing && existing.create_local && existing.new_dept_name) {
         // 已登记的待创建部门：重建为下拉可选项
@@ -718,12 +845,12 @@ export default function DirectorySyncPanel() {
     setPendingDepts(pending);
     setMappingDraft(draft);
     // 默认展开第一级，避免全部展开太乱；其余由用户自行点开
-    setExpandedPaths(new Set(remoteDepartments.map((d) => d.path)));
+    setExpandedPaths(new Set(scopedRemoteDepartments.map((d) => d.path)));
     setMatchOpen(true);
   };
 
   const saveMatchModal = async () => {
-    const all: DepartmentMapping[] = flattenRemoteDepts(remoteDepartments).map((d) => {
+    const all: DepartmentMapping[] = flattenRemoteDepts(scopedRemoteDepartments).map((d) => {
       const row = mappingDraft[d.path] || { include: false, local_id: '' };
       const include = !!row.include && !!row.local_id;
       const base: DepartmentMapping = {
@@ -772,8 +899,31 @@ export default function DirectorySyncPanel() {
     }
   };
 
+  const resetSyncedDepartments = () => {
+    Modal.confirm({
+      title: '清理同步组织并重新映射？',
+      content: '将删除当前同步源自动创建的本地组织及旧绑定；其中的用户会先移到挂载组织。手工创建的组织和用户不会被删除。完成后请重新选择映射并点击“同步用户”。',
+      okText: '确认清理',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        const result = await directorySyncApi.resetDepartments();
+        setDepartmentMappings([]);
+        setMappingDraft({});
+        setPendingDepts({});
+        setMatchOpen(false);
+        await load();
+        message.success(`已清理 ${result.departments_deleted} 个同步组织、${result.bindings_deleted} 条旧绑定，${result.users_moved} 个用户已移至挂载组织`);
+      },
+    });
+  };
+
   // 部门匹配弹窗：远端部门树相关
-  const allRemoteFlat = useMemo(() => flattenRemoteDepts(remoteDepartments), [remoteDepartments]);
+  const scopedRemoteDepartments = useMemo(
+    () => filterRemoteDeptTree(remoteDepartments, selectedDepartmentPaths),
+    [remoteDepartments, selectedDepartmentPaths],
+  );
+  const allRemoteFlat = useMemo(() => flattenRemoteDepts(scopedRemoteDepartments), [scopedRemoteDepartments]);
 
   const toggleExpand = (path: string) => {
     setExpandedPaths((prev) => {
@@ -798,29 +948,12 @@ export default function DirectorySyncPanel() {
     allRemoteFlat.filter((d) => d.path !== parentPath && d.path.startsWith(parentPath + '/')).map((d) => d.path);
 
   const handleIncludeChange = (path: string, include: boolean) => {
-    const selfLocal = mappingDraft[path]?.local_id || '';
-    const updates: Record<string, Partial<{ include: boolean; local_id: string }>> = {};
-    updates[path] = { include };
-    for (const childPath of descendantPaths(path)) {
-      const child = mappingDraft[childPath] || { include: false, local_id: '' };
-      updates[childPath] = {
-        include,
-        local_id: include ? (selfLocal || child.local_id) : child.local_id,
-      };
-    }
-    setDraftBatch(updates);
+    // 只登记当前根部门的挂载位置；子部门由后端按企微路径自动创建。
+    setDraftBatch({ [path]: { include } });
   };
 
   const handleLocalChange = (path: string, local_id: string) => {
-    const updates: Record<string, Partial<{ include: boolean; local_id: string }>> = {};
-    updates[path] = { local_id };
-    for (const childPath of descendantPaths(path)) {
-      const child = mappingDraft[childPath] || { include: false, local_id: '' };
-      if (child.include) {
-        updates[childPath] = { local_id };
-      }
-    }
-    setDraftBatch(updates);
+    setDraftBatch({ [path]: { local_id } });
   };
 
   const renderRemoteTree = (nodes: DirectoryDepartment[], depth = 0) => {
@@ -915,7 +1048,9 @@ export default function DirectorySyncPanel() {
     const node = allRemoteFlat.find((d) => d.path === path);
     setCreateForPath(path);
     setCreateName(createSearch.trim() || node?.name || '');
-    setCreateParent(undefined);
+    // 手动映射时新建的北区/南区默认挂在页面上选定的本地根组织下，
+    // 避免因每次忘记选“上级部门”而把整棵子树建到根目录。
+    setCreateParent(form.getFieldValue('mount_department_id') || undefined);
     setCreateSearch('');
     setCreateOpen(true);
   };
@@ -1055,6 +1190,58 @@ export default function DirectorySyncPanel() {
             />
           </Form.Item>
         </div>
+        {(
+          <div style={{ marginTop: 16, padding: '14px 16px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc' }}>
+            <div style={{ fontWeight: 600, marginBottom: 12 }}>{mappingMode ? '手动组织映射范围' : '自动组织同步'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+              <Form.Item
+                label="企微同步范围"
+                name="selected_department_paths"
+                tooltip="选择北区后自动包含北区的全部子部门和用户；不选表示同步应用可见范围全部组织。"
+              >
+                <TreeSelect
+                  treeData={deptTreeData(remoteDepartments)}
+                  treeCheckable
+                  showCheckedStrategy={TreeSelect.SHOW_PARENT}
+                  showSearch
+                  treeNodeFilterProp="title"
+                  allowClear
+                  placeholder={remoteDepartments.length ? '选择北区等根部门' : '请先点击拉取远端部门'}
+                  disabled={remoteDepartments.length === 0}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item
+                label={mappingMode ? '手动映射默认上级组织' : 'OneAuth 挂载组织'}
+                name="mount_department_id"
+                tooltip={mappingMode
+                  ? '新建北区/南区等映射锚点时，默认挂在该组织下；子部门再按企微层级自动创建。'
+                  : '只选一个本地挂载根。前面选中的北区、综合部等会自动创建在该组织下。'}
+              >
+                <TreeSelect
+                  treeData={localTree}
+                  showSearch
+                  treeNodeFilterProp="title"
+                  allowClear
+                  placeholder="选择 FIT2CLOUD 等首级组织"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item
+                label="去除远端路径前缀"
+                name="strip_prefix"
+                tooltip="默认自动填入企微公司根路径，避免在 FIT2CLOUD 下再重复创建一层公司名。"
+              >
+                <Input placeholder="/杭州飞致云信息科技有限公司" />
+              </Form.Item>
+            </div>
+            <div style={{ color: '#64748b', fontSize: 12 }}>
+              {mappingMode
+                ? '部门匹配弹窗只展示上面选中的企微范围及其子部门，并加载当前 OneAuth 组织供逐项选择。'
+                : '自动模式只需选一个挂载根：例如选择 FIT2CLOUD，将生成 FIT2CLOUD/北区、FIT2CLOUD/综合部及完整子部门树。'}
+            </div>
+          </div>
+        )}
         <Space style={{ marginTop: 12 }} wrap>
           <Button type="primary" ghost loading={savingConn} onClick={saveConnection}>
             保存连接
@@ -1071,7 +1258,7 @@ export default function DirectorySyncPanel() {
       <Modal
         title="用户导入"
         open={importOpen && !!importPreview}
-        width={900}
+        width={1040}
         footer={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Space>
@@ -1118,7 +1305,7 @@ export default function DirectorySyncPanel() {
       >
         {importPreview && (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
               <div style={{ fontSize: 13, color: '#475569' }}>
                 同步时间：<b>{importPreview.sync_at || '—'}</b>，共 <b>{importPreview.total}</b> 位用户待导入
                 <span style={{ color: '#64748b', marginLeft: 12 }}>已选 {selectedRowKeys.length} 位</span>
@@ -1128,21 +1315,74 @@ export default function DirectorySyncPanel() {
                   </span>
                 )}
               </div>
-              <Input.Search
-                placeholder="搜索用户名 / 姓名 / 邮箱"
-                allowClear
-                value={importKeyword}
-                onChange={(e) => {
-                  setImportKeyword(e.target.value);
-                  setImportPage(1);
-                }}
-                onSearch={(v) => {
-                  setImportKeyword(v);
-                  setImportPage(1);
-                }}
-                style={{ width: 260 }}
-              />
+              <Space wrap style={{ justifyContent: 'flex-end' }}>
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="按远端部门筛选"
+                  options={importDepartmentOptions}
+                  value={importDepartment}
+                  onChange={(value) => {
+                    setImportDepartment(value);
+                    setImportPage(1);
+                  }}
+                  style={{ width: 260 }}
+                />
+                <Input.Search
+                  placeholder="搜索用户名 / 姓名 / 邮箱"
+                  allowClear
+                  value={importKeyword}
+                  onChange={(e) => {
+                    setImportKeyword(e.target.value);
+                    setImportPage(1);
+                  }}
+                  onSearch={(v) => {
+                    setImportKeyword(v);
+                    setImportPage(1);
+                  }}
+                  style={{ width: 260 }}
+                />
+              </Space>
             </div>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 10 }}
+              message={
+                <span>
+                  新建账号默认密码：<b style={{ fontFamily: 'monospace' }}>{importPreview.default_password || '未配置'}</b>
+                  <span style={{ color: '#64748b', marginLeft: 8 }}>已存在账号不会被重置密码</span>
+                </span>
+              }
+            />
+            <Space wrap style={{ marginBottom: 8 }}>
+              <Button size="small" onClick={selectFilteredUsers} disabled={filteredImportItems.length === 0}>
+                仅选当前筛选（{filteredImportItems.length}）
+              </Button>
+              <Button size="small" onClick={appendFilteredUsers} disabled={filteredImportItems.length === 0}>
+                追加当前筛选
+              </Button>
+              <Button size="small" onClick={unselectFilteredUsers} disabled={filteredImportItems.length === 0}>
+                取消当前筛选
+              </Button>
+              <Button size="small" danger onClick={() => setSelectedRowKeys([])} disabled={selectedRowKeys.length === 0}>
+                清空全部选择
+              </Button>
+              <span style={{ color: '#64748b', fontSize: 12 }}>选择父部门时包含其子部门用户</span>
+            </Space>
+            {selectedRowKeys.length > 0 ? (
+              <Alert
+                type={selectedHiddenCount > 0 ? 'warning' : 'info'}
+                showIcon
+                style={{ marginBottom: 10 }}
+                message={
+                  selectedHiddenCount > 0
+                    ? `共选 ${selectedRowKeys.length} 位：当前筛选 ${selectedCurrentCount} 位，其他筛选中隐藏 ${selectedHiddenCount} 位`
+                    : `当前已选择 ${selectedCurrentCount} 位用户`
+                }
+              />
+            ) : null}
             {importLoading && importProgress < 100 && (
               <div style={{ marginBottom: 12 }}>
                 <Progress percent={importProgress} status="active" showInfo={false} />
@@ -1268,13 +1508,13 @@ export default function DirectorySyncPanel() {
                 {
                   title: '部门（落库）',
                   dataIndex: 'department',
-                  width: 140,
+                  width: 320,
                   ellipsis: true,
                   render: (dept: string, record: any) => {
                     const src = (record.groups || []).join('、');
                     const text = dept || '-';
                     return (
-                      <Tooltip title={src ? `源部门：${src}` : undefined}>
+                      <Tooltip title={<><div>落库路径：{text}</div>{src ? <div>源部门：{src}</div> : null}</>}>
                         <span style={{ fontSize: 12, color: '#475569' }}>{text}</span>
                       </Tooltip>
                     );
@@ -1323,11 +1563,50 @@ export default function DirectorySyncPanel() {
               <Statistic title="匹配部门" value={summary.department_matched} />
               <Statistic title="新增用户" value={summary.user_created} />
               <Statistic title="更新用户" value={summary.user_updated} />
-              <Statistic title="禁用用户" value={summary.user_disabled} />
-              {!summary.mapping_preview?.length ? (
-                <Statistic title="跳过用户" value={summary.user_skipped} />
-              ) : null}
+              <Statistic
+                title="禁用用户"
+                value={summary.user_disabled}
+                formatter={(value) => summary.user_disabled > 0
+                  ? <Button type="link" style={{ padding: 0, height: 'auto', fontSize: 24 }} onClick={() => setSummaryDetailType('disabled')}>{value}</Button>
+                  : value}
+              />
+              <Statistic
+                title="失败用户"
+                value={summary.user_failed || 0}
+                valueStyle={summary.user_failed ? { color: '#cf1322' } : undefined}
+                formatter={(value) => summary.user_failed > 0
+                  ? <Button danger type="link" style={{ padding: 0, height: 'auto', fontSize: 24 }} onClick={() => setSummaryDetailType('failed')}>{value}</Button>
+                  : value}
+              />
+              <Statistic
+                title="跳过用户"
+                value={summary.user_skipped}
+                formatter={(value) => summary.user_skipped > 0
+                  ? <Button type="link" style={{ padding: 0, height: 'auto', fontSize: 24 }} onClick={() => setSummaryDetailType('skipped')}>{value}</Button>
+                  : value}
+              />
             </div>
+            {summaryDetailType ? (
+              <Card
+                size="small"
+                style={{ marginTop: 16 }}
+                title={summaryDetailType === 'failed' ? '失败用户及原因' : summaryDetailType === 'disabled' ? '禁用用户及原因' : '跳过用户及原因'}
+                extra={<Button type="link" onClick={() => setSummaryDetailType(null)}>收起</Button>}
+              >
+                <div style={{ maxHeight: 300, overflow: 'auto' }}>
+                  {(summary.user_details || []).filter((item) => item.type === summaryDetailType).map((item, index) => (
+                    <div key={`${item.type}-${item.external_id || item.username}-${index}`} style={{ padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                      <b>{item.name || item.username || item.external_id || '未知用户'}</b>
+                      {item.username ? <span style={{ color: '#64748b' }}>（{item.username}）</span> : null}
+                      <div style={{ color: item.type === 'failed' ? '#b42318' : '#64748b', marginTop: 2 }}>{item.reason}</div>
+                    </div>
+                  ))}
+                  {(summary.user_details || []).filter((item) => item.type === summaryDetailType).length === 0 ? (
+                    <div style={{ color: '#94a3b8' }}>本次结果没有可展示的逐用户明细。</div>
+                  ) : null}
+                </div>
+              </Card>
+            ) : null}
             {summary.mapping_preview && summary.mapping_preview.length > 0 ? (
               <div style={{ marginTop: 16 }}>
                 <div style={{ marginBottom: 8, fontSize: 13, color: '#475569' }}>
@@ -1347,11 +1626,18 @@ export default function DirectorySyncPanel() {
                 />
               </div>
             ) : summary.details?.length > 0 ? (
-              <div style={{ marginTop: 16, padding: '12px 14px', border: '1px solid #fee2e2', background: '#fff7f7', color: '#b42318', fontSize: 13, lineHeight: 1.8 }}>
-                {summary.details.slice(0, 8).map((d) => (
-                  <div key={d}>{d}</div>
-                ))}
-              </div>
+              <Collapse
+                style={{ marginTop: 16 }}
+                items={[{
+                  key: 'failures',
+                  label: `查看失败用户及原因（${summary.details.length}）`,
+                  children: (
+                    <div style={{ color: '#b42318', fontSize: 13, lineHeight: 1.8, maxHeight: 320, overflow: 'auto' }}>
+                      {summary.details.map((d) => <div key={d}>{d}</div>)}
+                    </div>
+                  ),
+                }]}
+              />
             ) : null}
           </>
         )}
@@ -1453,12 +1739,20 @@ export default function DirectorySyncPanel() {
         okText="保存匹配"
         cancelText="取消"
         confirmLoading={saving}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Button danger icon={<DeleteOutlined />} onClick={resetSyncedDepartments}>
+              清理同步组织并重新映射
+            </Button>
+            <Space><CancelBtn /><OkBtn /></Space>
+          </Space>
+        )}
       >
         <div style={{ marginBottom: 8, color: '#64748b', fontSize: 12 }}>
           左侧为远端部门树，点击 ▶/▼ 展开或收起；勾选父部门并映射到本地部门后，其下所有子部门（小组/团队）的用户会一并同步，不需要逐一勾选。本地若无对应部门，可展开右侧「映射到本地部门」下拉框，在底部点「＋ 新建本地部门」登记为待创建部门——该部门**不会立即建库**，而是等到你点「立即同步」且确实有用户归属它时才会真正创建，避免产生空部门。
         </div>
         <div style={{ maxHeight: 440, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6 }}>
-          {renderRemoteTree(remoteDepartments)}
+          {renderRemoteTree(scopedRemoteDepartments)}
           {remoteDepartments.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>请先拉取远端部门</div>
           )}

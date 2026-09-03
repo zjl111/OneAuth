@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
@@ -45,7 +46,13 @@ func NewDB(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	db, err := gorm.Open(dial, &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
+		Logger: logger.New(log.New(os.Stdout, "", log.LstdFlags), logger.Config{
+			SlowThreshold:             2 * time.Second,
+			LogLevel:                  logLevel,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
+			ParameterizedQueries:      true,
+		}),
 	})
 	if err != nil {
 		return nil, err
@@ -194,8 +201,8 @@ func migrateBufferExtIdx(db *gorm.DB) {
 //
 // 本迁移在 AutoMigrate 之后的 runOnce 阶段执行（此时模型已不再声明 external_id 索引），
 // 做两件事：
-//  1) 清理跨 provider 重复的 external_id 行（保留最新一条），让表数据干净；
-//  2) 显式 DROP 掉历史残留的 idx_buf_ext / idx_buf_provider_ext 索引（无论唯一与否），
+//  1. 清理跨 provider 重复的 external_id 行（保留最新一条），让表数据干净；
+//  2. 显式 DROP 掉历史残留的 idx_buf_ext / idx_buf_provider_ext 索引（无论唯一与否），
 //     确保数据库层不再有任何 external_id 约束，杜绝 2067。
 //
 // 注意：idx_buf_provider（provider 普通索引）保留——业务按 provider 清缓冲/导入查询依赖它。
@@ -204,8 +211,8 @@ func revertBufferExtIdx(db *gorm.DB) {
 }
 
 // dropBufferExtUnique 承载缓冲表 external_id 索引的彻底清理逻辑：
-//  1) 清理跨 provider 重复的 external_id 行，保留 id 最大（最新）的一条（避免残留唯一约束/重复数据）；
-//  2) 显式 DROP 历史残留的 external_id 索引（单列唯一 idx_buf_ext / 复合唯一 idx_buf_provider_ext），
+//  1. 清理跨 provider 重复的 external_id 行，保留 id 最大（最新）的一条（避免残留唯一约束/重复数据）；
+//  2. 显式 DROP 历史残留的 external_id 索引（单列唯一 idx_buf_ext / 复合唯一 idx_buf_provider_ext），
 //     模型已不再声明，AutoMigrate 不会重建。
 //
 // 用独立迁移名 drop_buf_ext_unique_v1 注册，确保即使旧迁移 revert_buffer_ext_idx_v1
@@ -234,6 +241,7 @@ func dropBufferExtUnique(db *gorm.DB) {
 	db.Exec(`DROP INDEX IF EXISTS idx_buf_ext`)
 	db.Exec(`DROP INDEX IF EXISTS idx_buf_provider_ext`)
 }
+
 // 第一次执行 fn 后写入 marker，之后启动直接跳过。
 // 想强制重跑就 DELETE FROM sso_system_config WHERE category='_migration' AND key=<name>。
 func runOnce(db *gorm.DB, name string, fn func()) {

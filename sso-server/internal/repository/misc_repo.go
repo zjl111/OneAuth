@@ -30,7 +30,15 @@ func (r *DepartmentRepository) ListAll() ([]model.Department, error) {
 func (r *DepartmentRepository) Create(d *model.Department) error { return r.db.Create(d).Error }
 func (r *DepartmentRepository) Update(d *model.Department) error { return r.db.Save(d).Error }
 func (r *DepartmentRepository) Delete(id uuid.UUID) error {
-	return r.db.Delete(&model.Department{}, "id = ?", id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 目录同步绑定没有数据库外键；删除部门时必须主动清理，
+		// 否则下次同步会复用已不存在的 local_id。
+		if err := tx.Where("external_type = ? AND local_id = ?", "department", id).
+			Delete(&model.DirectorySyncBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Department{}, "id = ?", id).Error
+	})
 }
 func (r *DepartmentRepository) Get(id uuid.UUID) (*model.Department, error) {
 	var d model.Department
@@ -104,10 +112,10 @@ func (r *PermissionRepository) ListAll() ([]model.Permission, error) {
 
 // ConfigRepository ----------------------------------
 type ConfigRepository struct {
-	db       *gorm.DB
-	mu       sync.RWMutex
-	siteURL  string // 缓存 platform.site_url，避免每次签发 token 都查 DB
-	loaded   bool
+	db      *gorm.DB
+	mu      sync.RWMutex
+	siteURL string // 缓存 platform.site_url，避免每次签发 token 都查 DB
+	loaded  bool
 }
 
 func NewConfigRepository(db *gorm.DB) *ConfigRepository {
@@ -316,9 +324,9 @@ func (r *GrantRepository) Has(userID uuid.UUID, clientID, scope string) bool {
 }
 func (r *GrantRepository) Grant(userID uuid.UUID, clientID, scope string) error {
 	g := model.AuthorizationGrant{
-		UserID:    userID,
-		ClientID:  clientID,
-		Scope:     scope,
+		UserID:   userID,
+		ClientID: clientID,
+		Scope:    scope,
 	}
 	var existing model.AuthorizationGrant
 	if err := r.db.Where("user_id = ? AND client_id = ?", userID, clientID).First(&existing).Error; err == gorm.ErrRecordNotFound {

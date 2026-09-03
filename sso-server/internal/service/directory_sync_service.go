@@ -25,6 +25,7 @@ import (
 )
 
 const DirectoryProviderWeComAttendance = "wecom_attendance"
+
 // DirectoryProviderWeCom 企业微信通讯录：直接走企业微信 API，复用全局 wecom 配置，
 // 无需第三方平台地址与 API Key。
 const DirectoryProviderWeCom = "wecom"
@@ -34,12 +35,12 @@ const DirectoryProviderWeCom = "wecom"
 const defaultPasswordFallback = "OneAuth@2026"
 
 type DirectorySyncService struct {
-	configRepo  *repository.ConfigRepository
-	userRepo    *repository.UserRepository
-	deptRepo    *repository.DepartmentRepository
-	groupRepo   *repository.UserGroupRepository
-	db          *gorm.DB
-	client      *http.Client
+	configRepo   *repository.ConfigRepository
+	userRepo     *repository.UserRepository
+	deptRepo     *repository.DepartmentRepository
+	groupRepo    *repository.UserGroupRepository
+	db           *gorm.DB
+	client       *http.Client
 	secretCipher *crypto.SecretCipher
 	// defaultPassword 新建账号的默认密码；为空时回退到固定兜底密码（OneAuth@2026）。
 	defaultPassword string
@@ -78,11 +79,11 @@ func (s *DirectorySyncService) decryptSecret(stored string) (string, error) {
 }
 
 type DirectorySyncConfig struct {
-	Enabled                 bool              `json:"enabled"`
-	PlatformType            string            `json:"platform_type"`
-	BaseURL                 string            `json:"base_url"`
-	APIKey                  string            `json:"api_key,omitempty"`
-	APIKeySet               bool              `json:"api_key_set"`
+	Enabled                 bool                `json:"enabled"`
+	PlatformType            string              `json:"platform_type"`
+	BaseURL                 string              `json:"base_url"`
+	APIKey                  string              `json:"api_key,omitempty"`
+	APIKeySet               bool                `json:"api_key_set"`
 	SelectedDepartmentPaths []string            `json:"selected_department_paths"`
 	StripPrefix             string              `json:"strip_prefix"`
 	MountDepartmentID       string              `json:"mount_department_id"`
@@ -102,6 +103,7 @@ type DirectorySyncConfig struct {
 //   - 常规匹配：local_department_id 指向本地已存在的部门；
 //   - 按需新建匹配：create_local=true 且 new_dept_name 非空，表示「待创建部门」，
 //     仅在同步时确实有用户归属于该部门才真正新建，避免产生空部门。
+//
 // 仅把已勾选（include=true 且上述二者其一成立）的远端部门下的用户同步到对应本地部门。
 type DepartmentMapping struct {
 	RemoteExternalID  string `json:"remote_external_id"`
@@ -142,9 +144,26 @@ type DirectorySyncSummary struct {
 	UserUpdated       int               `json:"user_updated"`
 	UserDisabled      int               `json:"user_disabled"`
 	UserSkipped       int               `json:"user_skipped"`
+	UserFailed        int               `json:"user_failed"`
 	Message           string            `json:"message"`
 	Details           []string          `json:"details"`
+	UserDetails       []UserSyncDetail  `json:"user_details"`
 	MappingPreview    []SyncPreviewDept `json:"mapping_preview"`
+}
+
+// UserSyncDetail 为同步结果中的逐用户明细，供管理端查看跳过、禁用和失败对象及原因。
+type UserSyncDetail struct {
+	Type       string `json:"type"` // skipped | disabled | failed
+	Name       string `json:"name"`
+	Username   string `json:"username"`
+	ExternalID string `json:"external_id,omitempty"`
+	Reason     string `json:"reason"`
+}
+
+type DirectorySyncResetResult struct {
+	DepartmentsDeleted int `json:"departments_deleted"`
+	UsersMoved         int `json:"users_moved"`
+	BindingsDeleted    int `json:"bindings_deleted"`
 }
 
 // SyncPreviewUser 预览树中的单个用户节点。
@@ -168,8 +187,8 @@ type SyncPreviewDept struct {
 // UserImportPreviewItem 是「用户导入」表格中的一行，对应一个将被同步的远端用户。
 type UserImportPreviewItem struct {
 	ExternalID     string   `json:"external_id"`
-	Status         string   `json:"status"`          // "create" 新建 | "update" 更新
-	Username       string   `json:"username"`        // 将落库的真实用户名（经策略换算，全小写）
+	Status         string   `json:"status"`   // "create" 新建 | "update" 更新
+	Username       string   `json:"username"` // 将落库的真实用户名（经策略换算，全小写）
 	Name           string   `json:"name"`
 	Email          string   `json:"email"`
 	SourceUsername string   `json:"source_username"` // 远端原始账号（如企微 userid），未经策略换算，供对照
@@ -180,12 +199,13 @@ type UserImportPreviewItem struct {
 
 // UserImportPreview 是「用户导入」弹框的分页预览结果。
 type UserImportPreview struct {
-	SyncAt     string                  `json:"sync_at"`
-	Progress   int                     `json:"progress"` // 0-100，拉取未完成时显示进度
-	Total      int                     `json:"total"`
-	Page       int                     `json:"page"`
-	PageSize   int                     `json:"page_size"`
-	Users      []UserImportPreviewItem `json:"users"`
+	SyncAt          string                  `json:"sync_at"`
+	Progress        int                     `json:"progress"` // 0-100，拉取未完成时显示进度
+	Total           int                     `json:"total"`
+	Page            int                     `json:"page"`
+	PageSize        int                     `json:"page_size"`
+	DefaultPassword string                  `json:"default_password"`
+	Users           []UserImportPreviewItem `json:"users"`
 }
 
 type directorySnapshot struct {
@@ -364,12 +384,93 @@ func (s *DirectorySyncService) cleanupPlatformBuffer(oldProvider string) (int, e
 	return removed, nil
 }
 
+// ResetManagedDepartments 清理当前同步源自动创建的本地组织，供管理员重新映射。
+// 只删除带有目录同步标记的部门，手工创建/手工选中的本地组织不会被删除。
+// 删除前先把用户和非同步子部门移到挂载组织，避免产生新的孤儿数据。
+func (s *DirectorySyncService) ResetManagedDepartments() (*DirectorySyncResetResult, error) {
+	cfg := s.LoadConfig(false)
+	provider := strings.TrimSpace(cfg.PlatformType)
+	if provider == "" {
+		return nil, errors.New("请先配置同步平台")
+	}
+	result := &DirectorySyncResetResult{}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		managedDescriptions := []string{
+			"third-party directory sync",
+			"enterprise wecom directory sync",
+			"enterprise directory mapped subtree sync",
+			"directory sync on-demand",
+		}
+		var managed []model.Department
+		if err := tx.Where("description IN ?", managedDescriptions).Find(&managed).Error; err != nil {
+			return err
+		}
+		managedIDs := make([]uuid.UUID, 0, len(managed))
+		managedSet := make(map[uuid.UUID]bool, len(managed))
+		for _, dept := range managed {
+			managedIDs = append(managedIDs, dept.ID)
+			managedSet[dept.ID] = true
+		}
+
+		var fallbackID *uuid.UUID
+		if mountID, err := parseOptionalUUID(cfg.MountDepartmentID); err == nil && mountID != nil && !managedSet[*mountID] {
+			var count int64
+			if err := tx.Model(&model.Department{}).Where("id = ?", *mountID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				fallbackID = mountID
+			}
+		}
+		if len(managedIDs) > 0 {
+			var fallbackValue any
+			if fallbackID != nil {
+				fallbackValue = *fallbackID
+			}
+			res := tx.Model(&model.User{}).Where("department_id IN ?", managedIDs).Update("department_id", fallbackValue)
+			if res.Error != nil {
+				return res.Error
+			}
+			result.UsersMoved = int(res.RowsAffected)
+			// 保留手工建立的子部门，只把它们从待删除的同步父部门下移出。
+			if err := tx.Model(&model.Department{}).
+				Where("parent_id IN ? AND (description NOT IN ? OR description IS NULL)", managedIDs, managedDescriptions).
+				Update("parent_id", fallbackValue).Error; err != nil {
+				return err
+			}
+			res = tx.Delete(&model.Department{}, "id IN ?", managedIDs)
+			if res.Error != nil {
+				return res.Error
+			}
+			result.DepartmentsDeleted = int(res.RowsAffected)
+		}
+
+		res := tx.Where("provider = ? AND external_type = ?", provider, "department").
+			Delete(&model.DirectorySyncBinding{})
+		if res.Error != nil {
+			return res.Error
+		}
+		result.BindingsDeleted = int(res.RowsAffected)
+		if err := tx.Where("provider = ?", provider).Delete(&model.DirectorySyncBuffer{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// 清空旧映射，迫使管理员在新组织树上重新确认锚点。
+	if err := s.configRepo.Set("directory_sync", "department_mappings", "[]"); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (s *DirectorySyncService) FetchDepartments() ([]DirectoryDepartment, error) {
 	cfg := s.LoadConfig(false)
 	if cfg.PlatformType == DirectoryProviderWeCom {
-		// 企业微信通讯录：直接拉企微部门树
-		depts, _, err := s.WeCom.FetchDirectorySnapshot()
-		return depts, err
+		// 企业微信通讯录：部门匹配只需部门树，不要在此逐部门拉取成员。
+		return s.WeCom.FetchDirectoryDepartments()
 	}
 	if err := validateDirectoryConfig(cfg, false); err != nil {
 		return nil, err
@@ -490,12 +591,15 @@ func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg Direct
 		}
 		var deptResolver map[string]*mappingTarget
 		if cfg.MappingMode {
-			deptResolver, err = s.buildMappingResolver(tx, cfg)
+			deptResolver, err = s.ensureMappedDepartmentSubtrees(tx, cfg, snap, false, nil)
 			if err != nil {
 				return err
 			}
 		} else {
-			pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+			// 手动「同步用户」只走 Pull -> storeSnapshot。自动组织模式下必须在
+			// 生成预览缓冲前先创建/更新远端组织树，否则新部署或删除旧部门后，
+			// resolveUserDepartment 找不到末级部门，所有用户都会回退到挂载根组织。
+			pathIndex, err := s.ensureAutomaticDepartments(tx, cfg, snap, mountID)
 			if err != nil {
 				return err
 			}
@@ -558,22 +662,22 @@ func (s *DirectorySyncService) storeSnapshot(snap *directorySnapshot, cfg Direct
 			if emailEdited != "" {
 				email = emailEdited
 			}
-		rows = append(rows, model.DirectorySyncBuffer{
-			Provider:       cfg.PlatformType,
-			ExternalID:     externalID,
-			Username:       username,
-			Name:           item.Name,
-			Email:          email,
-			SourceUsername: item.SourceUsername,
-			Department:     item.Department,
-			Groups:         string(groupsJSON),
-			Status:         item.Status,
-			Exists:         item.Exists,
-			UsernameEdited: usernameEdited,
-			EmailEdited:    emailEdited,
-			Raw:            string(raw),
-			FetchedAt:      time.Now(),
-		})
+			rows = append(rows, model.DirectorySyncBuffer{
+				Provider:       cfg.PlatformType,
+				ExternalID:     externalID,
+				Username:       username,
+				Name:           item.Name,
+				Email:          email,
+				SourceUsername: item.SourceUsername,
+				Department:     item.Department,
+				Groups:         string(groupsJSON),
+				Status:         item.Status,
+				Exists:         item.Exists,
+				UsernameEdited: usernameEdited,
+				EmailEdited:    emailEdited,
+				Raw:            string(raw),
+				FetchedAt:      time.Now(),
+			})
 		}
 
 		if err := tx.Where("provider = ?", cfg.PlatformType).Delete(&model.DirectorySyncBuffer{}).Error; err != nil {
@@ -594,7 +698,7 @@ func (s *DirectorySyncService) computePreviewItem(tx *gorm.DB, cfg DirectorySync
 	deptName := ""
 	var d model.Department
 	if err := tx.First(&d, "id = ?", *deptID).Error; err == nil {
-		deptName = d.Name
+		deptName = s.departmentDisplayPath(tx, d.ID)
 	}
 	nickname := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["nickname"]), externalID)
 	sourceUsername := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["username"]), externalID)
@@ -672,52 +776,68 @@ func (s *DirectorySyncService) ImportUsers(externalIDs []string, groupIDs []stri
 		}
 	}
 
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		mountID, err := parseOptionalUUID(cfg.MountDepartmentID)
-		if err != nil {
-			return err
-		}
-		var deptResolver map[string]*mappingTarget
-		if cfg.MappingMode {
-			deptResolver, err = s.buildMappingResolver(tx, cfg)
-			if err != nil {
-				return err
-			}
-		} else {
-			pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
-			if err != nil {
-				return err
-			}
-			deptResolver = make(map[string]*mappingTarget, len(pathIndex))
-			for k, v := range pathIndex {
-				deptResolver[k] = &mappingTarget{kind: "existing", localID: v}
-			}
-		}
-		seen := make(map[string]bool)
-		for _, r := range rows {
-			if whitelist != nil && !whitelist[r.ExternalID] {
-				continue
-			}
-			var remote map[string]any
-			if err := json.Unmarshal([]byte(r.Raw), &remote); err != nil {
-				return fmt.Errorf("解析缓冲记录 %s 失败: %w", r.ExternalID, err)
-			}
-			if err := s.applyRemoteUser(tx, cfg, remote, deptResolver, mountID, false, summary, seen, r.Username, r.EmailEdited, groupIDs); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	mountID, err := parseOptionalUUID(cfg.MountDepartmentID)
 	if err != nil {
 		summary.Status = "failed"
 		summary.Message = err.Error()
+		s.finishLog(logRow, summary)
+		return summary, err
+	}
+	for _, r := range rows {
+		if whitelist != nil && !whitelist[r.ExternalID] {
+			continue
+		}
+		userSummary := &DirectorySyncSummary{}
+		err := s.db.Transaction(func(tx *gorm.DB) error {
+			var remote map[string]any
+			if err := json.Unmarshal([]byte(r.Raw), &remote); err != nil {
+				return fmt.Errorf("解析缓冲记录失败: %w", err)
+			}
+			var deptResolver map[string]*mappingTarget
+			if cfg.MappingMode {
+				userSnap := &directorySnapshot{Users: []map[string]any{remote}}
+				deptResolver, err = s.ensureMappedDepartmentSubtrees(tx, cfg, userSnap, false, userSummary)
+				if err != nil {
+					return err
+				}
+			} else {
+				pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+				if err != nil {
+					return err
+				}
+				deptResolver = make(map[string]*mappingTarget, len(pathIndex))
+				for k, v := range pathIndex {
+					deptResolver[k] = &mappingTarget{kind: "existing", localID: v}
+				}
+			}
+			return s.applyRemoteUser(tx, cfg, remote, deptResolver, mountID, false, userSummary, make(map[string]bool), r.Username, r.EmailEdited, groupIDs)
+		})
+		if err != nil {
+			summary.UserFailed++
+			name := strings.TrimSpace(r.Name)
+			if name == "" {
+				name = r.Username
+			}
+			summary.Details = append(summary.Details, fmt.Sprintf("%s（%s / %s）: %v", name, r.Username, r.ExternalID, err))
+			summary.UserDetails = append(summary.UserDetails, UserSyncDetail{
+				Type: "failed", Name: name, Username: r.Username, ExternalID: r.ExternalID, Reason: err.Error(),
+			})
+			continue
+		}
+		mergeDirectorySyncSummary(summary, userSummary)
+	}
+	if summary.UserFailed > 0 {
+		if summary.UserCreated+summary.UserUpdated+summary.UserSkipped > 0 {
+			summary.Status = "partial_success"
+			summary.Message = fmt.Sprintf("导入完成，%d 位用户失败", summary.UserFailed)
+		} else {
+			summary.Status = "failed"
+			summary.Message = fmt.Sprintf("导入失败，共 %d 位用户失败", summary.UserFailed)
+		}
 	} else {
 		summary.Message = "导入完成"
 	}
 	s.finishLog(logRow, summary)
-	if err != nil {
-		return summary, err
-	}
 	return summary, nil
 }
 
@@ -802,13 +922,44 @@ func (s *DirectorySyncService) UserImportPreview(keyword string, page, pageSize 
 	}
 
 	return &UserImportPreview{
-		SyncAt:   syncAt,
-		Progress: 100,
-		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
-		Users:    pageItems,
+		SyncAt:          syncAt,
+		Progress:        100,
+		Total:           total,
+		Page:            page,
+		PageSize:        pageSize,
+		DefaultPassword: firstNonEmpty(s.defaultPassword, defaultPasswordFallback),
+		Users:           pageItems,
 	}, nil
+}
+
+func mergeDirectorySyncSummary(dst, src *DirectorySyncSummary) {
+	dst.DepartmentCreated += src.DepartmentCreated
+	dst.DepartmentMatched += src.DepartmentMatched
+	dst.UserCreated += src.UserCreated
+	dst.UserUpdated += src.UserUpdated
+	dst.UserDisabled += src.UserDisabled
+	dst.UserSkipped += src.UserSkipped
+	dst.UserFailed += src.UserFailed
+	dst.Details = append(dst.Details, src.Details...)
+	dst.UserDetails = append(dst.UserDetails, src.UserDetails...)
+}
+
+// departmentDisplayPath 返回从本地根组织到目标部门的完整路径，
+// 用于导入前「部门（落库）」所见即所得预览。
+func (s *DirectorySyncService) departmentDisplayPath(tx *gorm.DB, id uuid.UUID) string {
+	var depts []model.Department
+	if err := tx.Find(&depts).Error; err != nil {
+		return ""
+	}
+	byID := make(map[uuid.UUID]model.Department, len(depts))
+	for _, dept := range depts {
+		byID[dept.ID] = dept
+	}
+	path, ok := departmentRelativePath(id, nil, byID)
+	if !ok {
+		return ""
+	}
+	return path
 }
 
 func (s *DirectorySyncService) LatestLogs(limit int) ([]model.DirectorySyncLog, error) {
@@ -915,8 +1066,14 @@ func (s *DirectorySyncService) fetchCombinedSnapshot(cfg DirectorySyncConfig) (*
 		if err != nil {
 			return nil, err
 		}
-		_ = depts // 部门树由 FetchDepartments 接口单独返回，导入流水线只消费 users
-		return &directorySnapshot{Users: users}, nil
+		snap := &directorySnapshot{Departments: flattenDirectoryDepartments(depts), Users: users}
+		roots := cfg.SelectedDepartmentPaths
+		if cfg.MappingMode {
+			if mapped := mappingRoots(cfg); len(mapped) > 0 {
+				roots = mapped
+			}
+		}
+		return filterDirectorySnapshot(snap, roots), nil
 	}
 	// 手动部门匹配模式：只拉取已勾选匹配的远端部门（含其下级），
 	// 避免把整个公司的用户都拉回来，再产生大量无关的“跳过”记录。
@@ -979,13 +1136,16 @@ func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfi
 
 	var deptResolver map[string]*mappingTarget
 	if cfg.MappingMode {
-		// 手动匹配模式：remote 路径(裁剪后) -> 目标部门（已存在或待创建），待创建部门在用户阶段按需新建
-		deptResolver, err = s.buildMappingResolver(tx, cfg)
+		// 手动模式只决定选中远端根部门挂载到本地哪里；
+		// 根下子部门仍按企微完整路径自动创建。
+		deptResolver, err = s.ensureMappedDepartmentSubtrees(tx, cfg, snap, dryRun, summary)
 		if err != nil {
 			return err
 		}
 	} else {
-		pathIndex, err := s.buildDepartmentPathIndex(tx, mountID)
+		// 自动模式下，拉取缓冲时就同步组织树。这样首次使用无需先手工
+		// 创建部门，缓冲中的用户也能立即解析到新创建的最末级部门。
+		pathIndex, err := s.ensureAutomaticDepartments(tx, cfg, snap, mountID)
 		if err != nil {
 			return err
 		}
@@ -1103,6 +1263,12 @@ func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfi
 		if err := s.applyRemoteUser(tx, cfg, remote, deptResolver, mountID, dryRun, summary, seenUserIDs, "", "", nil); err != nil {
 			summary.UserSkipped++
 			summary.Details = append(summary.Details, err.Error())
+			externalID := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["external_id"]), getStringAny(remote, "externalId"))
+			username := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["username"]), externalID)
+			name := firstNonEmpty(getStringAny(remote, cfg.FieldMapping["nickname"]), username)
+			summary.UserDetails = append(summary.UserDetails, UserSyncDetail{
+				Type: "skipped", Name: name, Username: username, ExternalID: externalID, Reason: err.Error(),
+			})
 		}
 	}
 	if cfg.MappingMode {
@@ -1118,6 +1284,152 @@ func (s *DirectorySyncService) applySnapshot(tx *gorm.DB, cfg DirectorySyncConfi
 		}
 	}
 	return nil
+}
+
+// ensureAutomaticDepartments 将远端部门树按层级同步到指定本地挂载部门下。
+// 企微部门 ID 作为稳定绑定键：远端改名/移动时更新同一个本地部门，不重复创建。
+func (s *DirectorySyncService) ensureAutomaticDepartments(tx *gorm.DB, cfg DirectorySyncConfig, snap *directorySnapshot, mountID *uuid.UUID) (map[string]uuid.UUID, error) {
+	index, err := s.buildDepartmentPathIndex(tx, mountID)
+	if err != nil {
+		return nil, err
+	}
+	remoteByPath := make(map[string]map[string]any)
+	for _, dept := range snap.Departments {
+		path := localDepartmentPath(firstNonEmpty(getStringAny(dept, "path"), getStringAny(dept, "departmentPath")), cfg.StripPrefix)
+		if path != "" {
+			remoteByPath[path] = dept
+		}
+	}
+	paths := collectRemoteDepartmentPaths(snap, cfg)
+	sort.Slice(paths, func(i, j int) bool {
+		di, dj := pathDepth(paths[i]), pathDepth(paths[j])
+		if di == dj {
+			return paths[i] < paths[j]
+		}
+		return di < dj
+	})
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		parentID := mountID
+		if parent := parentPath(path); parent != "" {
+			if id, ok := index[parent]; ok {
+				pid := id
+				parentID = &pid
+			}
+		}
+		remote := remoteByPath[path]
+		externalID := strings.TrimSpace(firstNonEmpty(getStringAny(remote, "external_id"), getStringAny(remote, "id")))
+		bindingKey := "path:" + path
+		if externalID != "" {
+			bindingKey = "id:" + externalID
+		}
+
+		var dept *model.Department
+		if binding, bindErr := s.getBinding(tx, cfg.PlatformType, "department", bindingKey); bindErr == nil {
+			var bound model.Department
+			if getErr := tx.First(&bound, "id = ?", binding.LocalID).Error; getErr == nil {
+				dept = &bound
+			}
+		}
+		if dept == nil {
+			if id, ok := index[path]; ok {
+				var existing model.Department
+				if getErr := tx.First(&existing, "id = ?", id).Error; getErr == nil {
+					dept = &existing
+				}
+			}
+		}
+		if dept == nil {
+			created := &model.Department{Name: leafName(path), ParentID: parentID, Description: "enterprise wecom directory sync"}
+			if err := tx.Create(created).Error; err != nil {
+				return nil, err
+			}
+			dept = created
+		} else {
+			// 绑定后可跟随远端改名和父部门调整。
+			dept.Name = leafName(path)
+			dept.ParentID = parentID
+			dept.Description = "enterprise wecom directory sync"
+			if err := tx.Save(dept).Error; err != nil {
+				return nil, err
+			}
+		}
+		index[path] = dept.ID
+		if err := s.upsertBinding(tx, cfg.PlatformType, "department", bindingKey, dept.ID, path); err != nil {
+			return nil, err
+		}
+	}
+	return index, nil
+}
+
+func flattenDirectoryDepartments(tree []DirectoryDepartment) []map[string]any {
+	out := make([]map[string]any, 0)
+	var walk func([]DirectoryDepartment)
+	walk = func(items []DirectoryDepartment) {
+		for _, dept := range items {
+			out = append(out, map[string]any{
+				"external_id": dept.ExternalID,
+				"id":          dept.ID,
+				"name":        dept.Name,
+				"path":        dept.Path,
+				"parent_path": dept.ParentPath,
+			})
+			walk(dept.Children)
+		}
+	}
+	walk(tree)
+	return out
+}
+
+func filterDirectorySnapshot(snap *directorySnapshot, roots []string) *directorySnapshot {
+	cleanRoots := make([]string, 0, len(roots))
+	for _, root := range roots {
+		root = "/" + strings.Trim(strings.TrimSpace(root), "/")
+		if root != "/" {
+			cleanRoots = append(cleanRoots, root)
+		}
+	}
+	if len(cleanRoots) == 0 {
+		return snap
+	}
+	inScope := func(path string) bool {
+		path = "/" + strings.Trim(strings.TrimSpace(path), "/")
+		for _, root := range cleanRoots {
+			if path == root || strings.HasPrefix(path, root+"/") {
+				return true
+			}
+		}
+		return false
+	}
+	filtered := &directorySnapshot{}
+	for _, dept := range snap.Departments {
+		if inScope(firstNonEmpty(getStringAny(dept, "path"), getStringAny(dept, "departmentPath"))) {
+			filtered.Departments = append(filtered.Departments, dept)
+		}
+	}
+	for _, user := range snap.Users {
+		primary := getStringAny(user, "departmentPath")
+		if inScope(primary) {
+			// 用户可能兼任多个区域的部门。选择北区同步时，仅保留北区范围内的
+			// departmentPaths，避免因兼职关系顺带在 OneAuth 创建范围外的南区/总部组织。
+			copyUser := make(map[string]any, len(user))
+			for key, value := range user {
+				copyUser[key] = value
+			}
+			paths := getStringListAny(user, "departmentPaths")
+			inScopePaths := make([]string, 0, len(paths))
+			for _, path := range paths {
+				if inScope(path) {
+					inScopePaths = append(inScopePaths, path)
+				}
+			}
+			copyUser["departmentPaths"] = inScopePaths
+			filtered.Users = append(filtered.Users, copyUser)
+		}
+	}
+	return filtered
 }
 
 // buildMappingResolver 将已勾选的部门匹配转换为 "裁剪后的远端路径 -> 目标部门" 映射。
@@ -1174,6 +1486,105 @@ func (s *DirectorySyncService) buildMappingResolver(tx *gorm.DB, cfg DirectorySy
 	return out, nil
 }
 
+// ensureMappedDepartmentSubtrees 实现「手动根映射 + 子树自动同步」：
+// 管理员只需指定北区/南区等远端根部门在 OneAuth 的挂载位置，
+// 其下销售部、小组、团队仍按企微路径自动创建，并返回精确路径解析器。
+func (s *DirectorySyncService) ensureMappedDepartmentSubtrees(tx *gorm.DB, cfg DirectorySyncConfig, snap *directorySnapshot, dryRun bool, summary *DirectorySyncSummary) (map[string]*mappingTarget, error) {
+	roots, err := s.buildMappingResolver(tx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	resolved := make(map[string]*mappingTarget)
+	rootIDs := make(map[string]uuid.UUID)
+	for path, target := range roots {
+		id := s.ensureTargetDept(tx, cfg, target, dryRun, summary)
+		if id == nil {
+			return nil, fmt.Errorf("无法解析手动映射部门：%s", path)
+		}
+		rootIDs[path] = *id
+		resolved[path] = &mappingTarget{kind: "existing", localID: *id}
+		if summary != nil && target.kind == "existing" {
+			summary.DepartmentMatched++
+		}
+		if !dryRun {
+			_ = s.upsertBinding(tx, cfg.PlatformType, "department", "mapped:path:"+path, *id, path)
+		}
+	}
+
+	paths := collectRemoteDepartmentPaths(snap, cfg)
+	sort.Slice(paths, func(i, j int) bool {
+		if pathDepth(paths[i]) == pathDepth(paths[j]) {
+			return paths[i] < paths[j]
+		}
+		return pathDepth(paths[i]) < pathDepth(paths[j])
+	})
+	for _, path := range paths {
+		var bestRoot string
+		for root := range rootIDs {
+			if path == root || strings.HasPrefix(path, root+"/") {
+				if len(root) > len(bestRoot) {
+					bestRoot = root
+				}
+			}
+		}
+		if bestRoot == "" || path == bestRoot {
+			continue
+		}
+		parentID := rootIDs[bestRoot]
+		currentPath := bestRoot
+		relative := strings.TrimPrefix(path, bestRoot+"/")
+		for _, name := range strings.Split(relative, "/") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			currentPath += "/" + name
+			if existing, ok := resolved[currentPath]; ok {
+				parentID = existing.localID
+				continue
+			}
+			id, created, err := s.findOrCreateMappedChild(tx, parentID, name, dryRun)
+			if err != nil {
+				return nil, err
+			}
+			if summary != nil {
+				if created {
+					summary.DepartmentCreated++
+				} else {
+					summary.DepartmentMatched++
+				}
+			}
+			parentID = id
+			resolved[currentPath] = &mappingTarget{kind: "existing", localID: id}
+			if !dryRun {
+				_ = s.upsertBinding(tx, cfg.PlatformType, "department", "mapped:path:"+currentPath, id, currentPath)
+			}
+		}
+	}
+	return resolved, nil
+}
+
+func (s *DirectorySyncService) findOrCreateMappedChild(tx *gorm.DB, parentID uuid.UUID, name string, dryRun bool) (uuid.UUID, bool, error) {
+	var dept model.Department
+	if err := tx.Where("name = ? AND parent_id = ?", name, parentID).First(&dept).Error; err == nil {
+		return dept.ID, false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, false, err
+	}
+	if dryRun {
+		return uuid.New(), true, nil
+	}
+	dept = model.Department{
+		Name:        name,
+		ParentID:    &parentID,
+		Description: "enterprise directory mapped subtree sync",
+	}
+	if err := tx.Create(&dept).Error; err != nil {
+		return uuid.Nil, false, err
+	}
+	return dept.ID, true, nil
+}
+
 // overrideUsername 非空时表示用户手动编辑过用户名：仅当与「自然落库用户名」不同才覆盖，
 // 否则保持原有策略逻辑（未编辑的用户行为完全不变）。完整同步传 ""，ImportUsers 传缓冲表 username。
 func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, resolver map[string]*mappingTarget, mountID *uuid.UUID, dryRun bool, summary *DirectorySyncSummary, seen map[string]bool, overrideUsername, overrideEmail string, groupIDs []string) error {
@@ -1220,6 +1631,10 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 	// 企微已离职账号（姓名含「（已离职）」）：不创建新账号；已存在的按删除逻辑禁用（表示已删除）。
 	if isDepartedName(nickname) {
 		summary.UserSkipped++
+		summary.UserDetails = append(summary.UserDetails, UserSyncDetail{
+			Type: "skipped", Name: nickname, Username: sourceUsername, ExternalID: externalID,
+			Reason: "远端账号已标记离职；不存在的本地账号不再创建，已存在账号将禁用",
+		})
 		if user != nil && !dryRun {
 			user.IsActive = false
 			user.HireStatus = "resigned"
@@ -1255,9 +1670,9 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 			Nickname:      nickname,
 			PasswordHash:  hash,
 			Position:      position,
-		DomainAccount: externalID,
-		UserSource:    "platform",
-		HireStatus:    hireStatus(active),
+			DomainAccount: externalID,
+			UserSource:    "platform",
+			HireStatus:    hireStatus(active),
 			DepartmentID:  deptID,
 			IsActive:      active,
 		}
@@ -1337,7 +1752,7 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 	if err := tx.Save(user).Error; err != nil {
 		return fmt.Errorf("更新用户 %s 失败: %w", nickname, err)
 	}
-	if err := s.assignDefaultGroups(tx, cfg, user.ID); err != nil {
+	if err := s.assignGroups(tx, cfg, user.ID, groupIDs); err != nil {
 		return err
 	}
 	return s.upsertBinding(tx, cfg.PlatformType, "user", externalID, user.ID, "")
@@ -1360,7 +1775,11 @@ func (s *DirectorySyncService) assignGroups(tx *gorm.DB, cfg DirectorySyncConfig
 		if err != nil {
 			continue
 		}
-		if _, err := s.groupRepo.Get(gid); err != nil {
+		exists, err := userGroupExistsTx(tx, gid)
+		if err != nil {
+			return err
+		}
+		if !exists {
 			continue
 		}
 		if err := s.groupRepo.AddMemberTx(tx, gid, userID); err != nil {
@@ -1379,7 +1798,11 @@ func (s *DirectorySyncService) assignDefaultGroups(tx *gorm.DB, cfg DirectorySyn
 		if err != nil {
 			continue
 		}
-		if _, err := s.groupRepo.Get(gid); err != nil {
+		exists, err := userGroupExistsTx(tx, gid)
+		if err != nil {
+			return err
+		}
+		if !exists {
 			continue
 		}
 		if err := s.groupRepo.AddMemberTx(tx, gid, userID); err != nil {
@@ -1389,11 +1812,30 @@ func (s *DirectorySyncService) assignDefaultGroups(tx *gorm.DB, cfg DirectorySyn
 	return nil
 }
 
+// userGroupExistsTx 必须使用导入事务的 tx 查询。SQLite 连接池只有一个连接，
+// 若在事务内改用 repository 持有的根 DB 查询，会等待第二个连接并形成自锁，
+// 最终让导入和其他需要数据库的登录请求全部卡住。
+func userGroupExistsTx(tx *gorm.DB, id uuid.UUID) (bool, error) {
+	var count int64
+	if err := tx.Model(&model.UserGroup{}).Where("id = ?", id).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (s *DirectorySyncService) resolveUserDepartment(tx *gorm.DB, cfg DirectorySyncConfig, remote map[string]any, resolver map[string]*mappingTarget, mountID *uuid.UUID, dryRun bool, summary *DirectorySyncSummary) *uuid.UUID {
-	paths := getStringListAny(remote, cfg.FieldMapping["department_paths"])
-	if len(paths) == 0 {
-		if p := getStringAny(remote, cfg.FieldMapping["department_path"]); p != "" {
-			paths = []string{p}
+	// 企微用户可同时隶属多个部门，但在 OneAuth 只有一个主部门。
+	// department_path 是上游根据 main_department 计算的主部门路径，必须优先；
+	// department_paths 仅作为主部门缺失时的兼职/多部门兜底。
+	paths := make([]string, 0)
+	primary := strings.TrimSpace(getStringAny(remote, cfg.FieldMapping["department_path"]))
+	if primary != "" {
+		paths = append(paths, primary)
+	}
+	for _, path := range getStringListAny(remote, cfg.FieldMapping["department_paths"]) {
+		path = strings.TrimSpace(path)
+		if path != "" && path != primary {
+			paths = append(paths, path)
 		}
 	}
 	for _, p := range paths {
@@ -1456,13 +1898,47 @@ func (s *DirectorySyncService) ensureTargetDept(tx *gorm.DB, cfg DirectorySyncCo
 	}
 	parentStr := ""
 	if t.parentID != nil {
+		var count int64
+		if err := tx.Model(&model.Department{}).Where("id = ?", *t.parentID).Count(&count).Error; err != nil {
+			return nil
+		}
+		if count == 0 {
+			// 旧映射可能保存了已删除的上级部门 ID。优先回退到当前
+			// 配置的挂载组织；挂载组织也无效时才建到根目录，绝不再造孤儿树。
+			fallback, _ := parseOptionalUUID(cfg.MountDepartmentID)
+			if fallback != nil {
+				if err := tx.Model(&model.Department{}).Where("id = ?", *fallback).Count(&count).Error; err != nil {
+					return nil
+				}
+			}
+			if fallback != nil && count > 0 {
+				t.parentID = fallback
+			} else {
+				t.parentID = nil
+			}
+		}
+	}
+	if t.parentID != nil {
 		parentStr = t.parentID.String()
 	}
 	extID := "newdept:" + cfg.PlatformType + ":" + parentStr + ":" + t.name
 	if binding, err := s.getBinding(tx, cfg.PlatformType, "department", extID); err == nil {
-		id := binding.LocalID
-		t.createdID = &id
-		return t.createdID
+		// 本地部门可能已被管理员删除，而旧版本未同步清理目录绑定。
+		// 不能盲目复用 binding.local_id，否则新建子部门会挂在不存在的
+		// “幽灵父部门”下，最终导致用户导入预览的部门路径为空。
+		var count int64
+		if err := tx.Model(&model.Department{}).Where("id = ?", binding.LocalID).Count(&count).Error; err != nil {
+			return nil
+		}
+		if count > 0 {
+			id := binding.LocalID
+			t.createdID = &id
+			return t.createdID
+		}
+		// 失效绑定就地自愈：删除后继续走下方的真实部门创建逻辑。
+		if err := tx.Delete(&model.DirectorySyncBinding{}, "id = ?", binding.ID).Error; err != nil {
+			return nil
+		}
 	}
 	if summary != nil {
 		summary.DepartmentCreated++
@@ -1687,6 +2163,10 @@ func (s *DirectorySyncService) disableMissingUsers(tx *gorm.DB, cfg DirectorySyn
 			continue
 		}
 		summary.UserDisabled++
+		summary.UserDetails = append(summary.UserDetails, UserSyncDetail{
+			Type: "disabled", Name: u.Nickname, Username: u.Username,
+			Reason: "最近一次远端通讯录中已不存在该用户，按配置自动禁用",
+		})
 		if dryRun {
 			continue
 		}
@@ -1886,8 +2366,8 @@ type bufferConflictInfo struct {
 
 // editBufferFieldResult 编辑用户名/邮箱结果：无冲突时已写回编辑值；冲突时不写回、返回冲突信息。
 type editBufferFieldResult struct {
-	Value    string                `json:"-"`
-	Conflict *bufferConflictInfo   `json:"conflict,omitempty"`
+	Value    string              `json:"-"`
+	Conflict *bufferConflictInfo `json:"conflict,omitempty"`
 }
 
 // EditBufferUsername 供前端「用户导入」预览行内编辑用户名：
@@ -1945,6 +2425,7 @@ func (s *DirectorySyncService) EditBufferField(externalID, field, value string) 
 //     同时将缓冲行的 username/email 更新为冲突用户的值。
 //   - "rename"：基于用户想改的目标值追加序号（唯一性兜底）写回，导入时新建该值账号。
 //     对用户名追加序号到 username 字段；对邮箱追加序号到 email local part。
+//
 // 返回最终落库/显示的值（username 或 email）。
 func (s *DirectorySyncService) ResolveBufferConflict(externalID, field, action, conflictUserID, value string) (string, error) {
 	cfg := s.LoadConfig(false)
@@ -2208,6 +2689,7 @@ func camelSegments(s string) []string {
 //     当远端 givenName/surname 为中文（非拉丁，无法拼装）时，回退到远端邮箱的本地名
 //     （仅当远端邮箱域名与配置一致，避免误用个人邮箱）；再不行才回退到远端 username（完整拼音）。
 //   - fullname：优先用远端 username（完整拼音），其次远端邮箱本地名，再回退到拉丁昵称。
+//
 // 仅当策略与域名都配置时返回非空；否则返回 ""（沿用远端或留空）。
 // 该函数不依赖 receiver 状态（纯函数），故改为包级函数，供 wecom 建号等同包逻辑复用。
 func generateEmail(cfg DirectorySyncConfig, sourceUsername, nickname, givenName, surname, rawEmail string) string {
@@ -2304,7 +2786,6 @@ func (s *DirectorySyncService) resolveAssignEmail(tx *gorm.DB, cfg DirectorySync
 	}
 	return &cand
 }
-
 
 func validateDirectoryConfig(cfg DirectorySyncConfig, requireDepartments bool) error {
 	switch cfg.PlatformType {

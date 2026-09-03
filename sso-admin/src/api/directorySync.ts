@@ -68,8 +68,16 @@ export interface DirectorySyncSummary {
   user_updated: number;
   user_disabled: number;
   user_skipped: number;
+  user_failed: number;
   message: string;
   details: string[];
+  user_details?: Array<{
+    type: 'skipped' | 'disabled' | 'failed';
+    name: string;
+    username: string;
+    external_id?: string;
+    reason: string;
+  }>;
   mapping_preview?: SyncPreviewDept[];
 }
 
@@ -96,6 +104,8 @@ export interface UserImportPreview {
   total: number;
   page: number;
   page_size: number;
+  /** 仅新建的同步账号使用此初始密码 */
+  default_password: string;
   users: UserImportPreviewItem[];
 }
 
@@ -130,6 +140,12 @@ export interface DirectorySyncLog {
   message: string;
 }
 
+export interface DirectorySyncResetResult {
+  departments_deleted: number;
+  users_moved: number;
+  bindings_deleted: number;
+}
+
 // 同步/导入/预览都是「同步执行 + 可能拉取大量远端部门」的耗时操作，
 // 默认 15s 的 axios 超时会让前端提前报"超时"，而此时后端其实仍在运行。
 // 这里给这些调用单独放宽超时到 5 分钟，避免误报超时。
@@ -138,7 +154,7 @@ const SYNC_LONG_TIMEOUT = { timeout: 300000 };
 export const directorySyncApi = {
   config: () => get<DirectorySyncConfig>('/directory-sync/config'),
   saveConfig: (data: DirectorySyncConfig) => put<DirectorySyncConfig>('/directory-sync/config', data),
-  departments: () => get<DirectoryDepartment[]>('/directory-sync/departments'),
+	departments: () => get<DirectoryDepartment[]>('/directory-sync/departments', undefined, SYNC_LONG_TIMEOUT),
   preview: () => post<DirectorySyncSummary>('/directory-sync/preview', undefined, SYNC_LONG_TIMEOUT),
   userImportPreview: (params?: { keyword?: string; page?: number; page_size?: number }) =>
     get<UserImportPreview>('/directory-sync/user-import-preview', params, SYNC_LONG_TIMEOUT),
@@ -156,5 +172,6 @@ export const directorySyncApi = {
   // 冲突处理：link=关联到已有用户（建立绑定，导入时更新而非新建）；rename=重命名加序号
   resolveConflict: (data: { external_id: string; field: 'username' | 'email'; action: 'link' | 'rename'; conflict_user_id?: string; username?: string }) =>
     post<{ username?: string; email?: string }>('/directory-sync/buffer/resolve-conflict', data, SYNC_LONG_TIMEOUT),
+  resetDepartments: () => post<DirectorySyncResetResult>('/directory-sync/reset-departments', undefined, SYNC_LONG_TIMEOUT),
   logs: () => get<DirectorySyncLog[]>('/directory-sync/logs'),
 };

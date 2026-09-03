@@ -160,6 +160,20 @@ type LogQuery struct {
 	EndTime   *time.Time
 	Page      int
 	PageSize  int
+	SortBy    string
+	SortOrder string
+}
+
+func logOrder(q LogQuery, allowed map[string]string) string {
+	column, ok := allowed[q.SortBy]
+	if !ok {
+		column = "l.created_at"
+	}
+	direction := "DESC"
+	if strings.EqualFold(q.SortOrder, "asc") {
+		direction = "ASC"
+	}
+	return column + " " + direction
 }
 
 func paginate(page, size int) (int, int) {
@@ -194,7 +208,11 @@ func (r *LogRepository) ListLoginLogs(q LogQuery) ([]LoginLogView, int64, error)
 	}
 	page, size := paginate(q.Page, q.PageSize)
 	var items []LoginLogView
-	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
+	err := tx.Order(logOrder(q, map[string]string{
+		"username": "l.username", "ip_address": "l.ip_address", "province": "l.province",
+		"city": "l.city", "isp": "l.isp", "status": "l.status", "message": "l.message",
+		"user_agent": "l.user_agent", "created_at": "l.created_at",
+	})).Limit(size).Offset((page - 1) * size).Scan(&items).Error
 	return items, total, err
 }
 
@@ -240,7 +258,11 @@ func (r *LogRepository) ListOperationLogs(q LogQuery) ([]OperationLogView, int64
 	}
 	page, size := paginate(q.Page, q.PageSize)
 	var items []OperationLogView
-	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
+	err := tx.Order(logOrder(q, map[string]string{
+		"username": "l.username", "resource_type": "l.resource_type", "action": "l.action",
+		"resource_id": "l.resource_id", "output": "l.output", "ip_address": "l.ip_address",
+		"status": "l.status", "created_at": "l.created_at",
+	})).Limit(size).Offset((page - 1) * size).Scan(&items).Error
 	return items, total, err
 }
 
@@ -266,7 +288,11 @@ func (r *LogRepository) ListAccessLogs(q LogQuery) ([]AccessLogView, int64, erro
 	}
 	page, size := paginate(q.Page, q.PageSize)
 	var items []AccessLogView
-	err := tx.Order("l.created_at DESC").Limit(size).Offset((page - 1) * size).Scan(&items).Error
+	err := tx.Order(logOrder(q, map[string]string{
+		"username": "l.username", "client_name": "l.client_name", "client_id": "l.client_id",
+		"ip_address": "l.ip_address", "province": "l.province", "city": "l.city",
+		"created_at": "l.created_at",
+	})).Limit(size).Offset((page - 1) * size).Scan(&items).Error
 	return items, total, err
 }
 
@@ -501,10 +527,10 @@ func (r *LogRepository) trafficTrendDaily(now time.Time, days int) ([]TrafficPoi
 
 // SecurityAlert 单条安全预警
 type SecurityAlert struct {
-	Type        string `json:"type"`         // failed_login / brute_force / unusual_location / user_locked / operation_failure
-	Title       string `json:"title"`        // 简短标题
-	Description string `json:"description"`  // 详细描述
-	Severity    string `json:"severity"`     // high / medium / low
+	Type        string `json:"type"`        // failed_login / brute_force / unusual_location / user_locked / operation_failure
+	Title       string `json:"title"`       // 简短标题
+	Description string `json:"description"` // 详细描述
+	Severity    string `json:"severity"`    // high / medium / low
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"` // 用户姓名（来自 sso_user.nickname）
 	IP          string `json:"ip"`

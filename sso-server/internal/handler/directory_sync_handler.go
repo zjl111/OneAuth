@@ -176,3 +176,12 @@ func (h *DirectorySyncHandler) Logs(c *gin.Context) {
 	}
 	response.OK(c, logs)
 }
+
+func (h *DirectorySyncHandler) ResetDepartments(c *gin.Context) {
+	result, err := h.Service.ResetManagedDepartments()
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, result)
+}

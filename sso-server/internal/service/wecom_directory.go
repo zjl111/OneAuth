@@ -36,6 +36,43 @@ func (s *WeComService) FetchDirectorySnapshot() ([]DirectoryDepartment, []map[st
 	if err != nil {
 		return nil, nil, err
 	}
+	tree, departments, pathOf, err := s.fetchWeComDepartments(token)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 完整同步才逐部门拉取成员。管理页的「拉取远端部门」只调用
+	// FetchDirectoryDepartments，避免为了展示部门树而串行请求所有部门的成员。
+	users, err := s.fetchWeComUsersByDept(token, departments, pathOf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tree, users, nil
+}
+
+// FetchDirectoryDepartments 只拉取企微部门树，不拉取成员。
+// 供管理页部门匹配使用，请求数量固定为 gettoken（可能命中缓存）+ department/list。
+func (s *WeComService) FetchDirectoryDepartments() ([]DirectoryDepartment, error) {
+	if !s.Enabled() {
+		return nil, errors.New("企业微信未启用或未通过配置校验，无法拉取通讯录")
+	}
+	token, err := s.getAccessToken()
+	if err != nil {
+		return nil, err
+	}
+	tree, _, _, err := s.fetchWeComDepartments(token)
+	return tree, err
+}
+
+type wecomDepartment struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	ParentID int    `json:"parentid"`
+	Order    int    `json:"order"`
+}
+
+func (s *WeComService) fetchWeComDepartments(token string) ([]DirectoryDepartment, []wecomDepartment, func(int) string, error) {
 
 	// 1) 拉取可见范围内的全量部门。
 	//    注意：不传 id（而非 id=1）。官方语义：不传 id 默认获取全量组织架构，
@@ -44,23 +81,18 @@ func (s *WeComService) FetchDirectorySnapshot() ([]DirectoryDepartment, []map[st
 	//    从而兼容「应用只勾选一个/几个部门」的常见配置。
 	deptBody, err := s.wecomHTTP(token, "department/list", url.Values{})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var deptResp struct {
-		Errcode    int  `json:"errcode"`
-		Errmsg     string `json:"errmsg"`
-		Department []struct {
-			ID       int    `json:"id"`
-			Name     string `json:"name"`
-			ParentID int    `json:"parentid"`
-			Order    int    `json:"order"`
-		} `json:"department"`
+		Errcode    int               `json:"errcode"`
+		Errmsg     string            `json:"errmsg"`
+		Department []wecomDepartment `json:"department"`
 	}
 	if err := json.Unmarshal(deptBody, &deptResp); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if deptResp.Errcode != 0 {
-		return nil, nil, fmt.Errorf("企业微信部门列表失败 %d: %s", deptResp.Errcode, deptResp.Errmsg)
+		return nil, nil, nil, fmt.Errorf("企业微信部门列表失败 %d: %s", deptResp.Errcode, deptResp.Errmsg)
 	}
 
 	// 2) 构建 id -> 部门信息，供计算全路径与构建部门树。
@@ -124,13 +156,7 @@ func (s *WeComService) FetchDirectorySnapshot() ([]DirectoryDepartment, []map[st
 		}
 	}
 
-	// 4) 逐部门拉取成员并按 main_department 去重（对齐 Cordys getDepartmentUser）。
-	users, err := s.fetchWeComUsersByDept(token, deptResp.Department, pathOf)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return tree, users, nil
+	return tree, deptResp.Department, pathOf, nil
 }
 
 // fetchWeComUsersByDept 对每个部门调用 user/list?department_id={deptId}，
@@ -140,12 +166,7 @@ func (s *WeComService) FetchDirectorySnapshot() ([]DirectoryDepartment, []map[st
 // 对某部门 deptId 返回的成员，仅保留 main_department == deptId 的成员；
 // 若成员未返回 main_department 则不过滤（保留）。因逐部门遍历，
 // 一个仅出现在非主部门的成员会在其主部门那一次被收录，天然去重。
-func (s *WeComService) fetchWeComUsersByDept(token string, depts []struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	ParentID int    `json:"parentid"`
-	Order    int    `json:"order"`
-}, pathOf func(int) string) ([]map[string]any, error) {
+func (s *WeComService) fetchWeComUsersByDept(token string, depts []wecomDepartment, pathOf func(int) string) ([]map[string]any, error) {
 	seen := make(map[string]struct{})
 	var users []map[string]any
 
@@ -211,14 +232,14 @@ func (u wecomRawUser) toMap(pathOf func(int) string) map[string]any {
 		paths = append(paths, pathOf(d))
 	}
 	return map[string]any{
-		"externalId":       u.UserID,
-		"userId":           u.UserID,
-		"userName":         u.Name,
-		"email":            u.Email,
-		"phone":            u.Mobile,
-		"position":         u.Position,
-		"departmentPath":   pathOf(main),
-		"departmentPaths":  paths,
+		"externalId":      u.UserID,
+		"userId":          u.UserID,
+		"userName":        u.Name,
+		"email":           u.Email,
+		"phone":           u.Mobile,
+		"position":        u.Position,
+		"departmentPath":  pathOf(main),
+		"departmentPaths": paths,
 	}
 }
 

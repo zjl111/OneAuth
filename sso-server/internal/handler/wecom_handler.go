@@ -258,7 +258,7 @@ func (h *WeComHandler) Callback(c *gin.Context) {
 	if mode == "bind" {
 		uid, uname, berr := h.currentUserID(c)
 		if berr != nil {
-			h.LogRepo.RecordLogin(nil, userid, c.ClientIP(), c.GetHeader("User-Agent"), "wecom_bind", "failure", berr.Error())
+			h.LogRepo.RecordLogin(nil, uname, c.ClientIP(), c.GetHeader("User-Agent"), "wecom_bind", "failure", berr.Error())
 			response.BadRequest(c, berr.Error())
 			return
 		}
@@ -414,28 +414,20 @@ func selfUserID(c *gin.Context) (uuid.UUID, bool) {
 	return id, true
 }
 
-// currentUserID 从 SSO 会话解析当前已登录用户（同时返回其用户名，供绑定日志记录）。
-// 解析顺序（OAuth 回调不在 authed 组内，需自行读取会话；用于扫码绑定当前账号）：
-//  1. sso_session cookie —— 首选，但依赖进程内/Redis 内存会话，进程重启或 8 小时 TTL 过期后失效；
-//  2. sso_access_token cookie 兜底 —— 与 OAuth/CAS/SAML 的 recoverSessionFromAccessToken 一致：
-//     access token 有效则据此重建会话。这样免密/扫码登录后 SSO 会话过期时，绑定仍能识别"当前已登录用户"，
-//     不会再报"登录状态已失效，请重新登录后再绑定"。
+// currentUserID 从 SSO 会话 cookie 解析当前已登录用户（同时返回其用户名，供绑定日志记录）。
+// （OAuth 回调不在 authed 组内，需自行读取会话；用于扫码绑定当前账号）。
 func (h *WeComHandler) currentUserID(c *gin.Context) (uuid.UUID, string, error) {
-	var sd *session.SessionData
-	if sid, err := c.Cookie(session.CookieName); err == nil && sid != "" {
-		if s, err := h.SessionMgr.Get(c.Request.Context(), sid); err == nil && s != nil {
-			sd = s
-		}
-	}
-	if sd == nil {
-		sd = recoverSessionFromAccessToken(c, h.SessionMgr, h.TokenService, h.UserService)
-	}
-	if sd == nil {
+	sid, err := c.Cookie(session.CookieName)
+	if err != nil || sid == "" {
 		return uuid.Nil, "", errors.New("请先登录后再绑定企业微信")
+	}
+	sd, err := h.SessionMgr.Get(c.Request.Context(), sid)
+	if err != nil || sd == nil {
+		return uuid.Nil, "", errors.New("登录状态已失效，请重新登录后再绑定")
 	}
 	id, err := uuid.Parse(sd.UserID)
 	if err != nil {
-		return uuid.Nil, sd.Username, errors.New("当前用户标识无效")
+		return uuid.Nil, "", errors.New("当前用户标识无效")
 	}
 	return id, sd.Username, nil
 }
