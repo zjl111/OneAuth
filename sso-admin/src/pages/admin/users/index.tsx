@@ -43,7 +43,7 @@ import {
 import * as XLSX from 'xlsx';
 import './users.css';
 import { usersApi, type User, type ImportUsersResult, type ImportExisting } from '@/api/users';
-import { orgApi, roleApi, userGroupApi, type Department, type Role, type UserGroup } from '@/api/misc';
+import { configApi, orgApi, roleApi, userGroupApi, type Department, type Role, type UserGroup } from '@/api/misc';
 import PageToolbar from '@/components/PageToolbar';
 import UserAvatar from '@/components/UserAvatar';
 import { useAuthStore } from '@/store/authStore';
@@ -80,10 +80,10 @@ interface ImportPreviewRow {
   errorDetail?: string;
 }
 
-function lockReasonText(reason?: string): string {
+function lockReasonText(reason?: string, inactiveDays = 30): string {
   switch (reason) {
     case 'inactivity':
-      return '超过30天未登录，系统自动锁定';
+      return `超过${inactiveDays}天未登录，系统自动锁定`;
     case 'login_failure':
       return '登录失败次数过多，被自动锁定';
     case 'wecom_missing':
@@ -132,6 +132,7 @@ export default function UserListPage() {
   const [depts, setDepts] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
+  const [inactiveDays, setInactiveDays] = useState(30);
 
   // 筛选状态
   const [filterDeptId, setFilterDeptId] = useState<string | undefined>(undefined);
@@ -190,6 +191,10 @@ export default function UserListPage() {
     orgApi.tree().then(setDepts);
     roleApi.list().then(setRoles);
     userGroupApi.list().then(setUserGroups);
+    configApi.byCategory('security').then((configs) => {
+      const value = Number(configs.find((item) => item.key === 'user_inactive_days')?.value);
+      if (Number.isFinite(value) && value > 0) setInactiveDays(value);
+    });
   }, []);
 
   const openCreate = () => {
@@ -814,7 +819,7 @@ export default function UserListPage() {
             sorter: true,
             render: (_, r) =>
               r.is_locked ? (
-                <Tooltip title={lockReasonText(r.lock_reason)}>
+                <Tooltip title={lockReasonText(r.lock_reason, inactiveDays)}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
                     <span className="user-tag user-tag--red">已锁定</span>
                     <span className="act-link" onClick={(e) => { e.stopPropagation(); handleLock(r); }} style={{ whiteSpace: 'nowrap' }}>

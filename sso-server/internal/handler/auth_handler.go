@@ -869,7 +869,13 @@ func (h *AuthHandler) lockedMessage(u *model.User) string {
 		return fmt.Sprintf("账号已锁定，请于 %s 后重试", u.LockUntil.Format("2006-01-02 15:04"))
 	}
 	if u != nil && u.LockReason != "" {
-		if reasonText := service.LockReasonText(u.LockReason); reasonText != "" {
+		inactiveDays := 30
+		if h.ConfigRepo != nil {
+			if n, err := strconv.Atoi(h.ConfigRepo.Get("security", "user_inactive_days")); err == nil && n > 0 {
+				inactiveDays = n
+			}
+		}
+		if reasonText := service.LockReasonText(u.LockReason, inactiveDays); reasonText != "" {
 			return "账号已锁定：" + reasonText + "，请联系管理员解锁"
 		}
 	}

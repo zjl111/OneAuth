@@ -235,6 +235,7 @@ func (u wecomRawUser) toMap(pathOf func(int) string) map[string]any {
 		"externalId":      u.UserID,
 		"userId":          u.UserID,
 		"userName":        u.Name,
+		"status":          fmt.Sprintf("%d", u.Status),
 		"email":           u.Email,
 		"phone":           u.Mobile,
 		"position":        u.Position,

@@ -376,7 +376,7 @@ func (s *UserService) Authenticate(username, plain string) (*model.User, error) 
 			}
 		} else {
 			// 永久锁定：附带原因
-			if reasonText := LockReasonText(u.LockReason); reasonText != "" {
+			if reasonText := LockReasonText(u.LockReason, s.inactiveDays()); reasonText != "" {
 				return nil, errors.New("账号已锁定：" + reasonText + "，请联系管理员解锁")
 			}
 			return nil, errors.New("账号已锁定，请联系管理员解锁")
@@ -448,10 +448,14 @@ func (s *UserService) LockUntil(id uuid.UUID, until *time.Time, reason string) e
 }
 
 // LockReasonText 返回锁定原因的可读中文描述
-func LockReasonText(reason string) string {
+func LockReasonText(reason string, configuredInactiveDays ...int) string {
 	switch reason {
 	case "inactivity":
-		return "超过30天未登录，系统自动锁定"
+		days := 30
+		if len(configuredInactiveDays) > 0 && configuredInactiveDays[0] > 0 {
+			days = configuredInactiveDays[0]
+		}
+		return fmt.Sprintf("超过%d天未登录，系统自动锁定", days)
 	case "login_failure":
 		return "登录失败次数过多，被自动锁定"
 	case "wecom_missing":
@@ -463,6 +467,15 @@ func LockReasonText(reason string) string {
 	default:
 		return ""
 	}
+}
+
+func (s *UserService) inactiveDays() int {
+	if s.configRepo != nil {
+		if days, err := strconv.Atoi(s.configRepo.Get("security", "user_inactive_days")); err == nil && days > 0 {
+			return days
+		}
+	}
+	return 30
 }
 
 func (s *UserService) Permissions(u *model.User) []string {

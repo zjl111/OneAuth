@@ -26,6 +26,10 @@ import (
 
 const DirectoryProviderWeComAttendance = "wecom_attendance"
 
+func isWeComDirectoryProvider(platformType string) bool {
+	return platformType == DirectoryProviderWeCom || platformType == DirectoryProviderWeComAttendance
+}
+
 // DirectoryProviderWeCom 企业微信通讯录：直接走企业微信 API，复用全局 wecom 配置，
 // 无需第三方平台地址与 API Key。
 const DirectoryProviderWeCom = "wecom"
@@ -517,9 +521,12 @@ func (s *DirectorySyncService) Sync(dryRun bool) (*DirectorySyncSummary, error) 
 	}
 
 	// 持久化到缓冲表，供「用户导入」弹窗展示，无需重复拉取远端。
-	// 缓冲写入失败不阻断本次同步。
+	// 这是完整同步结果的一部分；若失败必须让本次同步报错，避免成功状态下仍展示旧快照。
 	if err := s.storeSnapshot(snap, cfg); err != nil {
-		log.Printf("[dir-sync] 写入缓冲表失败(不影响本次同步): %v", err)
+		summary.Status = "failed"
+		summary.Message = "写入用户导入预览失败: " + err.Error()
+		s.finishLog(logRow, summary)
+		return summary, err
 	}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
@@ -1628,8 +1635,8 @@ func (s *DirectorySyncService) applyRemoteUser(tx *gorm.DB, cfg DirectorySyncCon
 		}
 	}
 
-	// 企微已离职账号（姓名含「（已离职）」）：不创建新账号；已存在的按删除逻辑禁用（表示已删除）。
-	if isDepartedName(nickname) {
+	// 企微已离职账号（姓名标记或 status=5）：不创建新账号；已存在的按删除逻辑禁用。
+	if isDepartedName(nickname) || (isWeComDirectoryProvider(cfg.PlatformType) && getStringAny(remote, "status") == "5") {
 		summary.UserSkipped++
 		summary.UserDetails = append(summary.UserDetails, UserSyncDetail{
 			Type: "skipped", Name: nickname, Username: sourceUsername, ExternalID: externalID,
