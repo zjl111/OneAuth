@@ -62,6 +62,10 @@ func main() {
 
 func shouldProxy(p string) bool {
 	switch {
+	case p == "/login" || p == "/logout" || p == "/serviceValidate" || p == "/proxyValidate" || p == "/p3/serviceValidate" || p == "/p3/proxyValidate":
+		// Root-level aliases for CAS clients that lose the /cas context path
+		// when joining endpoints to a server URL without a trailing slash.
+		return true
 	case p == "/oauth" || strings.HasPrefix(p, "/oauth/"):
 		return true
 	case p == "/api" || strings.HasPrefix(p, "/api/"):

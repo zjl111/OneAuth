@@ -37,6 +37,8 @@ services:
       SSO_REDIS_ADDR: redis:6379
       SSO_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
       SSO_OAUTH_ISSUER: ${SSO_ISSUER:-http://localhost}
+      # 逗号分隔的可信反向代理 IP/CIDR，例如通过 .env 注入
+      SSO_TRUSTED_PROXIES: ${SSO_TRUSTED_PROXIES:-}
       # 生产同源，前端登录跳转用相对路径
       SSO_OAUTH_FRONTEND_URL: ""
     volumes:

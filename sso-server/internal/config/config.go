@@ -20,11 +20,12 @@ type Config struct {
 }
 
 type AppConfig struct {
-	SecretKey   string `mapstructure:"secret_key"`
-	Environment string `mapstructure:"environment"`
-	Host        string `mapstructure:"host"`
-	Port        int    `mapstructure:"port"`
-	Driver      string `mapstructure:"driver"`
+	SecretKey      string   `mapstructure:"secret_key"`
+	Environment    string   `mapstructure:"environment"`
+	Host           string   `mapstructure:"host"`
+	Port           int      `mapstructure:"port"`
+	Driver         string   `mapstructure:"driver"`
+	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
 type DatabaseConfig struct {
@@ -120,6 +121,9 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("SSO_DB_NAME"); v != "" {
 		cfg.Database.DBName = v
 	}
+	if v, ok := os.LookupEnv("SSO_TRUSTED_PROXIES"); ok {
+		cfg.App.TrustedProxies = splitCSV(v)
+	}
 	if v := os.Getenv("SSO_REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 		cfg.Redis.Enabled = true
@@ -133,4 +137,15 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }

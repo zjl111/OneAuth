@@ -5,6 +5,8 @@ app:
   port: 8080
   # 数据库驱动: postgres | sqlite
   driver: "sqlite"
+  # 反向代理网段；生产环境应配置实际代理 CIDR，以便安全解析 X-Forwarded-For。
+  trusted_proxies: []
 
 database:
   host: "localhost"

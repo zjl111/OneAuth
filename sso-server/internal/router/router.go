@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -44,6 +45,9 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+	if err := r.SetTrustedProxies(cfg.App.TrustedProxies); err != nil {
+		panic(fmt.Sprintf("invalid app.trusted_proxies: %v", err))
+	}
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 	r.Use(middleware.RequestID())
@@ -87,6 +91,17 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 			casGroup.GET("/p3/serviceValidate", h.CAS.P3ServiceValidate)
 			casGroup.GET("/p3/proxyValidate", h.CAS.P3ServiceValidate) // V3 别名
 		}
+		// Some CAS clients join endpoint paths to the configured server URL as
+		// a URL reference. If that URL is "https://host/cas" (without a trailing
+		// slash), joining "login" can drop the /cas path and request /login.
+		// Keep root-level aliases for those clients while retaining /cas/* as
+		// the canonical endpoints.
+		r.GET("/login", h.CAS.Login)
+		r.GET("/logout", h.CAS.Logout)
+		r.GET("/serviceValidate", h.CAS.ServiceValidate)
+		r.GET("/proxyValidate", h.CAS.ServiceValidate)
+		r.GET("/p3/serviceValidate", h.CAS.P3ServiceValidate)
+		r.GET("/p3/proxyValidate", h.CAS.P3ServiceValidate)
 	}
 
 	// SAML 2.0 IdP 协议端点

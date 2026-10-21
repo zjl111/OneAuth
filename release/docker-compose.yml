@@ -1,6 +1,6 @@
 services:
   backend:
-    image: oneauth/backend:v1.0.32
+    image: oneauth/backend:v1.0.33
     environment:
       SSO_APP_DRIVER: "sqlite"
       SSO_APP_ENVIRONMENT: "production"
@@ -8,6 +8,7 @@ services:
       SSO_DATABASE_SQLITE_PATH: /app/data/sso.db
       SSO_REDIS_ENABLED: "false"
       SSO_OAUTH_ISSUER: ${SSO_ISSUER}
+      SSO_TRUSTED_PROXIES: ${SSO_TRUSTED_PROXIES:-}
       SSO_OAUTH_FRONTEND_URL: ""
     volumes:
       - ./conf/config.yaml:/app/configs/config.yaml
@@ -24,7 +25,7 @@ services:
       start_period: 10s
 
   gateway:
-    image: oneauth/gateway:v1.0.32
+    image: oneauth/gateway:v1.0.33
     depends_on:
       backend:
         condition: service_healthy

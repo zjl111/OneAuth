@@ -112,17 +112,9 @@ func (c *OAuth2Client) CheckRedirectURI(uri string) bool {
 			return true
 		}
 	}
-	// 规范化：去掉末尾无意义的 '?' 和 '/'（部分第三方应用会自动追加）
-	// 必须保持精确匹配语义，因为 token 端点也会用原始 redirect_uri 做校验
-	normalize := func(s string) string {
-		for len(s) > 0 && (s[len(s)-1] == '?' || s[len(s)-1] == '/') {
-			s = s[:len(s)-1]
-		}
-		return s
-	}
-	normURI := normalize(uri)
 	for _, u := range c.RedirectURIs {
-		if normalize(u) == normURI {
+		// redirect_uri 必须精确匹配；尾部 '/' 和 '?' 都可能是注册地址的一部分。
+		if u == uri {
 			return true
 		}
 	}

@@ -55,12 +55,9 @@ func (h *OAuthHandler) currentSession(c *gin.Context) *session.SessionData {
 	return recoverSessionFromAccessToken(c, h.SessionMgr, h.TokenService, h.UserService)
 }
 
-// normalizeRedirectURI 兼容第三方客户端把回调地址尾部多带的 '?' 或 '/'。
-// 这里保持和 client.CheckRedirectURI 的宽松语义一致，避免 authorize/token 两端出现不一致。
+// normalizeRedirectURI 保留回调地址原样。尾部 '/' 属于 redirect_uri 的一部分，
+// 擅自裁剪会导致授权码回跳到与客户端注册地址不同的 URL。
 func normalizeRedirectURI(uri string) string {
-	for len(uri) > 0 && (uri[len(uri)-1] == '?' || uri[len(uri)-1] == '/') {
-		uri = uri[:len(uri)-1]
-	}
 	return uri
 }
 

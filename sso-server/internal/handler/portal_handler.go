@@ -56,10 +56,10 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		grantedSet[g.ClientID] = true
 	}
 
-	// 应用门户过滤：
-	//   - 内置应用与 super_admin 始终可见
-	//   - visible_in_portal=false → 隐藏（除 super_admin）
-	//   - access_policy=none → 隐藏（除 super_admin）
+	// 应用门户过滤：管理员身份只允许进入管理功能，不会绕过应用本身的访问授权。
+	//   - 内置应用始终可见
+	//   - visible_in_portal=false → 隐藏
+	//   - access_policy=none → 隐藏
 	//   - access_policy=assigned → 必须命中 grant 表
 	//   - access_policy=all → 全部可见
 	var allowedSet map[string]bool
@@ -75,8 +75,6 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		}
 		if cl.IsBuiltin {
 			// 内置应用走内置路径，不应用门户过滤
-		} else if user.IsStaff {
-			// super_admin / staff 兜底全部可见，避免锁死管理员
 		} else {
 			if !cl.VisibleInPortal {
 				continue
