@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM public.ecr.aws/docker/library/alpine:3.21
 RUN apk add --no-cache python3 ca-certificates tzdata
 ENV TZ=Asia/Shanghai
 WORKDIR /app

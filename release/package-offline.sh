@@ -36,7 +36,8 @@ mkdir -p "$OUT_DIR/frontend"
 cp -R sso-admin/dist "$OUT_DIR/frontend/dist"
 
 echo "Copying CA certificates from local Alpine image..."
-cid="$(docker create alpine:latest)"
+# 用本地已有的 ECR 镜像源，避免 docker.1ms.run 镜像站 403（且网关在构建时会剥掉 --platform 参数）
+cid="$(docker create public.ecr.aws/docker/library/alpine:3.21)"
 docker cp "${cid}:/etc/ssl/certs/ca-certificates.crt" "$OUT_DIR/base/ca-certificates.crt"
 docker rm -v "$cid" >/dev/null
 

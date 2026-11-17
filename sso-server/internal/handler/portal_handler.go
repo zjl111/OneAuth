@@ -39,7 +39,8 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		return
 	}
 	uid, _ := uuid.Parse(userIDVal.(string))
-	user, err := h.UserService.GetByID(uid)
+	// 仅校验登录用户仍然存在；应用可见性不再因 is_staff 兜底放行。
+	_, err := h.UserService.GetByID(uid)
 	if err != nil {
 		response.Unauthorized(c, "用户不存在")
 		return

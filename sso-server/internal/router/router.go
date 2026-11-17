@@ -45,7 +45,12 @@ func Setup(cfg *config.Config, ts *oauth.TokenService, userSvc *service.UserServ
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	if err := r.SetTrustedProxies(cfg.App.TrustedProxies); err != nil {
+	// 未配置可信代理时传入 nil，保持 gin 默认（信任所有代理），与引入该配置前的行为一致。
+	// 注意：不能传空切片 []string{}——gin 会把"空切片"解释为不信任任何代理，
+	// 导致 ClientIP() 退化为反向代理地址（所有登录 IP 变成 nginx 容器 IP）。
+	if len(cfg.App.TrustedProxies) == 0 {
+		_ = r.SetTrustedProxies(nil)
+	} else if err := r.SetTrustedProxies(cfg.App.TrustedProxies); err != nil {
 		panic(fmt.Sprintf("invalid app.trusted_proxies: %v", err))
 	}
 	r.Use(gin.Recovery())
